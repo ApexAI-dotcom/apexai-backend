@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: apex-ai-api
+    runtime: python
+    buildCommand: pip install -r requirements.txt -r requirements_api.txt
+    startCommand: uvicorn src.api.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: BASE_URL
+        sync: false  # À définir dans le dashboard Render
+      - key: CORS_ORIGINS
+        value: https://*.lovable.app,https://*.lovable.dev
+      - key: PYTHONUNBUFFERED
+        value: 1
+    healthCheckPath: /health
+    disk:
+      name: apex-ai-data
+      mountPath: /app/output
+      sizeGB: 5
