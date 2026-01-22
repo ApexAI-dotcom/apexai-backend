@@ -1,30 +1,35 @@
+# Render.com - Apex AI Backend (zero-config)
+# Repo: github.com/ApexAI-dotcom/apexai-backend
+# Python 3.11 via runtime.txt — pas de Poetry
+
 services:
   - type: web
-    name: apex-ai-api
+    name: apexai-backend
     runtime: python
-    buildCommand: pip install -r requirements/requirements.txt
-    startCommand: python -m uvicorn src.api.main:app --host 0.0.0.0 --port $PORT
+
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn src.api.main:app --host 0.0.0.0 --port $PORT
+
     envVars:
       - key: ENVIRONMENT
         value: production
-      - key: BASE_URL
-        sync: false  # À définir: https://apexai-backend.onrender.com
-      - key: CORS_ORIGINS
-        sync: false  # À définir: https://apexai.pro,https://www.apexai.pro
       - key: PYTHONUNBUFFERED
         value: 1
+      - key: DOCS_ENABLED
+        value: "true"
+      - key: BASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
       - key: STRIPE_SECRET_KEY
-        sync: false  # À définir dans le dashboard Render
+        sync: false
       - key: STRIPE_WEBHOOK_SECRET
-        sync: false  # À définir dans le dashboard Render
+        sync: false
       - key: SUPABASE_URL
-        sync: false  # À définir dans le dashboard Render
+        sync: false
       - key: SUPABASE_SERVICE_KEY
-        sync: false  # À définir dans le dashboard Render
+        sync: false
       - key: MOCK_VIDEO_AI
         value: "true"
+
     healthCheckPath: /health
-    disk:
-      name: apex-ai-data
-      mountPath: /app/output
-      sizeGB: 5

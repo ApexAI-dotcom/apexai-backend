@@ -1,0 +1,14 @@
+# Apex AI Backend - requirements.txt (Render / Docker)
+# Python 3.11 uniquement. Pas de Poetry.
+
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.0.0,<3
+pandas>=2.0.0
+numpy>=1.24.0
+scipy>=1.10.0
+matplotlib>=3.7.0
+python-dotenv>=1.0.0
+stripe>=7.0.0
+httpx>=0.26.0
+duckdb>=0.9.0

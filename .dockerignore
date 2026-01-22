@@ -1,0 +1,61 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv
+env
+.env
+.env.*
+*.egg-info
+.eggs
+dist
+build
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Node / Frontend (backend only)
+node_modules
+apex-ai-fresh
+lovable-temp
+*.tsx
+*.ts
+vite.config.*
+package.json
+package-lock.json
+
+# Logs, data, temp
+logs
+*.log
+temp
+data
+output
+*.csv
+
+# Docs / Misc
+*.md
+!README.md
+Dockerfile
+.dockerignore
+render.yaml
+docker-compose*.yml
+.vercelignore
+vercel.json
+
+# Tests
+tests
+.pytest_cache
+.coverage
+htmlcov
+.tox

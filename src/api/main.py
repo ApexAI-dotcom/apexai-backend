@@ -40,12 +40,14 @@ app = FastAPI(
     title="Apex AI API",
     description="API d'analyse de télémétrie karting avec IA - Scoring /100 et Coaching",
     version="1.0.0",
-    docs_url="/docs" if settings.ENVIRONMENT == "development" else None,
-    redoc_url="/redoc" if settings.ENVIRONMENT == "development" else None
+    docs_url="/docs" if (settings.ENVIRONMENT == "development" or settings.DOCS_ENABLED) else None,
+    redoc_url="/redoc" if (settings.ENVIRONMENT == "development" or settings.DOCS_ENABLED) else None
 )
 
 # CORS pour Frontend et Lovable.dev
 allowed_origins = list(settings.CORS_ORIGINS)
+if not allowed_origins:
+    allowed_origins = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:5173", "http://localhost:8080"]
 if settings.ENVIRONMENT == "development":
     # Ajouter origines locales si pas déjà présentes
     dev_origins = [
@@ -140,7 +142,7 @@ async def root():
         "version": "1.0.0",
         "status": "operational",
         "description": "API d'analyse de télémétrie karting avec IA",
-        "docs": "/docs" if settings.ENVIRONMENT == "development" else "disabled",
+        "docs": "/docs" if (settings.ENVIRONMENT == "development" or settings.DOCS_ENABLED) else "disabled",
         "endpoints": {
             "analyze": "/api/v1/analyze",
             "health": "/health"
