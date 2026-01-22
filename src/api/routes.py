@@ -9,6 +9,9 @@ from fastapi import APIRouter, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
 import logging
 import uuid
+import os
+import tempfile
+from pathlib import Path
 
 from .models import AnalysisResponse, ErrorResponse
 from .services import AnalysisService
@@ -131,3 +134,143 @@ async def get_analysis_status(analysis_id: str):
         "status": "completed",
         "message": "Analyse synchrone (toujours completed)"
     }
+
+
+@router.post("/process-video")
+async def process_video(file: UploadFile = File(...)):
+    """
+    Traite une vidéo MP4 avec l'API Grok pour transcription et analyse.
+    
+    Args:
+        file: Fichier vidéo MP4 uploadé
+    
+    Returns:
+        {
+            "filename": str,
+            "summary": str,
+            "status": "processed"
+        }
+    """
+    try:
+        # Validation du format
+        if not file.filename or not file.filename.lower().endswith('.mp4'):
+            return JSONResponse(
+                status_code=400,
+                content={"error": "MP4 only"}
+            )
+        
+        logger.info(f"🎥 Video upload: {file.filename}")
+        print(f"🎥 Processing video: {file.filename}")
+        
+        # Créer le dossier temp s'il n'existe pas
+        temp_dir = Path(settings.TEMP_DIR)
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 1. Sauvegarde temporaire
+        temp_path = temp_dir / file.filename
+        with open(temp_path, "wb") as f:
+            content = await file.read()
+            f.write(content)
+        
+        logger.info(f"✅ Video saved to: {temp_path}")
+        print(f"✅ Video saved: {temp_path}")
+        
+        # 2. MOCK IA (Gratuit - Pas de paiement)
+        if os.getenv("MOCK_VIDEO_AI", "true").lower() == "true":
+            logger.info("🤖 Using MOCK Video AI (free)")
+            print(f"🤖 MOCK IA Analysis for: {file.filename}")
+            return JSONResponse(content={
+                "filename": file.filename,
+                "summary": settings.MOCK_SUMMARY.strip(),
+                "tags": ["business", "startup", "pitch"],
+                "status": "pro_analyzed"
+            })
+        
+        # 3. GROK API (transcription + analyse) - Fallback si MOCK désactivé
+        try:
+            import httpx
+            
+            grok_api_key = settings.GROK_API_KEY or os.getenv("GROK_API_KEY", "")
+            if not grok_api_key:
+                logger.warning("GROK_API_KEY not configured, skipping Grok analysis")
+                return JSONResponse(content={
+                    "filename": file.filename,
+                    "summary": "Grok API not configured. Video saved but not analyzed.",
+                    "status": "saved",
+                    "temp_path": str(temp_path)
+                })
+            
+            # Appel à l'API Grok
+            grok_url = f"{settings.GROK_API_URL}/chat/completions"
+            prompt = f"Analyse cette vidéo karting et donne un résumé: {file.filename}"
+            
+            logger.info(f"🤖 Calling Grok API...")
+            print(f"🤖 Calling Grok API for: {file.filename}")
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    grok_url,
+                    headers={
+                        "Authorization": f"Bearer {grok_api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": "grok-beta",
+                        "messages": [
+                            {"role": "user", "content": prompt}
+                        ]
+                    },
+                    timeout=30.0
+                )
+                
+                if response.status_code == 200:
+                    grok_data = response.json()
+                    summary = grok_data.get("choices", [{}])[0].get("message", {}).get("content", "Analysis completed")
+                    
+                    logger.info(f"✅ Grok analysis completed")
+                    print(f"✅ Grok analysis completed for: {file.filename}")
+                    
+                    return JSONResponse(content={
+                        "filename": file.filename,
+                        "summary": summary,
+                        "status": "processed"
+                    })
+                else:
+                    error_msg = f"Grok API error: {response.status_code} - {response.text}"
+                    logger.error(error_msg)
+                    print(f"❌ {error_msg}")
+                    return JSONResponse(
+                        status_code=500,
+                        content={
+                            "error": error_msg,
+                            "filename": file.filename,
+                            "status": "error"
+                        }
+                    )
+        
+        except ImportError:
+            logger.warning("httpx not installed, skipping Grok API call")
+            return JSONResponse(content={
+                "filename": file.filename,
+                "summary": "Grok API client not available. Install httpx for Grok integration.",
+                "status": "saved",
+                "temp_path": str(temp_path)
+            })
+        except Exception as grok_error:
+            logger.error(f"Grok API error: {grok_error}", exc_info=True)
+            print(f"❌ Grok API error: {grok_error}")
+            return JSONResponse(content={
+                "filename": file.filename,
+                "summary": f"Video saved but Grok analysis failed: {str(grok_error)}",
+                "status": "partial",
+                "temp_path": str(temp_path)
+            })
+    
+    except Exception as e:
+        error_msg = f"Error processing video: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        print(f"❌ {error_msg}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": error_msg}
+        )

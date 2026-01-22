@@ -15,6 +15,35 @@ from typing import Dict, Any
 import pandas as pd
 import numpy as np
 from pathlib import Path
+# Import du router Stripe
+try:
+    # Import direct depuis le même répertoire
+    import sys
+    from pathlib import Path
+    
+    # Ajouter le répertoire backend au path si nécessaire
+    backend_dir = Path(__file__).parent
+    if str(backend_dir) not in sys.path:
+        sys.path.insert(0, str(backend_dir))
+    
+    # Import du module stripe (renommé pour éviter conflit avec package stripe)
+    import importlib.util
+    stripe_file_path = backend_dir / "stripe.py"
+    
+    if stripe_file_path.exists():
+        spec = importlib.util.spec_from_file_location("stripe_routes_module", stripe_file_path)
+        stripe_routes = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(stripe_routes)
+        stripe_router = stripe_routes.router
+        print("✓ Stripe router loaded successfully")
+    else:
+        raise ImportError(f"stripe.py not found at {stripe_file_path}")
+except Exception as e:
+    # Si le module stripe n'est pas disponible, créer un router vide
+    from fastapi import APIRouter
+    stripe_router = APIRouter()
+    print(f"⚠ Warning: Could not import stripe router: {e}")
+    print("  Stripe endpoints will not be available")
 
 app = FastAPI(
     title="ApexAI Backend",
@@ -22,19 +51,25 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS pour Lovable
+# Inclure les routes Stripe
+app.include_router(stripe_router)
+
+# CORS pour Frontend et Lovable
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "http://localhost:8080",
         "http://localhost:3000",
         "http://localhost:5173",
+        "http://127.0.0.1:8080",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
         "https://*.lovable.app",
         "https://*.lovable.dev",
-        "*"
     ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 

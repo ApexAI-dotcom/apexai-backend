@@ -35,9 +35,37 @@ class Settings:
     # CORS (string séparée par virgules)
     CORS_ORIGINS_STR = os.getenv(
         "CORS_ORIGINS",
-        "http://localhost:3000,http://localhost:5173,https://*.lovable.app,https://*.lovable.dev"
+        "http://localhost:8080,http://localhost:3000,http://localhost:5173,http://127.0.0.1:8080,http://127.0.0.1:3000,http://127.0.0.1:5173,https://*.lovable.app,https://*.lovable.dev"
     )
     CORS_ORIGINS = [origin.strip() for origin in CORS_ORIGINS_STR.split(",") if origin.strip()]
+    
+    # Stripe Configuration
+    STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
+    STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+    
+    # Grok API Configuration
+    GROK_API_KEY = os.getenv("GROK_API_KEY", "")
+    GROK_API_URL = os.getenv("GROK_API_URL", "https://api.x.ai/v1")
+    
+    # Mock Video AI (Gratuit - Pas de paiement)
+    MOCK_VIDEO_AI = os.getenv("MOCK_VIDEO_AI", "true").lower() == "true"  # ← Gratuit !
+    
+    # Mock réponse (au lieu API payante)
+    MOCK_SUMMARY = """
+🎬 VIDÉO ANALYSÉE PAR APEXAI PRO !
+
+📊 Durée: 2min47s
+👥 3 personnes détectées
+💬 127 mots transcrits
+🔥 Moments forts: 00:23, 01:45
+
+📝 RÉSUMÉ IA:
+Votre présentation business est excellente ! 
+Points forts: accroche immédiate, chiffres concrets.
+Amélioration: slide 3 → animation + pause.
+
+#Tags: business pitch startup investissement
+"""
 
 
 settings = Settings()

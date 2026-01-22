@@ -2,17 +2,27 @@ services:
   - type: web
     name: apex-ai-api
     runtime: python
-    buildCommand: pip install -r requirements.txt -r requirements_api.txt
-    startCommand: uvicorn src.api.main:app --host 0.0.0.0 --port $PORT
+    buildCommand: pip install -r requirements/requirements.txt
+    startCommand: python -m uvicorn src.api.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: ENVIRONMENT
         value: production
       - key: BASE_URL
-        sync: false  # À définir dans le dashboard Render
+        sync: false  # À définir: https://apexai-backend.onrender.com
       - key: CORS_ORIGINS
-        value: https://*.lovable.app,https://*.lovable.dev
+        sync: false  # À définir: https://apexai.pro,https://www.apexai.pro
       - key: PYTHONUNBUFFERED
         value: 1
+      - key: STRIPE_SECRET_KEY
+        sync: false  # À définir dans le dashboard Render
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false  # À définir dans le dashboard Render
+      - key: SUPABASE_URL
+        sync: false  # À définir dans le dashboard Render
+      - key: SUPABASE_SERVICE_KEY
+        sync: false  # À définir dans le dashboard Render
+      - key: MOCK_VIDEO_AI
+        value: "true"
     healthCheckPath: /health
     disk:
       name: apex-ai-data

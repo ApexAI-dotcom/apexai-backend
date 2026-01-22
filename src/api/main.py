@@ -16,14 +16,24 @@ import time
 import os
 from pathlib import Path
 
-from .routes import router
-from .config import settings
-
+# Initialiser le logging avant les imports qui l'utilisent
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+from .routes import router
+from .config import settings
+
+# Import du router Stripe
+try:
+    from .stripe_routes import router as stripe_router
+    logger.info("✓ Stripe router loaded successfully")
+except ImportError as e:
+    logger.warning(f"⚠ Warning: Could not import stripe router: {e}")
+    logger.warning("  Stripe endpoints will not be available")
+    stripe_router = None
 
 # Créer application FastAPI
 app = FastAPI(
@@ -34,28 +44,37 @@ app = FastAPI(
     redoc_url="/redoc" if settings.ENVIRONMENT == "development" else None
 )
 
-# CORS pour Lovable.dev et local
+# CORS pour Frontend et Lovable.dev
 allowed_origins = list(settings.CORS_ORIGINS)
 if settings.ENVIRONMENT == "development":
-    allowed_origins.extend([
+    # Ajouter origines locales si pas déjà présentes
+    dev_origins = [
+        "http://localhost:8080",
         "http://localhost:3000",
         "http://localhost:5173",
+        "http://127.0.0.1:8080",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:5173"
-    ])
+    ]
+    for origin in dev_origins:
+        if origin not in allowed_origins:
+            allowed_origins.append(origin)
 else:
     # En production, accepter toutes les origines Lovable
-    allowed_origins.extend([
+    prod_origins = [
         "https://*.lovable.app",
         "https://*.lovable.dev"
-    ])
+    ]
+    for origin in prod_origins:
+        if origin not in allowed_origins:
+            allowed_origins.append(origin)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
     expose_headers=["X-Process-Time"]
 )
 
@@ -98,6 +117,14 @@ async def log_requests(request: Request, call_next):
 
 # Routes
 app.include_router(router, prefix="/api/v1", tags=["analysis"])
+
+# Routes Stripe
+if stripe_router:
+    app.include_router(stripe_router)
+
+# Importer process-video depuis routes pour accès direct /api/process-video
+from .routes import process_video
+app.post("/api/process-video")(process_video)
 
 
 @app.get("/", tags=["info"])
