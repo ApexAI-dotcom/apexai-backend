@@ -20,7 +20,7 @@ function App() {
   const testAPI = async () => {
     setLoading(true)
     try {
-      const res = await fetch('https://apexai-backend-v2.onrender.com/')
+      const res = await fetch('https://apexai-backend-v2.onrender.com/api')
       const json = await res.json()
       setData(json)
     } catch (error) {
