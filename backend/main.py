@@ -1,3 +1,13 @@
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://apexai-frontend.onrender.com", "*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
