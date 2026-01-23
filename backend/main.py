@@ -1,16 +1,3 @@
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "https://apexai-frontend.onrender.com",  # ← VOTRE FRONTEND
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "https://*.lovable.app",
-        "*"
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -18,9 +5,9 @@ ApexAI - Backend FastAPI
 Endpoint /api/upload pour analyse de CSV MyChron avec Lovable
 """
 
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 import uvicorn
 import os
 import tempfile
@@ -35,20 +22,30 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS pour Lovable
+# ============================================
+# CORS MIDDLEWARE - FORCE CLOUDFLARE
+# ============================================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "https://*.lovable.app",
-        "https://*.lovable.dev",
-        "*"
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=["*"],
+    allow_methods=["GET", "POST", "OPTIONS", "PUT", "DELETE"],
     allow_headers=["*"],
+    allow_credentials=False,
 )
+
+# ============================================
+# OPTIONS HANDLER - PREFLIGHT REQUESTS
+# ============================================
+@app.options("/{fullpath:path}")
+async def options_handler(fullpath: str):
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS, PUT, DELETE",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
 
 
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -220,13 +217,13 @@ def analyze_csv_lovable(file_path: str) -> Dict[str, Any]:
         # 1. CBV (Couleur/Brightness/Variance) - Basé sur la régularité de la vitesse
         speed_std = df['speed'].std()
         speed_mean = df['speed'].mean()
-        speed_cv = speed_std / speed_mean if speed_mean > 0 else 0  # Coefficient de variation
-        cbv_score = 1.0 - min(1.0, speed_cv / 0.5)  # Plus régulier = meilleur score
+        speed_cv = speed_std / speed_mean if speed_mean > 0 else 0
+        cbv_score = 1.0 - min(1.0, speed_cv / 0.5)
         
         # 2. Chroma - Basé sur la qualité de la trajectoire (smoothness)
         heading_changes = df['heading_change'].dropna()
         avg_heading_change = heading_changes.mean()
-        chroma_score = 1.0 - min(1.0, avg_heading_change / 45.0)  # Moins de changements brusques = meilleur
+        chroma_score = 1.0 - min(1.0, avg_heading_change / 45.0)
         
         # 3. Trajectoire - Basé sur la consistance de la trajectoire
         trajectory_variance = df['heading_change'].var()
@@ -236,7 +233,7 @@ def analyze_csv_lovable(file_path: str) -> Dict[str, Any]:
         max_speed = df['speed'].max()
         avg_speed = df['speed'].mean()
         speed_ratio = avg_speed / max_speed if max_speed > 0 else 0
-        speed_score = speed_ratio * 0.7 + (max_speed / 150.0) * 0.3  # Normalisé sur 150 km/h max
+        speed_score = speed_ratio * 0.7 + (max_speed / 150.0) * 0.3
         
         # ============================================
         # VOTRE CODE LOVABLE - INTERPRÉTATION
@@ -277,18 +274,16 @@ def analyze_csv_lovable(file_path: str) -> Dict[str, Any]:
         # ============================================
         # ÉTAPE 3 : CALCUL DU SCORE FINAL
         # ============================================
-        # VOTRE CODE LOVABLE - Calcul du score
         score_components = {
-            "cbv": cbv_score * 25,      # 25 points max
-            "chroma": chroma_score * 25,  # 25 points max
-            "trajectory": trajectory_score * 30,  # 30 points max
-            "speed": speed_score * 20    # 20 points max
+            "cbv": cbv_score * 25,
+            "chroma": chroma_score * 25,
+            "trajectory": trajectory_score * 30,
+            "speed": speed_score * 20
         }
         
         base_score = sum(score_components.values())
-        base_score = max(0, min(100, int(base_score)))  # Clamp 0-100
+        base_score = max(0, min(100, int(base_score)))
         
-        # Ajouter un peu de variabilité réaliste
         score = base_score + np.random.randint(-2, 3)
         score = max(0, min(100, score))
         
@@ -428,7 +423,7 @@ async def root():
 @app.get("/health")
 async def health():
     """Health check endpoint"""
-    return {"status": "healthy"}
+    return {"status": "healthy", "version": "1.0.0", "environment": "production"}
 
 
 if __name__ == "__main__":
