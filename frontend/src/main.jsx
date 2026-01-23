@@ -8,7 +8,7 @@ function App() {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    fetch('https://apexai-backend-v2.onrender.com/health')
+    fetch('https://apexai-backend-v2.onrender.com/api/health')
       .then(res => {
         if (res.ok) return res.json()
         throw new Error(`HTTP ${res.status}`)
