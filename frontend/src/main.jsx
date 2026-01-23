@@ -8,7 +8,7 @@ function App() {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    fetch('https://apexai-backend-v2.onrender.com/api/health')
+    fetch('https://apexai-backend-v2.onrender.com/health')
       .then(res => {
         if (res.ok) return res.json()
         throw new Error(`HTTP ${res.status}`)
@@ -20,7 +20,7 @@ function App() {
   const testAPI = async () => {
     setLoading(true)
     try {
-      const res = await fetch('https://apexai-backend-v2.onrender.com/api')
+      const res = await fetch('https://apexai-backend-v2.onrender.com/')
       const json = await res.json()
       setData(json)
     } catch (error) {
