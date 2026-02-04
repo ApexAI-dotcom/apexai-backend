@@ -44,16 +44,17 @@ app = FastAPI(
     redoc_url="/redoc" if (settings.ENVIRONMENT == "development" or settings.DOCS_ENABLED) else None
 )
 
-# CORS - lire depuis CORS_ORIGINS (env var, virgules = liste)
-cors_origins = os.environ.get(
-    "CORS_ORIGINS",
-    "http://localhost:8080,http://localhost:3000,http://localhost:5173"
-).split(",")
+# CORS - lire depuis CORS_ORIGINS (env var). "*" = toutes origines (preview Vercel)
+cors_origins_str = os.environ.get("CORS_ORIGINS", "http://localhost:8080")
+if cors_origins_str.strip() == "*":
+    allow_origins = ["*"]
+else:
+    allow_origins = [origin.strip() for origin in cors_origins_str.split(",") if origin.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin.strip() for origin in cors_origins if origin.strip()],
-    allow_credentials=True,
+    allow_origins=allow_origins,
+    allow_credentials=True if "*" not in allow_origins else False,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["X-Process-Time"]
