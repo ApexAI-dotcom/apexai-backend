@@ -11,4 +11,5 @@ COPY . .
 
 EXPOSE 8000
 
-CMD gunicorn src.api.main:app --workers 2 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
+CMD gunicorn src.api.main:app --workers 2 --worker-class 
+uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
