@@ -44,39 +44,18 @@ app = FastAPI(
     redoc_url="/redoc" if (settings.ENVIRONMENT == "development" or settings.DOCS_ENABLED) else None
 )
 
-# CORS pour Frontend et Lovable.dev
-allowed_origins = list(settings.CORS_ORIGINS)
-if not allowed_origins:
-    allowed_origins = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:5173", "http://localhost:8080"]
-if settings.ENVIRONMENT == "development":
-    # Ajouter origines locales si pas déjà présentes
-    dev_origins = [
-        "http://localhost:8080",
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:8080",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:5173"
-    ]
-    for origin in dev_origins:
-        if origin not in allowed_origins:
-            allowed_origins.append(origin)
-else:
-    # En production, accepter toutes les origines Lovable
-    prod_origins = [
-        "https://*.lovable.app",
-        "https://*.lovable.dev"
-    ]
-    for origin in prod_origins:
-        if origin not in allowed_origins:
-            allowed_origins.append(origin)
+# CORS - lire depuis CORS_ORIGINS (env var, virgules = liste)
+cors_origins = os.environ.get(
+    "CORS_ORIGINS",
+    "http://localhost:8080,http://localhost:3000,http://localhost:5173"
+).split(",")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=[origin.strip() for origin in cors_origins if origin.strip()],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_methods=["*"],
+    allow_headers=["*"],
     expose_headers=["X-Process-Time"]
 )
 
