@@ -1,31 +1,23 @@
-# Apex AI Backend - Dockerfile (Python 3.11, pas de Poetry)
-# Usage: docker build -t apexai-backend . && docker run -p 8000:8000 apexai-backend
-
-FROM python:3.11-slim
-
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+FROM python:3.12-slim
 
 WORKDIR /app
 
-# Dépendances système légères (matplotlib, scipy, etc.)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc g++ \
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Requirements (pip uniquement, pas Poetry)
-COPY requirements.txt ./
+# Copy requirements first (cache)
+COPY requirements.txt .
+
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Code source
-COPY src ./src
+# Copy the rest of the code
+COPY . .
 
-# Dossiers runtime
-RUN mkdir -p /app/output /app/temp
-
+# Expose port
 EXPOSE 8000
 
-# Port Render = $PORT (défaut 8000)
-CMD ["sh", "-c", "python -m uvicorn src.api.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Run with shell to interpret $PORT
+CMD ["sh", "-c", "uvicorn src.api.main:app --host 0.0.0.0 --port $PORT"]
