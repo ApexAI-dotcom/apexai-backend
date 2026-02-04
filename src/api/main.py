@@ -63,10 +63,12 @@ app.add_middleware(
 # Compression GZip
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
-# Servir les images statiques
+# Servir les images statiques (graphiques matplotlib)
 output_dir = Path(settings.OUTPUT_DIR)
 output_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/output", StaticFiles(directory=str(output_dir)), name="output")
+if settings.ENVIRONMENT == "production" and "localhost" in settings.BASE_URL:
+    logger.warning("BASE_URL points to localhost - graphiques ne s'afficheront pas en prod. Set BASE_URL on Railway/Render.")
 
 # Middleware timing et logging
 @app.middleware("http")

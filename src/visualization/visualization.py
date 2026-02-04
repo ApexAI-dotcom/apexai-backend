@@ -5,6 +5,10 @@ Apex AI - Visualization (Karting Pro)
 Création de 8 graphiques style F1 AWS pour analyse professionnelle
 """
 
+# Backend headless OBLIGATOIRE pour Railway/Render (pas de display)
+import matplotlib
+matplotlib.use("Agg")
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt

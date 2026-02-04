@@ -23,13 +23,13 @@ class Settings:
     # Paths (relatifs depuis project_root)
     PROJECT_ROOT = Path(__file__).parent.parent.parent.resolve()
     TEMP_DIR = str(PROJECT_ROOT / "temp")
-    OUTPUT_DIR = str(PROJECT_ROOT / "output")
+    OUTPUT_DIR = os.getenv("OUTPUT_DIR", str(PROJECT_ROOT / "output"))
     
     # Créer dossiers si nécessaire
     Path(TEMP_DIR).mkdir(parents=True, exist_ok=True)
     Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
     
-    # URL de base pour les images (à adapter selon déploiement)
+    # URL de base pour les images (OBLIGATOIRE en prod: Railway, Render)
     BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
     
     # CORS (string séparée par virgules)
