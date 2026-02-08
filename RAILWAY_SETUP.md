@@ -28,6 +28,6 @@ Ou laisser le **Builder** sur **Railpack** (auto-détection Python).
 
 Si Railpack pose problème, utiliser le Dockerfile :
 
-1. **Settings** → **Build** → **Builder** : **Dockerfile**
-2. **Dockerfile Path** : `apexai-backend/Dockerfile`
-3. **Root Directory** : `apexai-backend`
+1. **Settings** → **Source** → **Root Directory** : `apexai-backend`
+2. **Settings** → **Build** → **Builder** : **Dockerfile**
+3. **Dockerfile Path** : `Dockerfile` (relatif à la racine `apexai-backend`)
