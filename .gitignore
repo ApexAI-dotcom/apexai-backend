@@ -32,3 +32,8 @@ test_*.csv
 # OS
 .DS_Store
 Thumbs.db
+
+# Frontend / temp (separate repos)
+node_modules/
+apex-ai-fresh/
+lovable-temp/
