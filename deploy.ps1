@@ -31,7 +31,7 @@ Set-Location ..
 Write-Host "✅ Déploiement terminé!" -ForegroundColor Green
 Write-Host ""
 Write-Host "📋 Prochaines étapes:" -ForegroundColor Cyan
-Write-Host "1. Configurer le backend sur Render.com" -ForegroundColor White
+Write-Host "1. Configurer le backend sur Railway.app" -ForegroundColor White
 Write-Host "2. Ajouter les variables d'environnement sur Vercel" -ForegroundColor White
 Write-Host "3. Configurer le domaine apexai.pro (optionnel)" -ForegroundColor White
 Write-Host ""

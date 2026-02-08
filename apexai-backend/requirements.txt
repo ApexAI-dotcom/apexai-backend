@@ -1,4 +1,4 @@
-# Apex AI Backend - requirements.txt (Render / Docker)
+# Apex AI Backend - requirements.txt (Railway / Docker)
 # Python 3.11 uniquement. Pas de Poetry.
 
 fastapi>=0.109.0

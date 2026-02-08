@@ -48,7 +48,6 @@ output
 !README.md
 Dockerfile
 .dockerignore
-render.yaml
 docker-compose*.yml
 .vercelignore
 vercel.json

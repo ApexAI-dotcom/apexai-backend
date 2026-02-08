@@ -1,25 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Script de lancement de l'API REST Apex AI
+Script de lancement de l'API REST Apex AI (depuis la racine du projet)
+Délègue vers apexai-backend/run_api.py
 Usage: python run_api.py
 """
 
+import subprocess
 import sys
 from pathlib import Path
 
-# Ajouter le répertoire racine au path
-project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root))
+backend_dir = Path(__file__).parent / "apexai-backend"
+run_script = backend_dir / "run_api.py"
 
-import uvicorn
-from src.api.config import settings
-
-if __name__ == "__main__":
-    uvicorn.run(
-        "src.api.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=settings.ENVIRONMENT == "development",
-        log_level="info"
-    )
+if run_script.exists():
+    sys.exit(subprocess.call([sys.executable, str(run_script)], cwd=str(backend_dir)))
+else:
+    print("Erreur: apexai-backend/run_api.py introuvable.")
+    sys.exit(1)
