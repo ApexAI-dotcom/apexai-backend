@@ -6,6 +6,7 @@ Application FastAPI principale
 Version: 1.0.0
 """
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -23,6 +24,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Redis client global (connexion propre on_shutdown)
+redis_client = None
+
 from .routes import router
 from .config import settings
 
@@ -35,11 +39,34 @@ except ImportError as e:
     logger.warning("  Stripe endpoints will not be available")
     stripe_router = None
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup / shutdown : connexion Redis"""
+    global redis_client
+    if settings.REDIS_URL:
+        try:
+            from redis.asyncio import Redis
+            redis_client = Redis.from_url(settings.REDIS_URL, decode_responses=True)
+            await redis_client.ping()
+            logger.info("✓ Redis connected")
+        except Exception as e:
+            logger.warning(f"⚠ Redis not available: {e}")
+            redis_client = None
+    else:
+        redis_client = None
+    app.state.redis = redis_client
+    yield
+    if redis_client:
+        await redis_client.aclose()
+        logger.info("✓ Redis connection closed")
+
+
 # Créer application FastAPI
 app = FastAPI(
     title="Apex AI API",
     description="API d'analyse de télémétrie karting avec IA - Scoring /100 et Coaching",
     version="1.0.0",
+    lifespan=lifespan,
     docs_url="/docs" if (settings.ENVIRONMENT == "development" or settings.DOCS_ENABLED) else None,
     redoc_url="/redoc" if (settings.ENVIRONMENT == "development" or settings.DOCS_ENABLED) else None
 )
@@ -127,6 +154,7 @@ async def root():
         "docs": "/docs" if (settings.ENVIRONMENT == "development" or settings.DOCS_ENABLED) else "disabled",
         "endpoints": {
             "analyze": "/api/v1/analyze",
+            "analyse": "/api/v1/analyse/{cache_key}",
             "health": "/health"
         }
     }

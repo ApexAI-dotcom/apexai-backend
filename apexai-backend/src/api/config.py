@@ -47,6 +47,9 @@ class Settings:
     GROK_API_KEY = os.getenv("GROK_API_KEY", "")
     GROK_API_URL = os.getenv("GROK_API_URL", "https://api.x.ai/v1")
     
+    # Redis (Railway REDIS_URL)
+    REDIS_URL = os.getenv("REDIS_URL", "")
+
     # Docs en prod (Render, etc.)
     DOCS_ENABLED = os.getenv("DOCS_ENABLED", "false").lower() == "true"
 

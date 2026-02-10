@@ -5,21 +5,26 @@ Apex AI - API Routes
 Endpoints de l'API REST
 """
 
-from fastapi import APIRouter, File, UploadFile, HTTPException
-from fastapi.responses import JSONResponse
+import hashlib
+import json
 import logging
-import uuid
 import os
-import tempfile
+import uuid
 from pathlib import Path
 
+from fastapi import APIRouter, File, Request, UploadFile, HTTPException
+from fastapi.responses import JSONResponse
+
+from .config import settings
 from .models import AnalysisResponse, ErrorResponse
 from .services import AnalysisService
 from .utils import validate_csv_file
-from .config import settings
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+REDIS_CACHE_TTL = 3600
+REDIS_KEY_PREFIX = "analysis:"
 
 
 @router.post(
@@ -53,6 +58,7 @@ logger = logging.getLogger(__name__)
     """
 )
 async def analyze_telemetry(
+    request: Request,
     file: UploadFile = File(..., description="Fichier CSV de télémétrie")
 ) -> AnalysisResponse:
     """
@@ -66,7 +72,10 @@ async def analyze_telemetry(
     """
     analysis_id = str(uuid.uuid4())[:8]
     logger.info(f"🏁 New analysis request: {analysis_id} - {file.filename}")
-    
+
+    cache_key = hashlib.md5((file.filename or "unknown").encode()).hexdigest()
+    redis = getattr(request.app.state, "redis", None)
+
     try:
         # Validation
         validation_error = await validate_csv_file(file)
@@ -80,14 +89,32 @@ async def analyze_telemetry(
                     "message": validation_error
                 }
             )
-        
-        # Analyse
+
+        # Cache HIT
+        if redis:
+            cached_raw = await redis.get(f"{REDIS_KEY_PREFIX}{cache_key}")
+            if cached_raw:
+                logger.info(f"[{analysis_id}] Redis cache HIT")
+                data = json.loads(cached_raw)
+                return JSONResponse(content={"cached": True, "cache_key": cache_key, **data})
+
+        # Analyse (cache MISS)
+        if redis:
+            logger.info(f"[{analysis_id}] Redis cache MISS")
         service = AnalysisService()
         result = await service.process_telemetry(file, analysis_id)
-        
+
+        # Stocker en cache
+        if redis:
+            await redis.setex(
+                f"{REDIS_KEY_PREFIX}{cache_key}",
+                REDIS_CACHE_TTL,
+                json.dumps(result, default=str)
+            )
+
         logger.info(f"[{analysis_id}] ✅ Analysis completed successfully")
-        # result est déjà un dict depuis services.py
-        return AnalysisResponse(**result)
+        resp = AnalysisResponse(**result)
+        return JSONResponse(content={"cache_key": cache_key, **resp.model_dump()})
         
     except HTTPException:
         raise
@@ -111,6 +138,23 @@ async def analyze_telemetry(
                 "message": "Une erreur s'est produite lors de l'analyse. Veuillez réessayer."
             }
         )
+
+
+@router.get(
+    "/analyse/{cache_key}",
+    summary="Récupérer une analyse depuis le cache",
+    description="Retourne le résultat d'une analyse par cache_key (md5 du filename)"
+)
+async def get_analyse_by_id(request: Request, cache_key: str):
+    """Récupérer une analyse depuis le cache Redis."""
+    redis = getattr(request.app.state, "redis", None)
+    if not redis:
+        raise HTTPException(status_code=503, detail="Cache non disponible")
+    cached_raw = await redis.get(f"{REDIS_KEY_PREFIX}{cache_key}")
+    if not cached_raw:
+        raise HTTPException(status_code=404, detail="Analyse non trouvée ou expirée")
+    data = json.loads(cached_raw)
+    return JSONResponse(content={"cached": True, "cache_key": cache_key, **data})
 
 
 @router.get(
