@@ -133,6 +133,13 @@ app.include_router(router, prefix="/api/v1", tags=["analysis"])
 if stripe_router:
     app.include_router(stripe_router)
 
+# Routes User Profile
+try:
+    from .user_routes import router as user_router
+    app.include_router(user_router)
+except ImportError:
+    pass
+
 # Importer process-video depuis routes pour accès direct /api/process-video
 from .routes import process_video
 app.post("/api/process-video")(process_video)

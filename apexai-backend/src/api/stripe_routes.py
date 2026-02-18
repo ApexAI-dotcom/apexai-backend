@@ -243,19 +243,31 @@ async def stripe_webhook(request: Request):
             print(f"🔑 User ID: {user_id}")
             logger.info(f"Updating user {user_id} to plan {plan}")
             
-            # UPDATE SUPABASE
+            # Récupérer trial_end depuis Stripe subscription
+            trial_end = None
+            if subscription_id:
+                try:
+                    sub = stripe.Subscription.retrieve(subscription_id)
+                    trial_end = sub.trial_end
+                except Exception:
+                    pass
+
+            # UPDATE SUPABASE - tier, trial_end (CRM)
             if supabase_client:
                 try:
+                    metadata = {
+                        "subscription": {
+                            "plan": plan,
+                            "status": "active",
+                            "customer_id": customer_id,
+                            "subscription_id": subscription_id,
+                        },
+                        "tier": "racer" if plan == "pro" else "team",
+                        "trial_end": trial_end,
+                    }
                     supabase_client.auth.admin.update_user_by_id(
                         user_id,
-                        {"user_metadata": {
-                            "subscription": {
-                                "plan": plan,
-                                "status": "active", 
-                                "customer_id": customer_id,
-                                "subscription_id": subscription_id
-                            }
-                        }}
+                        {"user_metadata": metadata}
                     )
                     print(f"🎉 PRO SUPABASE ACTIVÉ: {user_id} → {plan}")
                     logger.info(f"✅ Supabase updated: user {user_id} → plan {plan}")
