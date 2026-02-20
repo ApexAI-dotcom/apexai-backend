@@ -113,7 +113,6 @@ async def analyze_telemetry(
             )
 
         logger.info(f"[{analysis_id}] ✅ Analysis completed successfully")
-        import json
         from datetime import datetime, date
 
         def json_serializer(obj):
