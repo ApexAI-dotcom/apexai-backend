@@ -50,6 +50,35 @@ def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> f
     return distance
 
 
+def _extract_beacon_markers(filepath: str) -> list:
+    """
+    Extrait les Beacon Markers de la ligne 11 d'un fichier CSV AiM/MoTeC.
+    Retourne une liste de floats (temps en secondes) ou [] si absent.
+    """
+    try:
+        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+            for i, line in enumerate(f):
+                if i > 20:  # Les beacons sont toujours dans les 20 premières lignes
+                    break
+                if 'Beacon' in line or 'beacon' in line:
+                    # Format: "Beacon Markers","82.248 135.306 187.523..."
+                    parts = line.strip().replace('"', '').split(',')
+                    if len(parts) >= 2:
+                        markers_str = parts[1].strip()
+                        markers = []
+                        for x in markers_str.split():
+                            try:
+                                val = float(x)
+                                markers.append(val)
+                            except ValueError:
+                                continue
+                        if markers:
+                            return sorted(markers)
+    except Exception:
+        pass
+    return []
+
+
 def _detect_format(file_path: str) -> int:
     """
     Détecte le format du fichier en lisant les premières lignes.
@@ -422,6 +451,15 @@ def robust_load_telemetry(file_path: str) -> Dict[str, Any]:
     
     # Utiliser le DataFrame nettoyé
     df = df_clean
+    
+    # Extraire les Beacon Markers (AiM/MoTeC)
+    beacon_markers = _extract_beacon_markers(file_path)
+    if beacon_markers:
+        df.attrs['beacon_markers'] = beacon_markers
+        result['warnings'].append(
+            f"✓ Beacon Markers extraits : {len(beacon_markers)} passages, "
+            f"1er beacon à t={beacon_markers[0]:.3f}s"
+        )
     
     # Calcul des métadonnées
     try:

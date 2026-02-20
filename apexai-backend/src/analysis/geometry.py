@@ -332,194 +332,158 @@ def calculate_trajectory_geometry(df: pd.DataFrame) -> pd.DataFrame:
 
 def detect_laps(df: pd.DataFrame, min_lap_distance_m: float = 100.0) -> pd.DataFrame:
     """
-    Détecte les tours complets par ligne de départ/arrivée géodésique.
+    Détecte les tours en utilisant les Beacon Markers AiM/MoTeC si disponibles.
+    Fallback sur détection GPS si pas de beacons.
     
-    Méthode robuste pour karting :
-    1. Ignore les N premiers points (sortie de stands = lents)
-    2. Trouve le point de retour répété = ligne de chrono
-    3. lap_number=0 = hors tour (stands, tour de formation)
-    4. lap_number>=1 = tours chronométrés
+    Avec beacons:
+    - lap_number=0 : avant le premier beacon (sortie stands + tour chauffe)
+    - lap_number=k : entre le k-ième et (k+1)-ième beacon
     
-    Avantages vs méthode par vitesse :
-    - Marche même si la ligne de chrono n'est pas en ligne droite rapide
-    - Détecte correctement plusieurs tours
-    - Exclut systématiquement la sortie des stands
+    Garantit que le Virage 1 des stands (avant 1er beacon) est toujours exclu.
     """
     df_result = df.copy()
     n_points = len(df_result)
-    lap_number = np.zeros(n_points, dtype=int)  # 0 = hors tour
-
+    lap_number = np.zeros(n_points, dtype=int)
+    
     try:
+        # Récupérer le temps
+        time_col = None
+        for col in ['time', 'Time', 'TIME', 't']:
+            if col in df_result.columns:
+                time_col = col
+                break
+        
+        if time_col is None:
+            df_result['lap_number'] = 1
+            return df_result
+        
+        time_vals = pd.to_numeric(df_result[time_col], errors='coerce').fillna(0).values
+        
+        # === MÉTHODE 1 : Utiliser les Beacon Markers (AiM/MoTeC) ===
+        beacon_markers = df_result.attrs.get('beacon_markers', [])
+        
+        if beacon_markers and len(beacon_markers) >= 1:
+            warnings.warn(f"✓ Utilisation Beacon Markers : {len(beacon_markers)} passages")
+            
+            # Assigner lap_number basé sur les beacons
+            # lap=0 avant le 1er beacon, lap=k entre beacon[k-1] et beacon[k]
+            for i in range(n_points):
+                t = float(time_vals[i])
+                current_lap = 0
+                for beacon_idx, beacon_t in enumerate(beacon_markers):
+                    if t >= beacon_t:
+                        current_lap = beacon_idx + 1
+                    else:
+                        break
+                lap_number[i] = current_lap
+            
+            df_result['lap_number'] = lap_number
+            df_result.attrs['n_laps_detected'] = len(beacon_markers)
+            df_result.attrs['method'] = 'beacon_markers'
+            
+            # Log stats
+            lap_0_count = int((lap_number == 0).sum())
+            warnings.warn(
+                f"✓ Résultat : {len(beacon_markers)} tours, "
+                f"{lap_0_count} points en stands/chauffe (lap=0), "
+                f"1er tour commence à t={beacon_markers[0]:.3f}s"
+            )
+            return df_result
+        
+        # === MÉTHODE 2 : Fallback GPS (si pas de beacons) ===
+        warnings.warn("⚠️ Pas de Beacon Markers, utilisation détection GPS")
+        
         lat = (df_result['latitude_smooth'].values 
                if 'latitude_smooth' in df_result.columns 
-               else df_result['latitude'].values)
+               else df_result['latitude'].values if 'latitude' in df_result.columns
+               else None)
         lon = (df_result['longitude_smooth'].values 
                if 'longitude_smooth' in df_result.columns 
-               else df_result['longitude'].values)
-        speed = pd.to_numeric(df_result['speed'], errors='coerce').fillna(0).values
+               else df_result['longitude'].values if 'longitude' in df_result.columns
+               else None)
+        
+        if lat is None or lon is None:
+            df_result['lap_number'] = 1
+            return df_result
+        
+        speed_col = next((c for c in ['speed', 'Speed', 'GPS Speed', 'gps_speed'] 
+                         if c in df_result.columns), None)
+        speed = pd.to_numeric(df_result[speed_col], errors='coerce').fillna(0).values if speed_col else np.zeros(n_points)
+        
         cum_dist = (df_result['cumulative_distance'].values 
                     if 'cumulative_distance' in df_result.columns 
                     else np.zeros(n_points))
-
-        # === ÉTAPE 1 : Ignorer le début (sortie de stands) ===
-        # On ignore les points jusqu'à ce qu'on ait parcouru min_lap_distance_m
-        # ET qu'on soit à une vitesse normale (>30 km/h)
-        MIN_SPEED_MOVING_KMH = 30.0
-        FINISH_LINE_RADIUS_M = 25.0   # rayon de détection passage ligne
-        MIN_LAP_DISTANCE_M = min_lap_distance_m  # distance minimum entre 2 passages
-
-        # Trouver l'index de début = premier point où on a vraiment commencé à rouler
-        start_idx = 0
-        for i in range(n_points):
-            if speed[i] > MIN_SPEED_MOVING_KMH and cum_dist[i] > 10.0:
-                start_idx = i
-                break
-
-        if start_idx == 0 or start_idx >= n_points - 10:
-            # Fallback : pas de données utilisables
-            df_result['lap_number'] = 1
-            return df_result
-
-        # === ÉTAPE 2 : Trouver la ligne de chrono par clustering ===
-        # La ligne de chrono = endroit où le kart passe PLUSIEURS FOIS
-        # On cherche le cluster de points GPS le plus répété
-        # après avoir parcouru au moins min_lap_distance_m
-
-        # Candidats : points espacés de MIN_LAP_DISTANCE_M
-        # On prend le premier point après avoir parcouru MIN_LAP_DISTANCE_M
-        finish_candidate_idx = None
-        for i in range(start_idx, n_points):
-            if cum_dist[i] - cum_dist[start_idx] >= MIN_LAP_DISTANCE_M:
-                finish_candidate_idx = i
-                break
-
-        if finish_candidate_idx is None:
-            df_result['lap_number'] = 1
-            return df_result
-
-        # Point de départ du candidat
-        cand_lat = float(lat[finish_candidate_idx])
-        cand_lon = float(lon[finish_candidate_idx])
-
-        # Chercher si on repasse près de ce point (validation = c'est bien un passage répété)
-        # On compte les passages dans un rayon FINISH_LINE_RADIUS_M
-        passages = []
-        i = finish_candidate_idx
-        while i < n_points:
-            dist = _haversine_distance(float(lat[i]), float(lon[i]), cand_lat, cand_lon)
-            if dist < FINISH_LINE_RADIUS_M:
-                # Trouver le centre exact de ce passage (point le plus proche)
-                min_dist = dist
-                best_i = i
-                j = i + 1
-                while j < n_points:
-                    d = _haversine_distance(float(lat[j]), float(lon[j]), cand_lat, cand_lon)
-                    if d < FINISH_LINE_RADIUS_M:
-                        if d < min_dist:
-                            min_dist = d
-                            best_i = j
-                        j += 1
-                    else:
-                        break
-                passages.append(best_i)
-                i = j + 1  # Avancer après ce passage
-            else:
-                i += 1
-
-        # Si pas assez de passages répétés, le candidat n'est pas bon
-        # Essayer un autre point plus loin
-        if len(passages) < 2:
-            # Fallback : utiliser méthode vitesse
-            speed_threshold = np.percentile(speed[speed > MIN_SPEED_MOVING_KMH], 75) if (speed > MIN_SPEED_MOVING_KMH).any() else 60.0
-            high_speed_pts = np.where((speed > speed_threshold) & (cum_dist > MIN_LAP_DISTANCE_M))[0]
-            if len(high_speed_pts) == 0:
-                df_result['lap_number'] = 1
-                return df_result
-            finish_candidate_idx = high_speed_pts[0]
-            cand_lat = float(lat[finish_candidate_idx])
-            cand_lon = float(lon[finish_candidate_idx])
-            # Recalculer les passages
-            passages = []
-            i = finish_candidate_idx
-            while i < n_points:
-                dist = _haversine_distance(float(lat[i]), float(lon[i]), cand_lat, cand_lon)
-                if dist < FINISH_LINE_RADIUS_M:
-                    min_dist = dist
-                    best_i = i
-                    j = i + 1
-                    while j < n_points:
-                        d = _haversine_distance(float(lat[j]), float(lon[j]), cand_lat, cand_lon)
-                        if d < FINISH_LINE_RADIUS_M:
-                            if d < min_dist:
-                                min_dist = d
-                                best_i = j
-                            j += 1
-                        else:
-                            break
-                    passages.append(best_i)
-                    i = j + 1
-                else:
-                    i += 1
-
-        if len(passages) < 1:
-            df_result['lap_number'] = 1
-            return df_result
-
-        # === ÉTAPE 3 : Affiner le point de ligne (barycentre des passages) ===
-        finish_lat = float(np.mean([lat[p] for p in passages]))
-        finish_lon = float(np.mean([lon[p] for p in passages]))
-
-        # === ÉTAPE 4 : Numéroter les tours ===
-        # lap_number[i] = 0 si avant le PREMIER passage sur la ligne
-        # lap_number[i] = k si entre le k-ième et (k+1)-ième passage
         
-        current_lap = 0  # 0 = avant le premier passage (stands/formation)
+        # Trouver fin des stands : dernier segment vitesse < 25km/h prolongé
+        # puis trouver le 1er passage GPS répété après
+        STAND_SPEED = 25.0
+        FINISH_RADIUS_M = 25.0
+        MIN_LAP_M = min_lap_distance_m
+        
+        # Trouver quand le kart sort vraiment des stands
+        pits_end_idx = 0
+        consecutive_fast = 0
+        for i in range(n_points):
+            if speed[i] > 40.0:
+                consecutive_fast += 1
+                if consecutive_fast > 50:  # 0.5s @ 100Hz ou 5s @ 10Hz
+                    pits_end_idx = max(0, i - 50)
+                    break
+            else:
+                consecutive_fast = 0
+        
+        if pits_end_idx == 0:
+            df_result['lap_number'] = 1
+            return df_result
+        
+        # Trouver la ligne de chrono (point GPS le plus répété après pits_end)
+        target_dist = cum_dist[pits_end_idx] + MIN_LAP_M
+        candidate_idx = next((i for i in range(pits_end_idx, n_points) 
+                             if cum_dist[i] >= target_dist), None)
+        
+        if candidate_idx is None:
+            df_result['lap_number'] = 1
+            return df_result
+        
+        finish_lat = float(lat[candidate_idx])
+        finish_lon = float(lon[candidate_idx])
+        
+        # Numéroter les tours
+        current_lap = 0
         last_passage_dist = 0.0
         near_line = False
-        cooldown_dist = MIN_LAP_DISTANCE_M * 0.5  # Distance minimale entre 2 détections
-
+        
         for i in range(n_points):
-            if np.isnan(lat[i]) or np.isnan(lon[i]):
+            if np.isnan(lat[i]) or np.isnan(lon[i]) or i < pits_end_idx:
                 lap_number[i] = current_lap
                 continue
-
+            
             dist_to_finish = _haversine_distance(
-                float(lat[i]), float(lon[i]),
-                finish_lat, finish_lon
-            )
-
+                float(lat[i]), float(lon[i]), finish_lat, finish_lon)
             dist_since_last = cum_dist[i] - last_passage_dist
-
-            # Détection passage ligne
-            if (dist_to_finish < FINISH_LINE_RADIUS_M 
-                    and dist_since_last > cooldown_dist
-                    and speed[i] > MIN_SPEED_MOVING_KMH
+            
+            if (dist_to_finish < FINISH_RADIUS_M 
+                    and dist_since_last > MIN_LAP_M * 0.3
+                    and speed[i] > 30.0
                     and not near_line):
                 current_lap += 1
                 last_passage_dist = cum_dist[i]
                 near_line = True
-            elif dist_to_finish > FINISH_LINE_RADIUS_M * 2:
+            elif dist_to_finish > FINISH_RADIUS_M * 2.5:
                 near_line = False
-
+            
             lap_number[i] = current_lap
-
-        # === ÉTAPE 5 : Sauvegarder la position de la ligne de chrono ===
-        # (utile pour affichage et debug)
+        
         df_result['lap_number'] = lap_number
-        df_result.attrs['finish_line_lat'] = finish_lat
-        df_result.attrs['finish_line_lon'] = finish_lon
-        df_result.attrs['n_laps_detected'] = current_lap
-
-        warnings.warn(
-            f"✓ Détection tours : {current_lap} tours, "
-            f"ligne chrono @ ({finish_lat:.6f}, {finish_lon:.6f}), "
-            f"{len(passages)} passages détectés"
-        )
+        df_result.attrs['n_laps_detected'] = int(current_lap)
+        df_result.attrs['method'] = 'gps_clustering'
+        warnings.warn(f"✓ GPS fallback : {current_lap} tours détectés")
 
     except Exception as e:
-        warnings.warn(f"⚠️ Erreur détection tours : {str(e)}")
+        import traceback
+        warnings.warn(f"⚠️ Erreur detect_laps : {str(e)}\n{traceback.format_exc()}")
         df_result['lap_number'] = 1
-
+    
     return df_result
 
 
