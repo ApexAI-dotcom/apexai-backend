@@ -524,8 +524,21 @@ def detect_corners(
     if missing_cols:
         raise ValueError(f"❌ Colonnes manquantes : {', '.join(missing_cols)}. Appelez d'abord calculate_trajectory_geometry()")
     
+    # Filtrer les points hors tour (stands, tour de chauffe) avant détection
+    if 'lap_number' in df.columns:
+        df_circuit = df[df['lap_number'] >= 1].copy()
+        if len(df_circuit) < 100:
+            warnings.warn("⚠️ Moins de 100 points en lap>=1, utilisation de tout le df")
+            df_circuit = df.copy()
+        else:
+            pct = len(df_circuit) / len(df) * 100
+            warnings.warn(f"✓ detect_corners : {len(df_circuit)} points circuit "
+                         f"({pct:.0f}% du total, lap>=1)")
+    else:
+        df_circuit = df.copy()
+    
     df_result = df.copy()
-    n_points = len(df_result)
+    n_points = len(df_circuit)
     
     # Initialiser colonnes
     df_result['is_corner'] = False
@@ -534,12 +547,12 @@ def detect_corners(
     df_result['corner_type'] = 'straight'
     
     try:
-        lateral_g = pd.to_numeric(df_result['lateral_g'], errors='coerce').values
-        speed = pd.to_numeric(df_result['speed'], errors='coerce').values
-        cumulative_dist = pd.to_numeric(df_result['cumulative_distance'], errors='coerce').values
+        lateral_g = pd.to_numeric(df_circuit['lateral_g'], errors='coerce').values
+        speed = pd.to_numeric(df_circuit['speed'], errors='coerce').values
+        cumulative_dist = pd.to_numeric(df_circuit['cumulative_distance'], errors='coerce').values
         
-        if 'time' in df_result.columns:
-            time = pd.to_numeric(df_result['time'], errors='coerce').values
+        if 'time' in df_circuit.columns:
+            time = pd.to_numeric(df_circuit['time'], errors='coerce').values
         else:
             time = None
         
@@ -601,23 +614,9 @@ def detect_corners(
             })
         
         # 4. TRAITER CHAQUE VIRAGE VALIDE avec numérotation par tour
-        # Récupérer lap_number si disponible
-        has_laps = 'lap_number' in df_result.columns
-        lap_numbers = df_result['lap_number'].values if has_laps else np.ones(n_points, dtype=int)
-
-        # Exclure virages hors tour (stands, lap=0)
-        valid_corners_filtered = []
-        for corner_info in valid_corners:
-            corner_indices = corner_info['indices']
-            lap_nums = [int(lap_numbers[i]) for i in corner_indices 
-                       if i < len(lap_numbers) and not np.isnan(lap_numbers[i])]
-            if not lap_nums:
-                continue
-            counts = np.bincount(lap_nums)
-            dominant_lap = int(np.argmax(counts))
-            if dominant_lap > 0:  # 0 = stands/formation
-                valid_corners_filtered.append(corner_info)
-        valid_corners = valid_corners_filtered
+        # (filtre lap=0 inutile : détection faite sur df_circuit = lap>=1 uniquement)
+        has_laps = 'lap_number' in df_circuit.columns
+        lap_numbers = df_circuit['lap_number'].values if has_laps else np.ones(n_points, dtype=int)
 
         # Compteur de virages PAR tour
         corners_per_lap: Dict[int, int] = {}
@@ -640,8 +639,8 @@ def detect_corners(
             corner_num_in_lap = corners_per_lap[lap_num]
 
             # Type de virage
-            if 'curvature' in df_result.columns:
-                curvature_in_corner = df_result.loc[df_result.index[corner_indices], 'curvature'].values
+            if 'curvature' in df_circuit.columns:
+                curvature_in_corner = df_circuit.loc[df_circuit.index[corner_indices], 'curvature'].values
                 curvature_mean = np.mean(curvature_in_corner) if len(curvature_in_corner) > 0 else 0.0
                 corner_type = "left" if curvature_mean > 0 else "right"
             else:
@@ -654,16 +653,17 @@ def detect_corners(
             apex_local_idx = np.argmax(lateral_g_abs_in_corner)
             apex_index = int(corner_indices[apex_local_idx])
 
-            # Marquer colonnes avec numérotation lap/corner
+            # Marquer colonnes avec numérotation lap/corner (indices df_circuit → index df complet)
             for idx in corner_indices:
-                if idx < len(df_result):
-                    df_result.at[df_result.index[idx], 'is_corner'] = True
-                    df_result.at[df_result.index[idx], 'corner_id'] = corner_num_in_lap
-                    df_result.at[df_result.index[idx], 'corner_type'] = corner_type
-                    df_result.at[df_result.index[idx], 'lap_number'] = lap_num
+                if idx < len(df_circuit):
+                    orig_idx = df_circuit.index[idx]
+                    df_result.at[orig_idx, 'is_corner'] = True
+                    df_result.at[orig_idx, 'corner_id'] = corner_num_in_lap
+                    df_result.at[orig_idx, 'corner_type'] = corner_type
+                    df_result.at[orig_idx, 'lap_number'] = lap_num
 
-            if apex_index < len(df_result):
-                df_result.at[df_result.index[apex_index], 'is_apex'] = True
+            if apex_index < len(df_circuit):
+                df_result.at[df_circuit.index[apex_index], 'is_apex'] = True
 
             # Métadonnées enrichies
             max_lateral_g = float(np.max(np.abs([lateral_g[i] for i in corner_indices])))
@@ -673,14 +673,18 @@ def detect_corners(
                 if pd.notna(time[start_idx]) and pd.notna(time[end_idx]):
                     duration_s = float(time[end_idx] - time[start_idx])
 
+            # Indices dans le df complet (pour downstream)
+            entry_idx_full = int(df_circuit.index[start_idx])
+            apex_idx_full = int(df_circuit.index[apex_index])
+            exit_idx_full = int(df_circuit.index[end_idx])
             corner_detail = {
                 'id': corner_num_in_lap,
                 'lap': lap_num,
                 'label': f"T{lap_num}V{corner_num_in_lap}",  # Ex: "T2V3" = Tour 2 Virage 3
                 'type': corner_type,
-                'entry_index': int(start_idx),
-                'apex_index': int(apex_index),
-                'exit_index': int(end_idx),
+                'entry_index': entry_idx_full,
+                'apex_index': apex_idx_full,
+                'exit_index': exit_idx_full,
                 'entry_speed_kmh': float(speed[start_idx]) if start_idx < len(speed) else 0.0,
                 'apex_speed_kmh': float(speed[apex_index]) if apex_index < len(speed) else 0.0,
                 'exit_speed_kmh': float(speed[end_idx]) if end_idx < len(speed) else 0.0,
