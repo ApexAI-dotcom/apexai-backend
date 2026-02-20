@@ -112,7 +112,7 @@ class AnalysisService:
             df = result['data']
             logger.info(f"[{analysis_id}] Loaded {len(df)} rows")
             
-            # Injecter les beacons AVANT detect_laps (qui sera appelé dans calculate_trajectory_geometry)
+            # Injecter les beacons AVANT detect_laps (appelé à Step 3.5)
             if beacon_markers:
                 df.attrs['beacon_markers'] = beacon_markers
             
