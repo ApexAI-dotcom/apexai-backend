@@ -16,6 +16,8 @@ import matplotlib.patches as mpatches
 from pathlib import Path
 from typing import Dict, Optional
 import warnings
+import tempfile
+import os
 
 # Constantes de style
 COLOR_BLUE = '#2E86DE'
@@ -905,3 +907,42 @@ def generate_all_plots(df: pd.DataFrame, output_dir: str = "./plots") -> Dict[st
             warnings.warn(f"⚠️ Exception {plot_name} : {str(e)}")
     
     return results
+
+
+def generate_all_plots_base64(df: pd.DataFrame) -> Dict[str, Optional[str]]:
+    """
+    Génère tous les graphiques et les retourne
+    en base64 data URIs au lieu de fichiers disque.
+    Survit aux redéploiements Docker.
+    """
+    import base64
+
+    plots = {}
+    plot_functions = {
+        'trajectory_2d': plot_trajectory_2d,
+        'speed_heatmap': plot_speed_heatmap,
+        'lateral_g_chart': plot_lateral_g_chart,
+        'speed_trace': plot_speed_trace,
+        'throttle_brake': plot_throttle_brake,
+        'sector_times': plot_sector_times,
+        'apex_precision': plot_apex_precision,
+        'performance_radar': plot_performance_radar,
+        'performance_score_breakdown': plot_performance_score_breakdown,
+        'corner_heatmap': plot_corner_heatmap,
+    }
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        for name, func in plot_functions.items():
+            try:
+                save_path = os.path.join(tmpdir, f"{name}.png")
+                success = func(df, save_path)
+                if success and os.path.exists(save_path):
+                    with open(save_path, 'rb') as f:
+                        b64 = base64.b64encode(f.read()).decode('utf-8')
+                    plots[name] = f"data:image/png;base64,{b64}"
+                else:
+                    plots[name] = None
+            except Exception:
+                plots[name] = None
+
+    return plots

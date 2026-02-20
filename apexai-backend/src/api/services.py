@@ -22,7 +22,7 @@ from src.analysis.geometry import (
 from src.analysis.scoring import calculate_performance_score
 from src.analysis.coaching import generate_coaching_advice
 from src.analysis.performance_metrics import analyze_corner_performance
-from src.visualization.visualization import generate_all_plots
+from src.visualization.visualization import generate_all_plots_base64
 
 from .config import settings
 from .models import (
@@ -197,22 +197,13 @@ class AnalysisService:
                 logger.warning(f"[{analysis_id}] Failed to generate coaching advice: {e}")
                 coaching_advice_list = []
             
-            # 4. Graphiques
+            # 4. Graphiques en base64 (pas de fichiers disque)
             logger.info(f"[{analysis_id}] Generating plots...")
-            output_dir = os.path.join(settings.OUTPUT_DIR, analysis_id)
-            os.makedirs(output_dir, exist_ok=True)
+            import base64
+            import io
             
-            plots_paths = generate_all_plots(df, output_dir=output_dir)
-            
-            # Convertir paths en URLs absolues
-            base_url = settings.BASE_URL.rstrip('/')
-            plots_urls = {}
-            
-            for name, path in plots_paths.items():
-                if path and os.path.exists(path):
-                    # Chemin relatif depuis output/
-                    rel_path = os.path.relpath(path, settings.OUTPUT_DIR)
-                    plots_urls[name] = f"{base_url}/output/{rel_path.replace(os.sep, '/')}"
+            plots_b64 = generate_all_plots_base64(df)
+            plots_urls = plots_b64  # base64 data URIs
             
             # 5. Construire réponse
             processing_time = (datetime.now() - start_time).total_seconds()
