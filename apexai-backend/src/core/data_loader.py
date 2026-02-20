@@ -121,30 +121,77 @@ def _normalize_columns(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
         'lat': 'latitude',
         'gps latitude': 'latitude',
         'gps_latitude': 'latitude',
-        
+        'gps lat': 'latitude',
+        'gps_lat': 'latitude',
+        'lat_deg': 'latitude',
+        'latitude_deg': 'latitude',
+        'gpslat': 'latitude',
+        'pos_lat': 'latitude',
+
         # Longitude
         'lon': 'longitude',
         'lng': 'longitude',
         'gps longitude': 'longitude',
         'gps_longitude': 'longitude',
-        
+        'gps lon': 'longitude',
+        'gps_lon': 'longitude',
+        'lon_deg': 'longitude',
+        'longitude_deg': 'longitude',
+        'gpslon': 'longitude',
+        'pos_lon': 'longitude',
+        'pos_lng': 'longitude',
+
         # Speed
         'vel': 'speed',
         'velocity': 'speed',
         'spd': 'speed',
         'gps speed': 'speed',
         'gps_speed': 'speed',
-        
+        'speed_kmh': 'speed',
+        'speed_kph': 'speed',
+        'vitesse': 'speed',
+        'velocity_kmh': 'speed',
+        'velocity_kph': 'speed',
+        'vhw': 'speed',
+        'sog': 'speed',
+
         # Time
         't': 'time',
         'timestamp': 'time',
         'elapsed time': 'time',
         'elapsed_time': 'time',
+        'time_s': 'time',
+        'time_ms': 'time',
+        'temps': 'time',
+        'session_time': 'time',
+        'laptime': 'time',
+        'lap_time': 'time',
+
+        # Lateral G (bonus si présent)
+        'lateral_g': 'lateral_g',
+        'lat_g': 'lateral_g',
+        'g_lat': 'lateral_g',
+        'ay': 'lateral_g',
+        'accel_lat': 'lateral_g',
     }
-    
+
     # Appliquer le mapping
     df_normalized.rename(columns=column_mapping, inplace=True)
-    
+
+    # Fuzzy fallback : chercher colonnes contenant des mots-clés
+    col_map = {}
+    for col in df_normalized.columns:
+        col_lower = col.lower()
+        if 'lat' in col_lower and 'longitude' not in col_lower and 'latitude' not in col_lower:
+            col_map[col] = 'latitude'
+        elif 'lon' in col_lower and 'latitude' not in col_lower and 'longitude' not in col_lower:
+            col_map[col] = 'longitude'
+        elif ('speed' in col_lower or 'vitesse' in col_lower or 'vel' in col_lower) and 'speed' not in df_normalized.columns:
+            col_map[col] = 'speed'
+        elif 'time' in col_lower and 'time' not in df_normalized.columns:
+            col_map[col] = 'time'
+    df_normalized.rename(columns=col_map, inplace=True)
+
     # CONVERSION m/s → km/h si nécessaire
     if 'speed' in df_normalized.columns:
         # Convertir en numérique pour analyse

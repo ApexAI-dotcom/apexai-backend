@@ -28,7 +28,14 @@ def generate_coaching_advice(
         Liste de conseils triés par priorité (impact décroissant)
     """
     advice_list = []
-    
+
+    # Enrichir corner_analysis avec labels lisibles si disponibles
+    for c in corner_analysis:
+        if 'lap' in c and 'corner_id' in c:
+            c['label'] = f"Tour {c.get('lap', 1)} / Virage {c.get('corner_id', '?')}"
+        else:
+            c['label'] = f"Virage {c.get('corner_id', '?')}"
+
     try:
         # === 1. CONSEILS FREINAGE ===
         braking_advice = _generate_braking_advice(corner_analysis)
@@ -73,21 +80,31 @@ def _generate_braking_advice(corner_analysis: List[Dict[str, Any]]) -> List[Dict
             
             if abs(braking_delta) < 2.0:  # Seuil minimum
                 continue
-            
+
             impact_seconds = abs(braking_delta) * 0.05  # Approximation : 1m = 0.05s
-            
-            if braking_delta > 0:  # Freine trop tôt
-                message = f"Virage {corner_id} : Tu freines {braking_delta:.1f}m trop tôt (-{impact_seconds:.2f}s perdu)"
-                explanation = f"Point de freinage actuel : {metrics.get('braking_point_distance', 0):.1f}m avant apex. Optimal : {metrics.get('braking_point_optimal', 0):.1f}m. En retardant le freinage, tu maintiens plus de vitesse."
+            label = corner.get('label', f"Virage {corner_id}")
+
+            if braking_delta > 0:
+                message = f"{label} — Tu freines {braking_delta:.1f}m trop tôt"
+                explanation = (
+                    f"Point de freinage actuel : {metrics.get('braking_point_distance', 0):.1f}m avant l'apex. "
+                    f"Point optimal : {metrics.get('braking_point_optimal', 0):.1f}m. "
+                    f"En retardant le freinage de {braking_delta:.1f}m, tu gagneras environ {impact_seconds:.2f}s par tour. "
+                    f"Repère un marqueur visuel {braking_delta:.0f}m plus proche de l'apex (bottes de paille, ligne blanche) "
+                    f"pour déclencher le freinage. Vitesse d'entrée cible : {metrics.get('entry_speed', 0):.1f} km/h."
+                )
                 difficulty = "facile"
-                visual_cue = f"Repère un point {braking_delta:.0f}m plus proche de l'apex pour déclencher le freinage"
-            
-            else:  # Freine trop tard
-                message = f"Virage {corner_id} : Tu freines {abs(braking_delta):.1f}m trop tard (-{impact_seconds:.2f}s perdu)"
-                explanation = f"Point de freinage actuel : {metrics.get('braking_point_distance', 0):.1f}m avant apex. Optimal : {metrics.get('braking_point_optimal', 0):.1f}m. Anticipe le freinage pour aborder le virage plus sereinement."
+            else:
+                message = f"{label} — Tu freines {abs(braking_delta):.1f}m trop tard"
+                explanation = (
+                    f"Point de freinage actuel : {metrics.get('braking_point_distance', 0):.1f}m avant l'apex. "
+                    f"Point optimal : {metrics.get('braking_point_optimal', 0):.1f}m. "
+                    f"Tu entres trop vite dans ce virage, ce qui te force à corriger en plein apex. "
+                    f"Anticipe le freinage de {abs(braking_delta):.1f}m pour stabiliser la trajectoire. "
+                    f"Perte estimée : {impact_seconds:.2f}s par tour."
+                )
                 difficulty = "moyen"
-                visual_cue = f"Repère un point {abs(braking_delta):.0f}m plus loin de l'apex pour commencer à freiner"
-            
+
             advice.append({
                 'priority': len(advice) + 1,
                 'category': 'braking',
@@ -96,12 +113,11 @@ def _generate_braking_advice(corner_analysis: List[Dict[str, Any]]) -> List[Dict
                 'message': message,
                 'explanation': explanation,
                 'difficulty': difficulty,
-                'visual_cue': visual_cue
             })
-        
+
         except Exception:
             continue
-    
+
     return advice
 
 
@@ -118,22 +134,30 @@ def _generate_apex_advice(corner_analysis: List[Dict[str, Any]]) -> List[Dict[st
             
             if apex_error < 1.0:  # Seuil minimum
                 continue
-            
+
             impact_seconds = apex_error * 0.08  # Approximation : 1m = 0.08s
-            
-            if direction:
-                if direction in ["left", "right"]:
-                    message = f"Virage {corner_id} : Apex décalé de {apex_error:.1f}m à {direction}"
-                else:
-                    message = f"Virage {corner_id} : Apex décalé de {apex_error:.1f}m ({direction})"
-                
-                explanation = f"Ligne actuelle clippe l'intérieur avec une erreur de {apex_error:.1f}m. Vise {apex_error:.1f}m plus {'à droite' if direction == 'left' else 'à gauche'} pour optimiser la sortie."
+            label = corner.get('label', f"Virage {corner_id}")
+
+            if direction in ["left", "right"]:
+                side_fr = "droite" if direction == "left" else "gauche"
+                message = f"{label} — Apex décalé de {apex_error:.1f}m vers l'{side_fr}"
+                explanation = (
+                    f"Ta trajectoire clippe l'intérieur avec {apex_error:.1f}m d'erreur. "
+                    f"En visant {apex_error:.1f}m plus vers {'l\'intérieur du virage' if direction == 'left' else 'l\'extérieur du virage'}, "
+                    f"tu pourras accélérer {apex_error * 0.05:.2f}s plus tôt en sortie. "
+                    f"Gain estimé : {impact_seconds:.2f}s par tour. "
+                    f"Regarde l'apex au moment de tourner le volant, pas la sortie."
+                )
             else:
-                message = f"Virage {corner_id} : Apex décalé de {apex_error:.1f}m"
-                explanation = f"Position de l'apex non optimale. Ajuste ta trajectoire pour clipper l'intérieur plus précisément."
-            
+                message = f"{label} — Apex décalé de {apex_error:.1f}m"
+                explanation = (
+                    f"Position d'apex non optimale ({apex_error:.1f}m d'erreur). "
+                    f"Un apex précis te permettrait d'accélérer plus tôt en sortie. "
+                    f"Gain estimé : {impact_seconds:.2f}s par tour."
+                )
+
             difficulty = "moyen" if apex_error < 3.0 else "difficile"
-            
+
             advice.append({
                 'priority': len(advice) + 1,
                 'category': 'apex',
@@ -169,15 +193,22 @@ def _generate_speed_advice(corner_analysis: List[Dict[str, Any]]) -> List[Dict[s
             
             if speed_delta < 3.0:  # Seuil minimum (3 km/h)
                 continue
-            
+
             # Approximation temps perdu : 1 km/h = 0.01s sur un virage moyen
             impact_seconds = speed_delta * 0.01
-            
             efficiency_pct = efficiency * 100
-            message = f"Virage {corner_id} : Vitesse apex {speed_real:.1f} km/h vs optimal {speed_optimal:.1f} km/h ({efficiency_pct:.0f}% efficacité)"
-            explanation = f"Vitesse actuelle à l'apex : {speed_real:.1f} km/h. Optimal : {speed_optimal:.1f} km/h. Tu peux maintenir {speed_delta:.1f} km/h de plus en confiant davantage au grip."
+            label = corner.get('label', f"Virage {corner_id}")
+            message = f"{label} — {speed_real:.1f} km/h à l'apex vs {speed_optimal:.1f} km/h optimal"
+            explanation = (
+                f"Vitesse réelle à l'apex : {speed_real:.1f} km/h. "
+                f"Vitesse physiquement atteignable sur ce rayon : {speed_optimal:.1f} km/h "
+                f"(μ={1.1}, R={1/max(metrics.get('curvature', 0.01), 0.001):.0f}m). "
+                f"Tu laisses {speed_delta:.1f} km/h sur la table — c'est {impact_seconds:.2f}s perdu par tour. "
+                f"Efficacité actuelle : {efficiency_pct:.0f}%. "
+                f"Pour progresser : plus de fluidité au volant et confiance progressive dans le grip."
+            )
             difficulty = "moyen" if speed_delta < 8.0 else "difficile"
-            
+
             advice.append({
                 'priority': len(advice) + 1,
                 'category': 'speed',
@@ -342,10 +373,21 @@ def _generate_global_advice(
         best_corners = details.get('best_corners', [])
         
         if best_corners:
+            # Construire labels lisibles pour les meilleurs virages
+            best_labels = []
+            for c in corner_analysis:
+                if c.get('corner_id') in best_corners:
+                    best_labels.append(c.get('label', f"V{c.get('corner_id')}"))
+
+            best_str = ', '.join(best_labels[:3]) if best_labels else ', '.join(map(str, best_corners[:3]))
+            message = f"Points forts : {best_str} — Reproduis cette approche"
+            explanation = (
+                f"Tes meilleurs virages : {best_str}. "
+                f"Analyse ce qui les distingue : point de freinage, regard, fluidité. "
+                f"Applique la même approche aux virages similaires sur le circuit."
+            )
             impact_seconds = 0.0  # Pas d'impact, juste encouragement
-            message = f"Point fort : Virages {', '.join(map(str, best_corners))}, reproduis cette approche ailleurs"
-            explanation = f"Tes meilleurs virages : {', '.join(map(str, best_corners))}. Analyse ce que tu fais différemment ici et applique-le aux autres virages."
-            
+
             advice.append({
                 'priority': len(advice) + 1,
                 'category': 'global',

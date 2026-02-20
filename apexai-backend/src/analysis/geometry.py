@@ -329,6 +329,72 @@ def calculate_trajectory_geometry(df: pd.DataFrame) -> pd.DataFrame:
     return df_result
 
 
+def detect_laps(df: pd.DataFrame, min_lap_distance_m: float = 200.0) -> pd.DataFrame:
+    """
+    Détecte les tours complets dans un CSV multi-tours.
+
+    Méthode : clustering GPS sur le point de départ/arrivée.
+    Chaque fois que le kart repasse près du point de départ
+    (dans un rayon < 30m), un nouveau tour commence.
+
+    Args:
+        df: DataFrame avec colonnes 'latitude', 'longitude',
+            'cumulative_distance'
+        min_lap_distance_m: Distance minimum d'un tour valide
+
+    Returns:
+        DataFrame enrichi avec colonne 'lap_number' (1-indexed)
+    """
+    df_result = df.copy()
+    n_points = len(df_result)
+    lap_number = np.ones(n_points, dtype=int)
+
+    try:
+        lat = df_result['latitude_smooth'].values if 'latitude_smooth' in df_result.columns else df_result['latitude'].values
+        lon = df_result['longitude_smooth'].values if 'longitude_smooth' in df_result.columns else df_result['longitude'].values
+        cum_dist = df_result['cumulative_distance'].values if 'cumulative_distance' in df_result.columns else np.zeros(n_points)
+
+        # Point de départ = premier point GPS
+        start_lat = lat[0]
+        start_lon = lon[0]
+
+        FINISH_LINE_RADIUS_M = 30.0
+        MIN_LAP_POINTS = 50  # Eviter faux positifs
+
+        current_lap = 1
+        last_lap_start_idx = 0
+        passed_start = False
+
+        for i in range(MIN_LAP_POINTS, n_points):
+            dist_to_start = _haversine_distance(
+                float(lat[i]), float(lon[i]),
+                float(start_lat), float(start_lon)
+            )
+
+            # Distance depuis dernier passage ligne
+            lap_dist = cum_dist[i] - cum_dist[last_lap_start_idx] if i < len(cum_dist) else 0
+
+            if dist_to_start < FINISH_LINE_RADIUS_M and lap_dist > min_lap_distance_m:
+                if not passed_start:
+                    # Nouveau tour détecté
+                    current_lap += 1
+                    last_lap_start_idx = i
+                    passed_start = True
+            else:
+                if dist_to_start > FINISH_LINE_RADIUS_M * 2:
+                    passed_start = False
+
+            lap_number[i] = current_lap
+
+        df_result['lap_number'] = lap_number
+
+    except Exception as e:
+        warnings.warn(f"⚠️ Erreur détection tours : {str(e)}")
+        df_result['lap_number'] = 1
+
+    return df_result
+
+
 def detect_corners(
     df: pd.DataFrame,
     min_lateral_g: float = MIN_CORNER_LATERAL_G
@@ -442,62 +508,85 @@ def detect_corners(
                 'end': end_idx
             })
         
-        # 4. TRAITER CHAQUE VIRAGE VALIDE
+        # 4. TRAITER CHAQUE VIRAGE VALIDE avec numérotation par tour
+        # Récupérer lap_number si disponible
+        has_laps = 'lap_number' in df_result.columns
+        lap_numbers = df_result['lap_number'].values if has_laps else np.ones(n_points, dtype=int)
+
+        # Compteur de virages PAR tour
+        corners_per_lap: Dict[int, int] = {}
+        renumbered_corners = []
+
         for corner_info in valid_corners:
             corner_id = corner_info['id']
             corner_indices = corner_info['indices']
             start_idx = corner_info['start']
             end_idx = corner_info['end']
-            
-            # Type de virage (gauche/droite) - utiliser curvature si disponible
+
+            # Déterminer le tour de ce virage (mode du lap_number sur ses indices)
+            lap_nums_in_corner = [int(lap_numbers[i]) for i in corner_indices if i < len(lap_numbers)]
+            lap_num = int(np.bincount(lap_nums_in_corner).argmax()) if lap_nums_in_corner else 1
+
+            # Numéroter dans le tour
+            if lap_num not in corners_per_lap:
+                corners_per_lap[lap_num] = 0
+            corners_per_lap[lap_num] += 1
+            corner_num_in_lap = corners_per_lap[lap_num]
+
+            # Type de virage
             if 'curvature' in df_result.columns:
                 curvature_in_corner = df_result.loc[df_result.index[corner_indices], 'curvature'].values
                 curvature_mean = np.mean(curvature_in_corner) if len(curvature_in_corner) > 0 else 0.0
                 corner_type = "left" if curvature_mean > 0 else "right"
             else:
-                # Fallback : utiliser signe de lateral_g
                 lateral_g_in_corner = lateral_g[corner_indices]
                 lateral_g_mean = np.mean(lateral_g_in_corner)
                 corner_type = "left" if lateral_g_mean > 0 else "right"
-            
-            # APEX = point de |lateral_g| MAX
+
+            # Apex = point de |lateral_g| MAX
             lateral_g_abs_in_corner = np.abs([lateral_g[i] for i in corner_indices])
             apex_local_idx = np.argmax(lateral_g_abs_in_corner)
             apex_index = int(corner_indices[apex_local_idx])
-            
-            # Marquer colonnes
+
+            # Marquer colonnes avec numérotation lap/corner
             for idx in corner_indices:
                 if idx < len(df_result):
                     df_result.at[df_result.index[idx], 'is_corner'] = True
-                    df_result.at[df_result.index[idx], 'corner_id'] = corner_id
+                    df_result.at[df_result.index[idx], 'corner_id'] = corner_num_in_lap
                     df_result.at[df_result.index[idx], 'corner_type'] = corner_type
-            
+                    df_result.at[df_result.index[idx], 'lap_number'] = lap_num
+
             if apex_index < len(df_result):
                 df_result.at[df_result.index[apex_index], 'is_apex'] = True
-            
-            # Extraire métadonnées
+
+            # Métadonnées enrichies
             max_lateral_g = float(np.max(np.abs([lateral_g[i] for i in corner_indices])))
-            distance_m = float(cumulative_dist[end_idx] - cumulative_dist[start_idx]) if end_idx < len(cumulative_dist) and start_idx < len(cumulative_dist) else 0.0
+            distance_m = float(cumulative_dist[end_idx] - cumulative_dist[start_idx]) if end_idx < len(cumulative_dist) else 0.0
             duration_s = 0.0
             if time is not None and end_idx < len(time) and start_idx < len(time):
                 if pd.notna(time[start_idx]) and pd.notna(time[end_idx]):
                     duration_s = float(time[end_idx] - time[start_idx])
-            
+
             corner_detail = {
-                'id': corner_id,
+                'id': corner_num_in_lap,
+                'lap': lap_num,
+                'label': f"T{lap_num}V{corner_num_in_lap}",  # Ex: "T2V3" = Tour 2 Virage 3
                 'type': corner_type,
                 'entry_index': int(start_idx),
                 'apex_index': int(apex_index),
                 'exit_index': int(end_idx),
-                'entry_speed_kmh': float(speed[start_idx]) if start_idx < len(speed) and pd.notna(speed[start_idx]) else 0.0,
-                'apex_speed_kmh': float(speed[apex_index]) if apex_index < len(speed) and pd.notna(speed[apex_index]) else 0.0,
-                'exit_speed_kmh': float(speed[end_idx]) if end_idx < len(speed) and pd.notna(speed[end_idx]) else 0.0,
+                'entry_speed_kmh': float(speed[start_idx]) if start_idx < len(speed) else 0.0,
+                'apex_speed_kmh': float(speed[apex_index]) if apex_index < len(speed) else 0.0,
+                'exit_speed_kmh': float(speed[end_idx]) if end_idx < len(speed) else 0.0,
                 'max_lateral_g': max_lateral_g,
                 'distance_m': distance_m,
                 'duration_s': duration_s
             }
-            corner_details.append(corner_detail)
-        
+            renumbered_corners.append(corner_detail)
+
+        # Remplacer corner_details par la version numérotée par tour
+        corner_details = renumbered_corners
+
         # Métadonnées globales
         total_distance = float(cumulative_dist[-1]) if len(cumulative_dist) > 0 else 0.0
         avg_speed = float(np.mean(speed[speed > 0])) if np.any(speed > 0) else 0.0
