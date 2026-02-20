@@ -113,8 +113,19 @@ async def analyze_telemetry(
             )
 
         logger.info(f"[{analysis_id}] ✅ Analysis completed successfully")
+        import json
+        from datetime import datetime, date
+
+        def json_serializer(obj):
+            if isinstance(obj, (datetime, date)):
+                return obj.isoformat()
+            raise TypeError(f"Type {type(obj)} not serializable")
+
         resp = AnalysisResponse(**result)
-        return JSONResponse(content={"cache_key": cache_key, **resp.model_dump()})
+        content = {"cache_key": cache_key, **resp.model_dump()}
+        return JSONResponse(
+            content=json.loads(json.dumps(content, default=json_serializer))
+        )
         
     except HTTPException:
         raise
