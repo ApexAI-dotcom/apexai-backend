@@ -331,59 +331,69 @@ def calculate_trajectory_geometry(df: pd.DataFrame) -> pd.DataFrame:
 
 def detect_laps(df: pd.DataFrame, min_lap_distance_m: float = 200.0) -> pd.DataFrame:
     """
-    Détecte les tours complets dans un CSV multi-tours.
-
-    Méthode : clustering GPS sur le point de départ/arrivée.
-    Chaque fois que le kart repasse près du point de départ
-    (dans un rayon < 30m), un nouveau tour commence.
-
-    Args:
-        df: DataFrame avec colonnes 'latitude', 'longitude',
-            'cumulative_distance'
-        min_lap_distance_m: Distance minimum d'un tour valide
-
-    Returns:
-        DataFrame enrichi avec colonne 'lap_number' (1-indexed)
+    Détecte les tours complets en excluant la ligne de stands.
+    Ligne de chrono = point GPS à haute vitesse répété.
+    lap_number=0 = hors tour (stands, formation).
     """
     df_result = df.copy()
     n_points = len(df_result)
-    lap_number = np.ones(n_points, dtype=int)
+    lap_number = np.zeros(n_points, dtype=int)
 
     try:
         lat = df_result['latitude_smooth'].values if 'latitude_smooth' in df_result.columns else df_result['latitude'].values
         lon = df_result['longitude_smooth'].values if 'longitude_smooth' in df_result.columns else df_result['longitude'].values
+        speed = pd.to_numeric(df_result['speed'], errors='coerce').values
         cum_dist = df_result['cumulative_distance'].values if 'cumulative_distance' in df_result.columns else np.zeros(n_points)
 
-        # Point de départ = premier point GPS
-        start_lat = lat[0]
-        start_lon = lon[0]
-
+        MIN_SPEED_FINISH_LINE_KMH = 60.0
         FINISH_LINE_RADIUS_M = 30.0
-        MIN_LAP_POINTS = 50  # Eviter faux positifs
+        MIN_LAP_POINTS = 50
 
-        current_lap = 1
-        last_lap_start_idx = 0
-        passed_start = False
+        valid_speed_mask = ~np.isnan(speed) & (speed > MIN_SPEED_FINISH_LINE_KMH)
+        if not valid_speed_mask.any():
+            df_result['lap_number'] = 1
+            return df_result
+
+        speed_threshold = np.percentile(speed[valid_speed_mask], 85)
+        high_speed_points = np.where(speed > speed_threshold)[0]
+
+        if len(high_speed_points) == 0:
+            df_result['lap_number'] = 1
+            return df_result
+
+        finish_lat = None
+        finish_lon = None
+        for idx in high_speed_points:
+            if cum_dist[idx] > min_lap_distance_m:
+                finish_lat = lat[idx]
+                finish_lon = lon[idx]
+                break
+
+        if finish_lat is None:
+            df_result['lap_number'] = 1
+            return df_result
+
+        current_lap = 0
+        last_lap_start_dist = 0.0
+        passed_line = False
 
         for i in range(MIN_LAP_POINTS, n_points):
-            dist_to_start = _haversine_distance(
+            if np.isnan(lat[i]) or np.isnan(lon[i]):
+                continue
+            dist_to_finish = _haversine_distance(
                 float(lat[i]), float(lon[i]),
-                float(start_lat), float(start_lon)
+                float(finish_lat), float(finish_lon)
             )
-
-            # Distance depuis dernier passage ligne
-            lap_dist = cum_dist[i] - cum_dist[last_lap_start_idx] if i < len(cum_dist) else 0
-
-            if dist_to_start < FINISH_LINE_RADIUS_M and lap_dist > min_lap_distance_m:
-                if not passed_start:
-                    # Nouveau tour détecté
-                    current_lap += 1
-                    last_lap_start_idx = i
-                    passed_start = True
-            else:
-                if dist_to_start > FINISH_LINE_RADIUS_M * 2:
-                    passed_start = False
-
+            lap_dist = cum_dist[i] - last_lap_start_dist
+            if (dist_to_finish < FINISH_LINE_RADIUS_M
+                    and speed[i] > MIN_SPEED_FINISH_LINE_KMH
+                    and lap_dist > min_lap_distance_m
+                    and not passed_line):
+                current_lap += 1
+                last_lap_start_dist = cum_dist[i]
+                passed_line = True
+            elif dist_to_finish > FINISH_LINE_RADIUS_M * 2:
+                passed_line = False
             lap_number[i] = current_lap
 
         df_result['lap_number'] = lap_number
@@ -512,6 +522,16 @@ def detect_corners(
         # Récupérer lap_number si disponible
         has_laps = 'lap_number' in df_result.columns
         lap_numbers = df_result['lap_number'].values if has_laps else np.ones(n_points, dtype=int)
+
+        # Exclure virages hors tour (stands, formation, lap=0)
+        valid_corners_filtered = []
+        for corner_info in valid_corners:
+            corner_indices = corner_info['indices']
+            lap_nums = [int(lap_numbers[i]) for i in corner_indices if i < len(lap_numbers)]
+            dominant_lap = int(np.bincount(lap_nums).argmax()) if lap_nums else 0
+            if dominant_lap > 0:
+                valid_corners_filtered.append(corner_info)
+        valid_corners = valid_corners_filtered
 
         # Compteur de virages PAR tour
         corners_per_lap: Dict[int, int] = {}

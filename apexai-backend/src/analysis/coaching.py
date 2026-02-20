@@ -304,102 +304,145 @@ def _generate_global_advice(
     corner_analysis: List[Dict[str, Any]],
     df
 ) -> List[Dict[str, Any]]:
-    """Génère conseils globaux."""
+    """Génère conseils globaux actionnables avec instructions physiques."""
     advice = []
-    
+
     try:
         breakdown = score_data.get('breakdown', {})
-        
-        # Conseils par secteur
-        sector_scores = {}
-        for corner in corner_analysis:
-            corner_id = corner.get('corner_id', 0)
-            # Approximatif : diviser virages en 3 tiers
-            if corner_id <= len(corner_analysis) / 3:
-                sector = 1
-            elif corner_id <= 2 * len(corner_analysis) / 3:
-                sector = 2
-            else:
-                sector = 3
-            
-            if sector not in sector_scores:
-                sector_scores[sector] = []
-            sector_scores[sector].append(corner.get('score', 70))
-        
-        for sector, scores in sector_scores.items():
-            avg_score = sum(scores) / len(scores) if scores else 70
-            
-            if avg_score < 70:
-                worst_corners = [c.get('corner_id') for c in corner_analysis 
-                               if c.get('score', 70) < 70][:3]
-                impact_seconds = (70 - avg_score) * 0.05
-                message = f"Secteur {sector} : {avg_score:.0f}% sous l'optimal, focus virages {', '.join(map(str, worst_corners))}"
-                explanation = f"Score moyen secteur {sector} : {avg_score:.0f}/100. Concentre-toi sur les virages {', '.join(map(str, worst_corners))} pour améliorer."
-                
-                advice.append({
-                    'priority': len(advice) + 1,
-                    'category': 'global',
-                    'impact_seconds': round(impact_seconds, 2),
-                    'corner': None,
-                    'message': message,
-                    'explanation': explanation,
-                    'difficulty': 'moyen'
-                })
-        
-        # Constance générale
-        consistency_score = breakdown.get('trajectory_consistency', 10.0)
-        if consistency_score < 15.0:
-            # Détecter micro-corrections
-            if 'heading' in df.columns:
-                heading = df['heading'].diff().abs()
-                corrections = (heading > 5.0).sum()
-                
-                if corrections > 10:
-                    impact_seconds = (15.0 - consistency_score) * 0.02
-                    message = f"Constance générale : {corrections} micro-corrections détectées, travail smoothness"
-                    explanation = f"{corrections} corrections de trajectoire détectées (>5°). Travaille la fluidité pour réduire les corrections et gagner en temps."
-                    
-                    advice.append({
-                        'priority': len(advice) + 1,
-                        'category': 'global',
-                        'impact_seconds': round(impact_seconds, 2),
-                        'corner': None,
-                        'message': message,
-                        'explanation': explanation,
-                        'difficulty': 'moyen'
-                    })
-        
-        # Point fort
-        details = score_data.get('details', {})
-        best_corners = details.get('best_corners', [])
-        
-        if best_corners:
-            # Construire labels lisibles pour les meilleurs virages
-            best_labels = []
-            for c in corner_analysis:
-                if c.get('corner_id') in best_corners:
-                    best_labels.append(c.get('label', f"V{c.get('corner_id')}"))
 
-            best_str = ', '.join(best_labels[:3]) if best_labels else ', '.join(map(str, best_corners[:3]))
-            message = f"Points forts : {best_str} — Reproduis cette approche"
-            explanation = (
-                f"Tes meilleurs virages : {best_str}. "
-                f"Analyse ce qui les distingue : point de freinage, regard, fluidité. "
-                f"Applique la même approche aux virages similaires sur le circuit."
-            )
-            impact_seconds = 0.0  # Pas d'impact, juste encouragement
+        # === CONSEILS PAR VIRAGE PROBLÉMATIQUE ===
+        # Trier par score croissant (pires virages en premier)
+        sorted_corners = sorted(corner_analysis, key=lambda c: c.get('score', 100))
+        worst_corners = sorted_corners[:3]  # Top 3 pires
+
+        for corner in worst_corners:
+            metrics = corner.get('metrics', {})
+            label = corner.get('label', f"Virage {corner.get('corner_id', '?')}")
+            score = corner.get('score', 70)
+            
+            if score >= 80:
+                continue  # Pas besoin de conseil si bon score
+
+            speed_real = metrics.get('apex_speed_real', 0.0)
+            speed_optimal = metrics.get('apex_speed_optimal', 0.0)
+            speed_delta = max(0, speed_optimal - speed_real)
+            apex_error = metrics.get('apex_distance_error', 0.0)
+            direction = metrics.get('apex_direction_error', '')
+            entry_speed = metrics.get('entry_speed', 0.0)
+            exit_speed = metrics.get('exit_speed', 0.0)
+            corner_type = corner.get('corner_type', 'unknown')
+            lateral_g = metrics.get('lateral_g_max', 0.0)
+            
+            # Construire conseil actionnable selon le problème principal
+            impact_seconds = (100 - score) * 0.003
+
+            # Déterminer le problème principal
+            if speed_delta > 5.0:
+                # Problème de vitesse apex
+                side = "droite" if corner_type == "right" else "gauche"
+                message = f"{label} — Perds {speed_delta:.1f} km/h à l'apex ({speed_real:.0f} vs {speed_optimal:.0f} km/h optimal)"
+                explanation = (
+                    f"Tu arrives trop lentement à l'apex de ce virage à {side}. "
+                    f"Action : retarde ton freinage de 5-10m, puis libère progressivement "
+                    f"la pression de frein en approchant de l'apex pour maintenir {speed_delta:.0f} km/h de plus. "
+                    f"Ton G latéral max est {lateral_g:.1f}G — le grip est disponible, "
+                    f"fais confiance aux pneus. "
+                    f"Gain estimé : {impact_seconds:.2f}s par tour."
+                )
+                difficulty = "moyen"
+
+            elif apex_error > 2.0:
+                # Problème de placement apex
+                side_action = "serre l'intérieur plus tôt" if direction == 'late' else "patiente avant de tourner"
+                message = f"{label} — Apex décalé de {apex_error:.1f}m, trajectoire à corriger"
+                explanation = (
+                    f"Ta ligne n'est pas optimale dans ce virage. "
+                    f"Action : {side_action}. "
+                    f"Repère un point fixe à l'intérieur du virage (vibreur, marque) "
+                    f"et vise-le précisément avec les yeux AVANT de tourner le volant. "
+                    f"Vitesse d'entrée actuelle : {entry_speed:.0f} km/h → "
+                    f"objectif sortie : {exit_speed + speed_delta:.0f} km/h. "
+                    f"Gain estimé : {impact_seconds:.2f}s par tour."
+                )
+                difficulty = "moyen"
+
+            else:
+                # Problème général de constance
+                message = f"{label} — Score {score}/100, manque de régularité"
+                explanation = (
+                    f"Ce virage est irrégulier d'un tour à l'autre. "
+                    f"Action : choisis UN point de repère fixe pour le freinage "
+                    f"(pancarte, marque au sol) et engage-toi à l'utiliser à chaque tour. "
+                    f"Vitesse apex actuelle : {speed_real:.0f} km/h. "
+                    f"Priorité : constance avant vitesse."
+                )
+                difficulty = "facile"
 
             advice.append({
                 'priority': len(advice) + 1,
                 'category': 'global',
                 'impact_seconds': round(impact_seconds, 2),
-                'corner': None,
+                'corner': corner.get('corner_id'),
                 'message': message,
                 'explanation': explanation,
+                'difficulty': difficulty
+            })
+
+        # === CONSTANCE GÉNÉRALE ===
+        consistency_score = breakdown.get('trajectory_consistency', 15.0)
+        if consistency_score < 15.0 and 'heading' in df.columns:
+            heading = df['heading'].diff().abs()
+            corrections = int((heading > 5.0).sum())
+            if corrections > 10:
+                impact_seconds = round((15.0 - consistency_score) * 0.02, 2)
+                advice.append({
+                    'priority': len(advice) + 1,
+                    'category': 'global',
+                    'impact_seconds': impact_seconds,
+                    'corner': None,
+                    'message': f"Fluidité générale — {corrections} corrections de trajectoire détectées",
+                    'explanation': (
+                        f"{corrections} corrections de volant >5° détectées sur le tour. "
+                        f"Action : travaille le regard loin (vise la sortie du virage dès l'entrée), "
+                        f"ça réduit naturellement les micro-corrections. "
+                        f"Mains souples sur le volant — pas de à-coups. "
+                        f"Gain estimé : {impact_seconds:.2f}s par tour."
+                    ),
+                    'difficulty': 'moyen'
+                })
+
+        # === POINT FORT ACTIONNABLE ===
+        details = score_data.get('details', {})
+        best_corners_ids = details.get('best_corners', [])
+        best_corners_data = [c for c in corner_analysis if c.get('corner_id') in best_corners_ids]
+
+        if best_corners_data:
+            best_labels = [c.get('label', f"V{c.get('corner_id')}") for c in best_corners_data[:3]]
+            best_str = ', '.join(best_labels)
+            
+            # Extraire ce qui est bien fait dans ces virages
+            avg_speed_best = sum(
+                c.get('metrics', {}).get('apex_speed_real', 0) 
+                for c in best_corners_data[:3]
+            ) / max(len(best_corners_data[:3]), 1)
+
+            advice.append({
+                'priority': len(advice) + 1,
+                'category': 'global',
+                'impact_seconds': 0.0,
+                'corner': None,
+                'message': f"Points forts : {best_str} — Vitesse apex moyenne {avg_speed_best:.0f} km/h",
+                'explanation': (
+                    f"Tes meilleurs virages ({best_str}) ont une vitesse apex moyenne de "
+                    f"{avg_speed_best:.0f} km/h — c'est ton niveau de référence. "
+                    f"Identifie ce que tu fais différemment ici : "
+                    f"regard, timing freinage, relâcher progressif. "
+                    f"Reproduis exactement cette séquence dans les virages similaires."
+                ),
                 'difficulty': 'facile'
             })
-    
+
     except Exception as e:
         warnings.warn(f"Error generating global advice: {str(e)}")
-    
+
     return advice
