@@ -1,24 +1,13 @@
-# Git
-.git
-.gitignore
-
-# Python
-__pycache__
-*.py[cod]
-*$py.class
-.venv
-venv
+__pycache__/
+*.pyc
+*.pyo
 .env
 .env.*
-
-# IDE
-.idea
-.vscode
-
-# Tests
-.pytest_cache
-.coverage
-htmlcov
-
-# Logs
-*.log
+*.egg-info/
+dist/
+build/
+.git/
+node_modules/
+package.json
+package-lock.json
+nixpacks.toml
