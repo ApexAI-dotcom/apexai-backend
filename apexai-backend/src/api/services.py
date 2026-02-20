@@ -16,6 +16,7 @@ from src.core.data_loader import robust_load_telemetry
 from src.core.signal_processing import apply_savgol_filter
 from src.analysis.geometry import (
     calculate_trajectory_geometry,
+    detect_laps,
     detect_corners,
     calculate_optimal_trajectory
 )
@@ -72,6 +73,35 @@ class AnalysisService:
             
             logger.info(f"[{analysis_id}] File saved: {len(content)} bytes - {file.filename}")
             
+            # Extraire les Beacon Markers AiM/MoTeC depuis le fichier brut
+            beacon_markers = []
+            try:
+                with open(temp_path, 'r', encoding='utf-8', errors='ignore') as bfile:
+                    for i, bline in enumerate(bfile):
+                        if i > 20:
+                            break
+                        if 'Beacon' in bline or 'beacon' in bline:
+                            parts = bline.strip().replace('"', '').split(',')
+                            if len(parts) >= 2:
+                                raw = parts[1].strip()
+                                parsed = []
+                                for tok in raw.split():
+                                    try:
+                                        parsed.append(float(tok))
+                                    except ValueError:
+                                        pass
+                                if parsed:
+                                    beacon_markers = sorted(parsed)
+                                    break
+            except Exception as be:
+                logger.warning(f"[{analysis_id}] Could not read beacon markers: {be}")
+            
+            if beacon_markers:
+                logger.info(f"[{analysis_id}] ✓ Beacon Markers: {len(beacon_markers)} passages, "
+                           f"1er beacon à t={beacon_markers[0]:.3f}s")
+            else:
+                logger.warning(f"[{analysis_id}] ⚠️ Pas de Beacon Markers dans ce fichier")
+            
             # 2. Pipeline d'analyse
             logger.info(f"[{analysis_id}] Step 1/5: Loading data...")
             result = robust_load_telemetry(temp_path)
@@ -82,11 +112,18 @@ class AnalysisService:
             df = result['data']
             logger.info(f"[{analysis_id}] Loaded {len(df)} rows")
             
+            # Injecter les beacons AVANT detect_laps (qui sera appelé dans calculate_trajectory_geometry)
+            if beacon_markers:
+                df.attrs['beacon_markers'] = beacon_markers
+            
             logger.info(f"[{analysis_id}] Step 2/5: Filtering GPS...")
             df = apply_savgol_filter(df)
             
             logger.info(f"[{analysis_id}] Step 3/5: Calculating geometry...")
             df = calculate_trajectory_geometry(df)
+            
+            logger.info(f"[{analysis_id}] Step 3.5/5: Detecting laps...")
+            df = detect_laps(df)
             
             logger.info(f"[{analysis_id}] Step 4/5: Detecting corners...")
             df = detect_corners(df, min_lateral_g=0.08)

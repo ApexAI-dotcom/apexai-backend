@@ -452,14 +452,8 @@ def robust_load_telemetry(file_path: str) -> Dict[str, Any]:
     # Utiliser le DataFrame nettoyé
     df = df_clean
     
-    # Extraire les Beacon Markers (AiM/MoTeC)
-    beacon_markers = _extract_beacon_markers(file_path)
-    if beacon_markers:
-        df.attrs['beacon_markers'] = beacon_markers
-        result['warnings'].append(
-            f"✓ Beacon Markers extraits : {len(beacon_markers)} passages, "
-            f"1er beacon à t={beacon_markers[0]:.3f}s"
-        )
+    # NOTE: Extraction des Beacon Markers déplacée dans services.py
+    # après la sauvegarde du fichier pour garantir l'accès au filepath original
     
     # Calcul des métadonnées
     try:
