@@ -141,9 +141,10 @@ def _generate_apex_advice(corner_analysis: List[Dict[str, Any]]) -> List[Dict[st
             if direction in ["left", "right"]:
                 side_fr = "droite" if direction == "left" else "gauche"
                 message = f"{label} — Apex décalé de {apex_error:.1f}m vers l'{side_fr}"
+                inside = "l'intérieur du virage" if direction == "left" else "l'extérieur du virage"
                 explanation = (
                     f"Ta trajectoire clippe l'intérieur avec {apex_error:.1f}m d'erreur. "
-                    f"En visant {apex_error:.1f}m plus vers {'l\'intérieur du virage' if direction == 'left' else 'l\'extérieur du virage'}, "
+                    f"En visant {apex_error:.1f}m plus vers {inside}, "
                     f"tu pourras accélérer {apex_error * 0.05:.2f}s plus tôt en sortie. "
                     f"Gain estimé : {impact_seconds:.2f}s par tour. "
                     f"Regarde l'apex au moment de tourner le volant, pas la sortie."
