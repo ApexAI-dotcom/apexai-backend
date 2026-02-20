@@ -523,13 +523,17 @@ def detect_corners(
         has_laps = 'lap_number' in df_result.columns
         lap_numbers = df_result['lap_number'].values if has_laps else np.ones(n_points, dtype=int)
 
-        # Exclure virages hors tour (stands, formation, lap=0)
+        # Exclure virages hors tour (stands, lap=0)
         valid_corners_filtered = []
         for corner_info in valid_corners:
             corner_indices = corner_info['indices']
-            lap_nums = [int(lap_numbers[i]) for i in corner_indices if i < len(lap_numbers)]
-            dominant_lap = int(np.bincount(lap_nums).argmax()) if lap_nums else 0
-            if dominant_lap > 0:
+            lap_nums = [int(lap_numbers[i]) for i in corner_indices 
+                       if i < len(lap_numbers) and not np.isnan(lap_numbers[i])]
+            if not lap_nums:
+                continue
+            counts = np.bincount(lap_nums)
+            dominant_lap = int(np.argmax(counts))
+            if dominant_lap > 0:  # 0 = stands/formation
                 valid_corners_filtered.append(corner_info)
         valid_corners = valid_corners_filtered
 

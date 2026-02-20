@@ -316,22 +316,21 @@ def _generate_global_advice(
         worst_corners = sorted_corners[:3]  # Top 3 pires
 
         for corner in worst_corners:
-            metrics = corner.get('metrics', {})
             label = corner.get('label', f"Virage {corner.get('corner_id', '?')}")
             score = corner.get('score', 70)
             
             if score >= 80:
                 continue  # Pas besoin de conseil si bon score
 
-            speed_real = metrics.get('apex_speed_real', 0.0)
-            speed_optimal = metrics.get('apex_speed_optimal', 0.0)
+            speed_real = float(corner.get('apex_speed_real') or 0.0)
+            speed_optimal = float(corner.get('apex_speed_optimal') or 0.0)
             speed_delta = max(0, speed_optimal - speed_real)
-            apex_error = metrics.get('apex_distance_error', 0.0)
-            direction = metrics.get('apex_direction_error', '')
-            entry_speed = metrics.get('entry_speed', 0.0)
-            exit_speed = metrics.get('exit_speed', 0.0)
+            apex_error = float(corner.get('apex_distance_error') or 0.0)
+            direction = corner.get('apex_direction_error') or ''
+            entry_speed = float(corner.get('entry_speed') or 0.0)
+            exit_speed = float(corner.get('exit_speed') or 0.0)
             corner_type = corner.get('corner_type', 'unknown')
-            lateral_g = metrics.get('lateral_g_max', 0.0)
+            lateral_g = float(corner.get('lateral_g_max') or 0.0)
             
             # Construire conseil actionnable selon le problème principal
             impact_seconds = (100 - score) * 0.003
@@ -422,7 +421,7 @@ def _generate_global_advice(
             
             # Extraire ce qui est bien fait dans ces virages
             avg_speed_best = sum(
-                c.get('metrics', {}).get('apex_speed_real', 0) 
+                float(c.get('apex_speed_real') or 0)
                 for c in best_corners_data[:3]
             ) / max(len(best_corners_data[:3]), 1)
 
