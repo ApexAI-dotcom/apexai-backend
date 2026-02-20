@@ -182,13 +182,19 @@ def _normalize_columns(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
     col_map = {}
     for col in df_normalized.columns:
         col_lower = col.lower()
-        if 'lat' in col_lower and 'longitude' not in col_lower and 'latitude' not in col_lower:
+        if ('lat' in col_lower 
+                and 'longitude' not in col_lower 
+                and 'latitude' not in df_normalized.columns
+                and col != 'latitude'):
             col_map[col] = 'latitude'
-        elif 'lon' in col_lower and 'latitude' not in col_lower and 'longitude' not in col_lower:
+        elif ('lon' in col_lower 
+                and 'latitude' not in col_lower 
+                and 'longitude' not in df_normalized.columns
+                and col != 'longitude'):
             col_map[col] = 'longitude'
-        elif ('speed' in col_lower or 'vitesse' in col_lower or 'vel' in col_lower) and 'speed' not in df_normalized.columns:
+        elif ('speed' in col_lower or 'vitesse' in col_lower or 'vel' in col_lower) and 'speed' not in df_normalized.columns and col != 'speed':
             col_map[col] = 'speed'
-        elif 'time' in col_lower and 'time' not in df_normalized.columns:
+        elif 'time' in col_lower and 'time' not in df_normalized.columns and col != 'time':
             col_map[col] = 'time'
     df_normalized.rename(columns=col_map, inplace=True)
 
@@ -232,7 +238,12 @@ def _validate_data(df: pd.DataFrame) -> Tuple[bool, pd.DataFrame, List[str]]:
     
     # Convertir en numérique
     for col in required_columns:
-        df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce')
+        series = df_clean[col]
+        # Si colonnes dupliquées, prendre la première
+        if isinstance(series, pd.DataFrame):
+            series = series.iloc[:, 0]
+            df_clean = df_clean.loc[:, ~df_clean.columns.duplicated()]
+        df_clean[col] = pd.to_numeric(series, errors='coerce')
     
     # Vérifier GPS valides
     invalid_lat = ((df_clean['latitude'] < -90) | (df_clean['latitude'] > 90)).sum()
