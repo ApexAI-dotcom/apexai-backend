@@ -246,18 +246,12 @@ class AnalysisService:
                 f"{analysis_id}_{file.filename}"
             )
             
-            # Lecture par chunks pour éviter timeout sur gros fichiers
+            content = await file.read()
             MAX_SIZE = 50 * 1024 * 1024  # 50MB
-            chunks = []
-            size = 0
-            async for chunk in file:
-                size += len(chunk)
-                if size > MAX_SIZE:
-                    raise ValueError(
-                        f"Fichier trop volumineux ({size/1024/1024:.1f}MB). Limite : 50MB."
-                    )
-                chunks.append(chunk)
-            content = b"".join(chunks)
+            if len(content) > MAX_SIZE:
+                raise ValueError(
+                    f"Fichier trop volumineux ({len(content)/1024/1024:.1f}MB). Limite : 50MB."
+                )
             with open(temp_path, "wb") as f:
                 f.write(content)
             
