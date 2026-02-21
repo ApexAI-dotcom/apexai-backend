@@ -14,56 +14,64 @@ from src.analysis.scoring import KARTING_CONSTANTS, calculate_optimal_apex_posit
 from src.analysis.geometry import _haversine_distance
 
 
-def calculate_optimal_apex_speed(
-    corner_data: pd.DataFrame,
-    corner_type: str = "right"
-) -> float:
+def _apex_speeds_per_lap(
+    df: pd.DataFrame,
+    corner_indices: List[int],
+) -> List[float]:
     """
-    Calcule la vitesse apex optimale théorique.
-    
-    Formule : V_opt = sqrt((R * g * μ * cos(θ)) / (1 - μ * sin(θ)))
-    Simplifiée : V_opt = sqrt(R * g * μ) pour piste plate
-    
-    Args:
-        corner_data: DataFrame avec points du virage
-        corner_type: "left" ou "right"
+    Vitesse apex par tour = minimum de vitesse dans le segment pour chaque tour.
+    (speed en km/h dans le pipeline.)
     
     Returns:
-        Vitesse optimale en km/h
+        Liste des vitesses apex en km/h, une par tour où le virage est présent.
     """
+    if not corner_indices or 'speed' not in df.columns:
+        return []
     try:
-        if 'curvature' not in corner_data.columns:
-            return 0.0
-        
-        curvature = pd.to_numeric(corner_data['curvature'], errors='coerce').fillna(0).values
-        curvature_abs = np.abs(curvature[curvature != 0])
-        
-        if len(curvature_abs) == 0:
-            return 0.0
-        
-        # Rayon moyen
-        curvature_mean = np.mean(curvature_abs)
-        if curvature_mean <= 0:
-            return 0.0
-        
-        radius = 1.0 / curvature_mean  # Rayon en mètres
-        
-        # Vitesse optimale (piste plate, θ=0)
-        g = KARTING_CONSTANTS['g']
-        mu = KARTING_CONSTANTS['mu_tire']
-        
-        v_optimal_ms = np.sqrt(mu * g * radius)
-        v_optimal_kmh = v_optimal_ms * 3.6
-        
-        # Validation : 30 < v_optimal < 150 km/h
-        if 30.0 < v_optimal_kmh < 150.0:
-            return float(v_optimal_kmh)
-        else:
-            return 0.0
-    
+        valid_indices = [i for i in corner_indices if i in df.index]
+        if not valid_indices:
+            return []
+        sub = df.loc[valid_indices].copy()
+        if len(sub) == 0:
+            return []
+        lap_col = 'lap_number' if 'lap_number' in df.columns else None
+        if not lap_col:
+            return [round(float(sub['speed'].min()), 1)]
+        lap_numbers = pd.to_numeric(sub[lap_col], errors='coerce').fillna(1).astype(int)
+        sub = sub.assign(_lap=lap_numbers)
+        unique_laps = sorted(sub['_lap'].unique())
+        unique_laps = [lap for lap in unique_laps if lap >= 1]
+        if not unique_laps:
+            return [round(float(sub['speed'].min()), 1)]
+        apex_speeds_per_lap = []
+        for lap in unique_laps:
+            lap_rows = sub[sub['_lap'] == lap]
+            if len(lap_rows) > 0:
+                min_speed = float(lap_rows['speed'].min())
+                apex_speeds_per_lap.append(min_speed)
+        return apex_speeds_per_lap
     except Exception as e:
-        warnings.warn(f"Error calculating optimal apex speed: {str(e)}")
+        warnings.warn(f"Erreur _apex_speeds_per_lap: {e}")
+        return []
+
+
+def calculate_optimal_apex_speed_from_laps(
+    df: pd.DataFrame,
+    corner_indices: List[int],
+) -> float:
+    """
+    Vitesse optimale à l'apex = maximum observé sur tous les tours.
+    
+    Physiquement cohérent : le pilote ne peut pas dépasser son propre record.
+    Évite les erreurs de la formule physique (rayon GPS bruité).
+    
+    Returns:
+        Vitesse max en km/h, ou 0.0 si pas de données
+    """
+    apex_speeds = _apex_speeds_per_lap(df, corner_indices)
+    if not apex_speeds:
         return 0.0
+    return round(max(apex_speeds), 1)
 
 
 def calculate_braking_point(
@@ -344,17 +352,22 @@ def analyze_corner_performance(
                 'score': 50
             }
         
-        # Vitesses
-        apex_speed_real = corner_data.get('apex_speed_kmh', 0.0)
+        # Vitesses : real = moyenne des apex par tour, optimal = max observé par tour
         entry_speed = corner_data.get('entry_speed_kmh', 0.0)
         exit_speed = corner_data.get('exit_speed_kmh', 0.0)
-        
-        # Vitesse optimale
-        apex_speed_optimal = calculate_optimal_apex_speed(corner_df, corner_type)
-        if apex_speed_optimal <= 0:
-            # Fallback : utiliser valeur depuis corner_data si disponible
-            apex_speed_optimal = corner_data.get('optimal_apex_speed_kmh', apex_speed_real * 1.1)
-        
+        apex_speeds_per_lap = _apex_speeds_per_lap(df, corner_indices)
+        if apex_speeds_per_lap:
+            apex_speed_real = round(float(np.mean(apex_speeds_per_lap)), 1)
+            apex_speed_optimal = round(max(apex_speeds_per_lap), 1)
+            apex_speed_optimal = max(apex_speed_optimal, apex_speed_real)
+        else:
+            apex_speed_real = corner_data.get('apex_speed_kmh', 0.0)
+            apex_speed_optimal = calculate_optimal_apex_speed_from_laps(df, corner_indices)
+            if apex_speed_optimal <= 0 and 'speed' in corner_df.columns and len(corner_df) > 0:
+                apex_speed_optimal = round(float(corner_df['speed'].min()), 1)
+            if apex_speed_optimal <= 0:
+                apex_speed_optimal = apex_speed_real
+            apex_speed_optimal = max(apex_speed_optimal, apex_speed_real)
         speed_efficiency = (apex_speed_real / apex_speed_optimal * 100) if apex_speed_optimal > 0 else 80.0
         
         # Erreur apex
@@ -389,11 +402,22 @@ def analyze_corner_performance(
         else:
             time_in_corner = corner_data.get('duration_s', 0.0)
         
-        # Temps perdu
+        # Temps perdu = différence entre tour moyen et meilleur tour à ce virage
         corner_distance = corner_data.get('distance_m', 0.0)
-        time_lost = calculate_time_lost(
-            df, corner_df, apex_speed_real, apex_speed_optimal, corner_distance
-        )
+        if apex_speed_optimal > 0 and apex_speed_real > 0 and apex_speed_real < apex_speed_optimal:
+            if corner_indices and 'cumulative_distance' in df.columns:
+                valid_idx = [i for i in corner_indices if i in df.index]
+                if valid_idx:
+                    dist_vals = df.loc[valid_idx, 'cumulative_distance']
+                    segment_length = float(abs(dist_vals.max() - dist_vals.min()))
+                else:
+                    segment_length = corner_distance if corner_distance > 0 else 30.0
+            else:
+                segment_length = corner_distance if corner_distance > 0 else 30.0
+            time_lost = segment_length / (apex_speed_real / 3.6) - segment_length / (apex_speed_optimal / 3.6)
+            time_lost = round(max(0.0, time_lost), 3)
+        else:
+            time_lost = 0.0
         
         # Score et grade pour ce virage
         corner_score = (
