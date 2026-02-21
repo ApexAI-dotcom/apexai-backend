@@ -652,8 +652,8 @@ def detect_corners(
                 'end': end_idx
             })
         
-        # 3b. Filtrer faux virages (lignes droites à G quasi-nul : vrai virage karting G > 0.5)
-        MIN_LATERAL_G_REAL = 0.5
+        # 3b. Filtrer faux virages (lignes droites à G quasi-nul : vrai virage karting G > 0.25)
+        MIN_LATERAL_G_REAL = 0.25
         valid_corners_final = []
         for corner_info in valid_corners:
             indices = corner_info['indices']
