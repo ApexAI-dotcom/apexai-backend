@@ -60,7 +60,7 @@ def _run_analysis_pipeline_sync(
     logger.info(f"[{analysis_id}] Step 3.5/5: Detecting laps...")
     df = detect_laps(df)
     logger.info(f"[{analysis_id}] Step 4/5: Detecting corners...")
-    df = detect_corners(df, min_lateral_g=0.08)
+    df = detect_corners(df, min_lateral_g=0.25)
 
     corners_meta = df.attrs.get("corners", {})
     corner_details = corners_meta.get("corner_details", [])
@@ -217,7 +217,7 @@ def _run_analysis_pipeline_sync(
             percentile=score_data.get("percentile", 78),
         ),
         corner_analysis=[
-            CornerAnalysis(**c) for c in unique_corner_analysis[:10] if c
+            CornerAnalysis(**c) for c in unique_corner_analysis if c
         ],
         coaching_advice=[
             CoachingAdvice(**a) for a in coaching_advice_list[:5]
