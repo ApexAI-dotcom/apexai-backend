@@ -138,6 +138,22 @@ def _run_analysis_pipeline_sync(
     unique_corner_analysis = list(unique_by_id.values())
     corners_detected = len(unique_corner_analysis)
 
+    # Score global = moyenne des scores virages (cohérent avec affichage)
+    corner_scores = [float(c.get("score", 50)) for c in unique_corner_analysis if c.get("score") is not None]
+    if corner_scores:
+        score_data["overall_score"] = round(sum(corner_scores) / len(corner_scores), 1)
+        s = score_data["overall_score"]
+        if s >= 85:
+            score_data["grade"] = "A"
+        elif s >= 75:
+            score_data["grade"] = "B"
+        elif s >= 65:
+            score_data["grade"] = "C"
+        elif s >= 50:
+            score_data["grade"] = "D"
+        else:
+            score_data["grade"] = "F"
+
     try:
         coaching_advice_list = generate_coaching_advice(
             df, corner_details, score_data, unique_corner_analysis

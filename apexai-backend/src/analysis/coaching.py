@@ -7,6 +7,8 @@ Générateur de conseils personnalisés hiérarchisés par impact
 
 from typing import Dict, Any, List, Optional
 import warnings
+import numpy as np
+import pandas as pd
 
 
 def generate_coaching_advice(
@@ -391,8 +393,15 @@ def _generate_global_advice(
         # === CONSTANCE GÉNÉRALE ===
         consistency_score = breakdown.get('trajectory_consistency', 15.0)
         if consistency_score < 15.0 and 'heading' in df.columns:
-            heading = df['heading'].diff().abs()
-            corrections = int((heading > 5.0).sum())
+            heading = pd.to_numeric(df['heading'], errors='coerce').ffill().fillna(0).values
+            if len(heading) > 10:
+                h = pd.Series(heading)
+                smooth = h.rolling(window=10, center=True, min_periods=1).mean()
+                diff = np.diff(smooth.values)
+                diff = np.where(diff > 180, diff - 360, np.where(diff < -180, diff + 360, diff))
+                corrections = int(np.sum(np.abs(diff) > 10.0))  # seuil 10° comme scoring
+            else:
+                corrections = 0
             if corrections > 10:
                 impact_seconds = round((15.0 - consistency_score) * 0.02, 2)
                 advice.append({
@@ -402,7 +411,7 @@ def _generate_global_advice(
                     'corner': None,
                     'message': f"Fluidité générale — {corrections} corrections de trajectoire détectées",
                     'explanation': (
-                        f"{corrections} corrections de volant >5° détectées sur le tour. "
+                        f"{corrections} corrections de volant >10° détectées sur le tour. "
                         f"Action : travaille le regard loin (vise la sortie du virage dès l'entrée), "
                         f"ça réduit naturellement les micro-corrections. "
                         f"Mains souples sur le volant — pas de à-coups. "

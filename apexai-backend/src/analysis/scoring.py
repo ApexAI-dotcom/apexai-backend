@@ -179,28 +179,30 @@ def calculate_trajectory_consistency_score(df: pd.DataFrame) -> float:
         # Écart-type de la courbure
         curvature_std = np.std(np.abs(curvature))
         
-        # Détecter micro-corrections (variations brutales du heading)
+        # Détecter vraies corrections (seuil élevé pour éviter bruit vibrations/piste à 100Hz)
+        STEERING_CORRECTION_THRESHOLD = 10.0  # degrés minimum
+        SMOOTHNESS_WINDOW = 10  # points de lissage
         if 'heading' in df.columns:
-            heading = pd.to_numeric(df['heading'], errors='coerce').fillna(0).values
-            
-            # Calculer variations de heading
-            heading_diff = np.diff(heading)
-            # Normaliser dans [-180, 180]
-            heading_diff = np.where(heading_diff > 180, heading_diff - 360, heading_diff)
-            heading_diff = np.where(heading_diff < -180, heading_diff + 360, heading_diff)
-            
-            # Détecter corrections > 5° en 0.5s (approximation: 10 points si 10Hz)
-            corrections = np.sum(np.abs(heading_diff) > 5.0)
+            heading = pd.to_numeric(df['heading'], errors='coerce').ffill().fillna(0).values
+            if len(heading) > SMOOTHNESS_WINDOW:
+                heading_series = pd.Series(heading)
+                heading_smooth = heading_series.rolling(window=SMOOTHNESS_WINDOW, center=True, min_periods=1).mean().values
+                heading_diff = np.diff(heading_smooth)
+                heading_diff = np.where(heading_diff > 180, heading_diff - 360, heading_diff)
+                heading_diff = np.where(heading_diff < -180, heading_diff + 360, heading_diff)
+                corrections = np.sum(np.abs(heading_diff) > STEERING_CORRECTION_THRESHOLD)
+            else:
+                heading_diff = np.diff(heading)
+                heading_diff = np.where(heading_diff > 180, heading_diff - 360, heading_diff)
+                heading_diff = np.where(heading_diff < -180, heading_diff + 360, heading_diff)
+                corrections = np.sum(np.abs(heading_diff) > STEERING_CORRECTION_THRESHOLD)
             correction_ratio = corrections / len(heading_diff) if len(heading_diff) > 0 else 0
         else:
             correction_ratio = 0
         
-        # Score basé sur écart-type et corrections
-        # std_deviation faible + peu de corrections = score élevé
+        # Score basé sur écart-type et corrections (fluidité en info, pas dominant)
         consistency_from_std = 20.0 * (1 - min(curvature_std / 0.3, 1.0))
-        consistency_from_corrections = 20.0 * (1 - min(correction_ratio * 10, 1.0))
-        
-        # Moyenne pondérée
+        consistency_from_corrections = 20.0 * (1 - min(correction_ratio * 5, 1.0))  # moins pénalisant
         score = (consistency_from_std * 0.6 + consistency_from_corrections * 0.4)
         
         return max(0.0, min(20.0, score))
@@ -383,20 +385,20 @@ def calculate_performance_score(
         # 4. Temps Secteur (25 points)
         sector_times = calculate_sector_times_score(df, corner_details)
         
-        # Score global
+        # Score global (sera éventuellement remplacé par moyenne virages dans le service)
         overall_score = apex_precision + trajectory_consistency + apex_speed + sector_times
         
-        # Grade
-        if overall_score >= 95:
-            grade = "A+"
-        elif overall_score >= 85:
+        # Grade (sera recalculé dans le service si score = moyenne virages)
+        if overall_score >= 85:
             grade = "A"
         elif overall_score >= 75:
             grade = "B"
         elif overall_score >= 65:
             grade = "C"
-        else:
+        elif overall_score >= 50:
             grade = "D"
+        else:
+            grade = "F"
         
         # Percentile (simulé, à remplacer par vraie DB si disponible)
         percentile = int(min(99, max(10, 10 + (overall_score - 50) * 1.5)))
