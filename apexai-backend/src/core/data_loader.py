@@ -431,6 +431,19 @@ def robust_load_telemetry(file_path: str) -> Dict[str, Any]:
         result['error'] = "❌ Impossible de parser le fichier avec toutes les méthodes essayées"
         return result
     
+    # === DOWNSAMPLING : réduire à max 8000 points pour performances ===
+    MAX_POINTS = 8000
+    if len(df) > MAX_POINTS:
+        n_orig = len(df)
+        step = max(1, n_orig // MAX_POINTS)
+        df = df.iloc[::step].reset_index(drop=True)
+        msg = (
+            f"✓ Downsampling : {n_orig} → {len(df)} points "
+            f"(1 point sur {step}, ~{10000 // step if step > 0 else 100}Hz effectif)"
+        )
+        warnings.warn(msg)
+        result['warnings'].append(msg)
+    
     # Normalisation des colonnes
     try:
         df, norm_warnings = _normalize_columns(df)

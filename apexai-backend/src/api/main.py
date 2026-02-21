@@ -107,7 +107,9 @@ async def limit_upload_size(request: Request, call_next):
                         "error": "file_too_large",
                         "message": (
                             f"Fichier trop volumineux ({content_length/1024/1024:.1f}MB). "
-                            f"Limite : {MAX_UPLOAD_SIZE/1024/1024:.0f}MB."
+                            f"Limite : {MAX_UPLOAD_SIZE/1024/1024:.0f}MB. "
+                            "Astuce : exportez votre CSV en sélectionnant 1 canal sur 10 "
+                            "dans Race Studio (décimation 1:10)."
                         )
                     }
                 )
