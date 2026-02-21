@@ -416,6 +416,8 @@ def analyze_corner_performance(
             'corner_id': corner_id,
             'corner_type': corner_type,
             'corner_number': corner_id,
+            'apex_lat': corner_data.get('apex_lat'),
+            'apex_lon': corner_data.get('apex_lon'),
             'metrics': {
                 'apex_speed_real': round(apex_speed_real, 1),
                 'apex_speed_optimal': round(apex_speed_optimal, 1),
@@ -442,6 +444,8 @@ def analyze_corner_performance(
             'corner_id': corner_data.get('id', 0),
             'corner_type': corner_data.get('type', 'right'),
             'corner_number': corner_data.get('id', 0),
+            'apex_lat': corner_data.get('apex_lat'),
+            'apex_lon': corner_data.get('apex_lon'),
             'metrics': {},
             'grade': 'C',
             'score': 50

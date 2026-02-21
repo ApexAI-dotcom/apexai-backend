@@ -86,6 +86,8 @@ def _run_analysis_pipeline_sync(
                 "time_lost": float(metrics.get("time_lost", 0.0) or 0.0),
                 "grade": str(corner_data.get("grade", "C")),
                 "score": float(corner_data.get("score", 50.0) or 50.0),
+                "apex_lat": corner_data.get("apex_lat"),
+                "apex_lon": corner_data.get("apex_lon"),
             }
         except Exception as e:
             logger.warning(f"[{analysis_id}] Error sanitizing corner data: {e}")
@@ -102,6 +104,8 @@ def _run_analysis_pipeline_sync(
                 "time_lost": 0.0,
                 "grade": "C",
                 "score": 50.0,
+                "apex_lat": None,
+                "apex_lon": None,
             }
 
     logger.info(f"[{analysis_id}] Analyzing corner performance...")
@@ -125,6 +129,8 @@ def _run_analysis_pipeline_sync(
                 "time_lost": 0.0,
                 "grade": "C",
                 "score": 50.0,
+                "apex_lat": None,
+                "apex_lon": None,
             })
 
     logger.info(f"[{analysis_id}] {len(corner_analysis_list)} corners analyzed successfully")
@@ -163,6 +169,7 @@ def _run_analysis_pipeline_sync(
         coaching_advice_list = []
 
     logger.info(f"[{analysis_id}] Generating plots...")
+    df.attrs["corner_analysis"] = unique_corner_analysis
     plots_urls = generate_all_plots_base64(df)
 
     processing_time = (datetime.now() - start_time).total_seconds()

@@ -690,6 +690,11 @@ def detect_corners(
             entry_idx_full = int(df_circuit.index[start_idx])
             apex_idx_full = int(df_circuit.index[apex_index])
             exit_idx_full = int(df_circuit.index[end_idx])
+            # Position GPS de l'apex (pour heatmap / trajectoire)
+            lat_col = 'latitude_smooth' if 'latitude_smooth' in df_circuit.columns else 'latitude'
+            lon_col = 'longitude_smooth' if 'longitude_smooth' in df_circuit.columns else 'longitude'
+            apex_lat = float(df_circuit[lat_col].iloc[apex_index]) if lat_col in df_circuit.columns else None
+            apex_lon = float(df_circuit[lon_col].iloc[apex_index]) if lon_col in df_circuit.columns else None
             corner_detail = {
                 'id': corner_num_in_lap,
                 'lap': lap_num,
@@ -698,6 +703,8 @@ def detect_corners(
                 'entry_index': entry_idx_full,
                 'apex_index': apex_idx_full,
                 'exit_index': exit_idx_full,
+                'apex_lat': apex_lat,
+                'apex_lon': apex_lon,
                 'entry_speed_kmh': float(speed[start_idx]) if start_idx < len(speed) else 0.0,
                 'apex_speed_kmh': float(speed[apex_index]) if apex_index < len(speed) else 0.0,
                 'exit_speed_kmh': float(speed[end_idx]) if end_idx < len(speed) else 0.0,

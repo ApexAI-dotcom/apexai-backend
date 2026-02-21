@@ -158,21 +158,45 @@ def plot_trajectory_2d(df: pd.DataFrame, save_path: str) -> bool:
         ax.add_collection(lc)
         ax.autoscale()
         
-        # Apex markers
-        if 'is_apex' in df.columns and 'corner_id' in df.columns:
-            apex_mask = df['is_apex'] == True
-            if apex_mask.any():
-                apex_lon = lon[apex_mask.values]
-                apex_lat = lat[apex_mask.values]
-                apex_ids = df.loc[apex_mask, 'corner_id'].values
-                ax.scatter(apex_lon, apex_lat, marker='*', s=180, 
-                          color=COLOR_ORANGE, edgecolors=BG_DARK, 
+        # Apex markers : un seul marqueur + label par corner_id (pas un par passage)
+        corner_analysis = df.attrs.get('corner_analysis', [])
+        if corner_analysis:
+            plotted_ids = set()
+            for corner in corner_analysis:
+                cid = corner.get('corner_id')
+                apex_lat = corner.get('apex_lat')
+                apex_lon = corner.get('apex_lon')
+                if cid is None or apex_lat is None or apex_lon is None or cid in plotted_ids:
+                    continue
+                plotted_ids.add(cid)
+                ax.scatter(apex_lon, apex_lat, marker='*', s=180,
+                          color=COLOR_ORANGE, edgecolors=BG_DARK,
                           linewidths=0.8, zorder=10)
-                for x, y, cid in zip(apex_lon, apex_lat, apex_ids):
+                ax.annotate(f'V{int(cid)}', xy=(apex_lon, apex_lat),
+                           xytext=(4, 6), textcoords='offset points',
+                           fontsize=8, color=COLOR_ORANGE, fontweight='bold')
+        elif 'is_apex' in df.columns and 'corner_id' in df.columns:
+            from collections import defaultdict
+            apex_mask = df['is_apex'].fillna(False)
+            if apex_mask.any():
+                by_cid = defaultdict(list)
+                for i in np.where(apex_mask.values)[0]:
+                    cid = df.iloc[i]['corner_id']
                     if pd.notna(cid):
-                        ax.annotate(f'V{int(cid)}', xy=(x, y), 
-                                   xytext=(4, 6), textcoords='offset points',
-                                   fontsize=8, color=COLOR_ORANGE, fontweight='bold')
+                        by_cid[int(cid)].append((lon[i], lat[i]))
+                plotted_ids = set()
+                for cid, points in by_cid.items():
+                    if cid in plotted_ids or not points:
+                        continue
+                    plotted_ids.add(cid)
+                    med_lon = np.median([p[0] for p in points])
+                    med_lat = np.median([p[1] for p in points])
+                    ax.scatter(med_lon, med_lat, marker='*', s=180,
+                              color=COLOR_ORANGE, edgecolors=BG_DARK,
+                              linewidths=0.8, zorder=10)
+                    ax.annotate(f'V{cid}', xy=(med_lon, med_lat),
+                               xytext=(4, 6), textcoords='offset points',
+                               fontsize=8, color=COLOR_ORANGE, fontweight='bold')
         
         # Start / Finish
         ax.scatter(lon[0], lat[0], s=120, color=COLOR_GREEN, 
@@ -684,62 +708,47 @@ def plot_performance_score_breakdown(df: pd.DataFrame, save_path: str) -> bool:
 
 def plot_corner_heatmap(df: pd.DataFrame, save_path: str) -> bool:
     try:
-        required = ['longitude_smooth', 'latitude_smooth', 'corner_id']
-        if not all(c in df.columns for c in required):
+        lon_col = 'longitude_smooth' if 'longitude_smooth' in df.columns else 'longitude'
+        lat_col = 'latitude_smooth' if 'latitude_smooth' in df.columns else 'latitude'
+        if lon_col not in df.columns or lat_col not in df.columns:
             return False
-        
-        lon = pd.to_numeric(df['longitude_smooth'], errors='coerce').values
-        lat = pd.to_numeric(df['latitude_smooth'], errors='coerce').values
-        corner_ids = df['corner_id'].values
-        
+        lon_all = pd.to_numeric(df[lon_col], errors='coerce').values
+        lat_all = pd.to_numeric(df[lat_col], errors='coerce').values
+
         fig, ax = plt.subplots(figsize=FIG_SIZE, dpi=DPI)
         fig.patch.set_facecolor(BG_DARK)
-        
-        # Trajectoire de base
-        ax.plot(lon, lat, color=BG_PANEL, linewidth=1.5, alpha=0.6, zorder=1)
-        
-        # Données de score par virage si disponibles dans attrs
-        corner_scores = {}
-        if 'corner_analysis' in df.attrs:
-            for c in df.attrs['corner_analysis']:
-                corner_scores[c.get('corner_id')] = c.get('score', 70)
-        
-        # Colorier chaque virage
-        unique_corners = np.unique(corner_ids[corner_ids > 0])
-        for cid in unique_corners:
-            mask = corner_ids == cid
-            c_lon = lon[mask]
-            c_lat = lat[mask]
-            
-            score = corner_scores.get(int(cid), 70)
+        ax.set_facecolor(BG_DARK)
+
+        # 1. Trajectoire GPS complète en fond (fine, sombre)
+        ax.plot(lon_all, lat_all, color=BG_PANEL, linewidth=1.2, alpha=0.7, zorder=1)
+
+        # 2. Cercles aux positions GPS des virages (pas de lignes entre eux)
+        corners = df.attrs.get('corner_analysis', [])
+        for corner in corners:
+            apex_lon = corner.get('apex_lon')
+            apex_lat = corner.get('apex_lat')
+            if apex_lon is None or apex_lat is None:
+                continue
+            score = corner.get('score', 70)
+            corner_id = corner.get('corner_id', '?')
             color = COLOR_GREEN if score >= 80 else COLOR_ORANGE if score >= 65 else COLOR_RED
-            
-            ax.plot(c_lon, c_lat, color=color, linewidth=4, 
-                   alpha=0.85, zorder=2)
-            
-            # Label au centre du virage
-            if len(c_lon) > 0:
-                mid = len(c_lon) // 2
-                ax.annotate(f'V{int(cid)}\n{score:.0f}', 
-                           xy=(c_lon[mid], c_lat[mid]),
-                           fontsize=7, color=COLOR_TEXT, ha='center',
-                           bbox=dict(boxstyle='round,pad=0.2', 
-                                    facecolor=BG_PANEL, alpha=0.85,
-                                    edgecolor='none'))
-        
+            ax.scatter(apex_lon, apex_lat, s=400, color=color, zorder=5,
+                      edgecolors=COLOR_TEXT, linewidths=1.5)
+            ax.annotate(f'V{corner_id}\n{score:.0f}',
+                       xy=(apex_lon, apex_lat),
+                       xytext=(6, 6), textcoords='offset points',
+                       fontsize=8, color=COLOR_TEXT, fontweight='bold', zorder=6)
+
         from matplotlib.patches import Patch
         legend_elements = [
             Patch(facecolor=COLOR_GREEN, label='Excellent ≥80'),
             Patch(facecolor=COLOR_ORANGE, label='Moyen 65-80'),
-            Patch(facecolor=COLOR_RED, label='À travailler <65')
+            Patch(facecolor=COLOR_RED, label='À travailler <65'),
         ]
-        ax.legend(handles=legend_elements, facecolor=BG_PANEL, 
+        ax.legend(handles=legend_elements, facecolor=BG_PANEL,
                  edgecolor=BG_PANEL, labelcolor=COLOR_TEXT, fontsize=9)
-        
-        _style_ax(ax, '🗺  Carte Performance — Heatmap Virages', 
-                 'Longitude', 'Latitude')
+        _style_ax(ax, '🗺  Carte Performance — Heatmap Virages', 'Longitude', 'Latitude')
         ax.set_aspect('equal')
-        
         fig.tight_layout()
         plt.savefig(save_path, dpi=DPI, bbox_inches='tight', facecolor=BG_DARK)
         plt.close(fig)
