@@ -49,6 +49,45 @@ def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> f
         return 0.0
 
 
+def _get_apex_gps(df_work: pd.DataFrame, indices: List[int]) -> Tuple[Optional[float], Optional[float]]:
+    """
+    Retourne (lat, lon) du point d'apex (vitesse min) parmi les indices du segment.
+    Gère les lat/lon manquantes ou hors bounds pour éviter virages absents (ex. V2).
+    """
+    if not indices or len(df_work) == 0:
+        return None, None
+    lat_col = 'latitude_smooth' if 'latitude_smooth' in df_work.columns else 'latitude'
+    lon_col = 'longitude_smooth' if 'longitude_smooth' in df_work.columns else 'longitude'
+    if lat_col not in df_work.columns or lon_col not in df_work.columns:
+        return None, None
+    try:
+        valid_indices = [
+            i for i in indices
+            if 0 <= i < len(df_work)
+            and pd.notna(df_work.iloc[i][lat_col])
+            and pd.notna(df_work.iloc[i][lon_col])
+        ]
+        if not valid_indices:
+            return None, None
+        speed_col = 'speed' if 'speed' in df_work.columns else 'GPS Speed'
+        if speed_col in df_work.columns:
+            speeds = df_work.iloc[valid_indices][speed_col]
+            apex_rel = speeds.values.argmin()
+            apex_iloc = valid_indices[apex_rel]
+        else:
+            apex_iloc = valid_indices[len(valid_indices) // 2]
+        lat = float(df_work.iloc[apex_iloc][lat_col])
+        lon = float(df_work.iloc[apex_iloc][lon_col])
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            return None, None
+        if lat == 0.0 and lon == 0.0:
+            return None, None
+        return lat, lon
+    except Exception as e:
+        warnings.warn(f"Erreur calcul apex GPS: {e}")
+        return None, None
+
+
 def _smooth_heading(heading: np.ndarray, window: int = 5) -> np.ndarray:
     """
     Lisse le cap (heading) en gérant les discontinuités 359° → 0°.
@@ -690,11 +729,8 @@ def detect_corners(
             entry_idx_full = int(df_circuit.index[start_idx])
             apex_idx_full = int(df_circuit.index[apex_index])
             exit_idx_full = int(df_circuit.index[end_idx])
-            # Position GPS de l'apex (pour heatmap / trajectoire)
-            lat_col = 'latitude_smooth' if 'latitude_smooth' in df_circuit.columns else 'latitude'
-            lon_col = 'longitude_smooth' if 'longitude_smooth' in df_circuit.columns else 'longitude'
-            apex_lat = float(df_circuit[lat_col].iloc[apex_index]) if lat_col in df_circuit.columns else None
-            apex_lon = float(df_circuit[lon_col].iloc[apex_index]) if lon_col in df_circuit.columns else None
+            # Position GPS de l'apex (robuste : vitesse min parmi indices avec lat/lon valides)
+            apex_lat, apex_lon = _get_apex_gps(df_circuit, list(corner_indices))
             corner_detail = {
                 'id': corner_num_in_lap,
                 'lap': lap_num,

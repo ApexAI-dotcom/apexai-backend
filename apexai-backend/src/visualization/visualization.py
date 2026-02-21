@@ -9,6 +9,7 @@ Création de 8 graphiques style F1 AWS pour analyse professionnelle
 import matplotlib
 matplotlib.use("Agg")
 
+import math
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -724,19 +725,42 @@ def plot_corner_heatmap(df: pd.DataFrame, save_path: str) -> bool:
 
         # 2. Cercles aux positions GPS des virages (pas de lignes entre eux)
         corners = df.attrs.get('corner_analysis', [])
-        for corner in corners:
+        corners_with_gps = [c for c in corners if c.get('apex_lat') is not None and c.get('apex_lon') is not None]
+
+        def _haversine_m(lat1, lon1, lat2, lon2):
+            R = 6371000
+            dlat = math.radians(lat2 - lat1)
+            dlon = math.radians(lon2 - lon1)
+            a = (math.sin(dlat / 2) ** 2 +
+                 math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
+                 math.sin(dlon / 2) ** 2)
+            return R * 2 * math.asin(math.sqrt(a))
+
+        # Offsets des labels pour éviter chevauchements (chicanes V7/V8)
+        label_offsets = {}
+        for i, c1 in enumerate(corners_with_gps):
+            offset = (6, 6)
+            for j, c2 in enumerate(corners_with_gps):
+                if i == j:
+                    continue
+                dist = _haversine_m(c1['apex_lat'], c1['apex_lon'], c2['apex_lat'], c2['apex_lon'])
+                if dist < 40:
+                    offset = (6, 12) if i < j else (6, -18)
+                    break
+            label_offsets[c1.get('corner_id')] = offset
+
+        for corner in corners_with_gps:
             apex_lon = corner.get('apex_lon')
             apex_lat = corner.get('apex_lat')
-            if apex_lon is None or apex_lat is None:
-                continue
             score = corner.get('score', 70)
             corner_id = corner.get('corner_id', '?')
             color = COLOR_GREEN if score >= 80 else COLOR_ORANGE if score >= 65 else COLOR_RED
             ax.scatter(apex_lon, apex_lat, s=400, color=color, zorder=5,
                       edgecolors=COLOR_TEXT, linewidths=1.5)
+            xytext = label_offsets.get(corner_id, (6, 6))
             ax.annotate(f'V{corner_id}\n{score:.0f}',
                        xy=(apex_lon, apex_lat),
-                       xytext=(6, 6), textcoords='offset points',
+                       xytext=xytext, textcoords='offset points',
                        fontsize=8, color=COLOR_TEXT, fontweight='bold', zorder=6)
 
         from matplotlib.patches import Patch
