@@ -404,18 +404,25 @@ def analyze_corner_performance(
         
         # Temps perdu = différence entre tour moyen et meilleur tour à ce virage
         corner_distance = corner_data.get('distance_m', 0.0)
-        if apex_speed_optimal > 0 and apex_speed_real > 0 and apex_speed_real < apex_speed_optimal:
-            if corner_indices and 'cumulative_distance' in df.columns:
-                valid_idx = [i for i in corner_indices if i in df.index]
-                if valid_idx:
-                    dist_vals = df.loc[valid_idx, 'cumulative_distance']
-                    segment_length = float(abs(dist_vals.max() - dist_vals.min()))
-                else:
-                    segment_length = corner_distance if corner_distance > 0 else 30.0
+        if corner_indices and 'cumulative_distance' in df.columns:
+            valid_idx = [i for i in corner_indices if i in df.index]
+            if valid_idx:
+                dist_vals = df.loc[valid_idx, 'cumulative_distance']
+                segment_length = abs(float(dist_vals.max()) - float(dist_vals.min()))
+                if segment_length > 5000:
+                    segment_length = segment_length / 1000.0  # mm → m
+                if segment_length > 500:
+                    segment_length = segment_length / 100.0  # cm → m
+                segment_length = max(5.0, min(200.0, segment_length))
             else:
                 segment_length = corner_distance if corner_distance > 0 else 30.0
-            time_lost = segment_length / (apex_speed_real / 3.6) - segment_length / (apex_speed_optimal / 3.6)
-            time_lost = round(max(0.0, time_lost), 3)
+        else:
+            segment_length = corner_distance if corner_distance > 0 else 30.0
+        v_real_ms = apex_speed_real / 3.6
+        v_opt_ms = apex_speed_optimal / 3.6
+        if v_real_ms > 0 and v_opt_ms > 0 and v_opt_ms > v_real_ms:
+            time_lost = segment_length / v_real_ms - segment_length / v_opt_ms
+            time_lost = round(max(0.0, min(time_lost, 5.0)), 3)
         else:
             time_lost = 0.0
         
