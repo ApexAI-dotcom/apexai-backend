@@ -52,7 +52,7 @@ REDIS_KEY_PREFIX = "analysis:"
     - Statistiques de l'analyse
     
     **Limites :**
-    - Taille max : 20 MB
+    - Taille max : 50 MB (configurable via MAX_UPLOAD_SIZE)
     - Format : CSV uniquement
     - Colonnes requises : Latitude, Longitude, Speed
     """

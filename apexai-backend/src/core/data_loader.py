@@ -119,8 +119,9 @@ def _parse_with_pandas(file_path: str, skiprows: int, encoding: str = 'utf-8') -
             file_path,
             skiprows=skiprows,
             encoding=encoding,
-            on_bad_lines='warn',
-            low_memory=False
+            low_memory=False,
+            dtype=str,
+            on_bad_lines='skip'
         )
         return df
     except Exception:

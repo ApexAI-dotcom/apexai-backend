@@ -90,6 +90,31 @@ app.add_middleware(
 # Compression GZip
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
+# Limite taille upload (50MB par défaut, MAX_UPLOAD_SIZE en bytes)
+MAX_UPLOAD_SIZE = int(os.environ.get("MAX_UPLOAD_SIZE", 52428800))  # 50MB
+
+@app.middleware("http")
+async def limit_upload_size(request: Request, call_next):
+    """Rejeter les requêtes POST trop volumineuses avec 413 et message clair."""
+    if request.method == "POST" and "content-length" in request.headers:
+        try:
+            content_length = int(request.headers["content-length"])
+            if content_length > MAX_UPLOAD_SIZE:
+                return JSONResponse(
+                    status_code=413,
+                    content={
+                        "success": False,
+                        "error": "file_too_large",
+                        "message": (
+                            f"Fichier trop volumineux ({content_length/1024/1024:.1f}MB). "
+                            f"Limite : {MAX_UPLOAD_SIZE/1024/1024:.0f}MB."
+                        )
+                    }
+                )
+        except ValueError:
+            pass
+    return await call_next(request)
+
 # Servir les images statiques (graphiques matplotlib)
 output_dir = Path(settings.OUTPUT_DIR)
 output_dir.mkdir(parents=True, exist_ok=True)

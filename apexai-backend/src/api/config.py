@@ -16,9 +16,10 @@ class Settings:
     VERSION = "1.0.0"
     ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
     
-    # Limites
-    MAX_FILE_SIZE_MB = 20
-    MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+    # Limites upload (50MB par défaut, configurable via MAX_UPLOAD_SIZE en bytes)
+    _max_upload_bytes = int(os.getenv("MAX_UPLOAD_SIZE", 52428800))
+    MAX_FILE_SIZE_BYTES = _max_upload_bytes
+    MAX_FILE_SIZE_MB = _max_upload_bytes // (1024 * 1024)
     
     # Paths (relatifs depuis project_root)
     PROJECT_ROOT = Path(__file__).parent.parent.parent.resolve()
