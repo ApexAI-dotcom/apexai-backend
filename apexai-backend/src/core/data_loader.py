@@ -157,9 +157,12 @@ def _normalize_columns(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
         'latitude_deg': 'latitude',
         'gpslat': 'latitude',
         'pos_lat': 'latitude',
+        'y_gps': 'latitude',
+        'position_lat': 'latitude',
 
         # Longitude
         'lon': 'longitude',
+        'long': 'longitude',
         'lng': 'longitude',
         'gps longitude': 'longitude',
         'gps_longitude': 'longitude',
@@ -170,6 +173,8 @@ def _normalize_columns(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
         'gpslon': 'longitude',
         'pos_lon': 'longitude',
         'pos_lng': 'longitude',
+        'x_gps': 'longitude',
+        'position_lon': 'longitude',
 
         # Speed
         'vel': 'speed',
@@ -180,10 +185,14 @@ def _normalize_columns(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
         'speed_kmh': 'speed',
         'speed_kph': 'speed',
         'vitesse': 'speed',
+        'vit': 'speed',
         'velocity_kmh': 'speed',
         'velocity_kph': 'speed',
         'vhw': 'speed',
         'sog': 'speed',
+        'v_gps': 'speed',
+        'ground_speed': 'speed',
+        'vitesse gps': 'speed',
 
         # Time
         't': 'time',
@@ -257,7 +266,13 @@ def _validate_data(df: pd.DataFrame) -> Tuple[bool, pd.DataFrame, List[str]]:
     
     # Vérifier nombre de lignes
     if len(df_clean) < 10:
-        return False, df_clean, ["❌ Pas assez de données : moins de 10 lignes"]
+        n_raw = len(df_clean)
+        cols = list(df_clean.columns[:8]) if len(df_clean.columns) > 0 else []
+        return False, df_clean, [
+            f"❌ Fichier non reconnu ou incompatible. "
+            f"Lignes : {n_raw}, colonnes détectées : {cols}. "
+            f"Format supporté : AiM/MoTeC CSV avec colonnes GPS (latitude, longitude, speed)."
+        ]
     
     # Vérifier colonnes requises
     required_columns = ['latitude', 'longitude', 'speed']
@@ -295,7 +310,10 @@ def _validate_data(df: pd.DataFrame) -> Tuple[bool, pd.DataFrame, List[str]]:
     
     # Vérifier qu'il reste assez de données après nettoyage
     if len(df_clean) < 10:
-        return False, df_clean, ["❌ Pas assez de données après nettoyage : moins de 10 lignes valides"]
+        return False, df_clean, [
+            f"❌ Pas assez de données après nettoyage : {len(df_clean)} lignes valides (min. 10). "
+            f"Colonnes : {list(df_clean.columns[:8])}. Vérifiez latitude/longitude/speed."
+        ]
     
     return True, df_clean, warnings_list
 

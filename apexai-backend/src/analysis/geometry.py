@@ -613,6 +613,19 @@ def detect_corners(
                 'end': end_idx
             })
         
+        # 3b. Filtrer faux virages (lignes droites à G quasi-nul : vrai virage karting G > 0.5)
+        MIN_LATERAL_G_REAL = 0.5
+        valid_corners_final = []
+        for corner_info in valid_corners:
+            indices = corner_info['indices']
+            g_vals = np.abs([lateral_g[i] for i in indices])
+            g_max = float(np.max(g_vals)) if len(g_vals) > 0 else 0.0
+            if g_max >= MIN_LATERAL_G_REAL:
+                valid_corners_final.append(corner_info)
+            else:
+                warnings.warn(f"Faux virage filtré : G_max={g_max:.2f} < {MIN_LATERAL_G_REAL}")
+        valid_corners = valid_corners_final
+        
         # 4. TRAITER CHAQUE VIRAGE VALIDE avec numérotation par tour
         # (filtre lap=0 inutile : détection faite sur df_circuit = lap>=1 uniquement)
         has_laps = 'lap_number' in df_circuit.columns
