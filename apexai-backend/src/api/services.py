@@ -149,13 +149,13 @@ def _run_analysis_pipeline_sync(
     if corner_scores:
         score_data["overall_score"] = round(sum(corner_scores) / len(corner_scores), 1)
         s = score_data["overall_score"]
-        if s >= 85:
+        if s >= 80:
             score_data["grade"] = "A"
-        elif s >= 75:
+        elif s >= 70:
             score_data["grade"] = "B"
-        elif s >= 65:
+        elif s >= 55:
             score_data["grade"] = "C"
-        elif s >= 50:
+        elif s >= 40:
             score_data["grade"] = "D"
         else:
             score_data["grade"] = "F"

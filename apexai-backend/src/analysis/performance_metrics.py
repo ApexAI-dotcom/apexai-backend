@@ -434,14 +434,16 @@ def analyze_corner_performance(
             (1 - min(time_lost / 1.0, 1.0)) * 10.0  # 10% temps perdu
         )
         
-        if corner_score >= 85:
+        if corner_score >= 80:
             grade = "A"
-        elif corner_score >= 75:
+        elif corner_score >= 68:
             grade = "B"
-        elif corner_score >= 65:
+        elif corner_score >= 52:
             grade = "C"
-        else:
+        elif corner_score >= 38:
             grade = "D"
+        else:
+            grade = "F"
         
         return {
             'corner_id': corner_id,

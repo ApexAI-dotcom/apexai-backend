@@ -389,13 +389,13 @@ def calculate_performance_score(
         overall_score = apex_precision + trajectory_consistency + apex_speed + sector_times
         
         # Grade (sera recalculé dans le service si score = moyenne virages)
-        if overall_score >= 85:
+        if overall_score >= 80:
             grade = "A"
-        elif overall_score >= 75:
+        elif overall_score >= 70:
             grade = "B"
-        elif overall_score >= 65:
+        elif overall_score >= 55:
             grade = "C"
-        elif overall_score >= 50:
+        elif overall_score >= 40:
             grade = "D"
         else:
             grade = "F"
