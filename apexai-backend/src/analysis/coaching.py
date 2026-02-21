@@ -306,14 +306,15 @@ def _generate_global_advice(
 ) -> List[Dict[str, Any]]:
     """Génère conseils globaux actionnables avec instructions physiques."""
     advice = []
+    valid_corner_ids = {c.get('corner_id') for c in corner_analysis if c.get('corner_id') is not None}
 
     try:
         breakdown = score_data.get('breakdown', {})
 
         # === CONSEILS PAR VIRAGE PROBLÉMATIQUE ===
-        # Trier par score croissant (pires virages en premier)
-        sorted_corners = sorted(corner_analysis, key=lambda c: c.get('score', 100))
-        worst_corners = sorted_corners[:3]  # Top 3 pires
+        # Trier par score croissant (pires virages en premier), uniquement virages présents
+        corners_valid = [c for c in corner_analysis if c.get('corner_id') in valid_corner_ids]
+        worst_corners = sorted(corners_valid, key=lambda c: c.get('score', 100))[:3]
 
         for corner in worst_corners:
             label = corner.get('label', f"Virage {corner.get('corner_id', '?')}")
@@ -413,6 +414,7 @@ def _generate_global_advice(
         # === POINT FORT ACTIONNABLE ===
         details = score_data.get('details', {})
         best_corners_ids = details.get('best_corners', [])
+        best_corners_ids = [cid for cid in best_corners_ids if cid in valid_corner_ids]
         best_corners_data = [c for c in corner_analysis if c.get('corner_id') in best_corners_ids]
 
         if best_corners_data:

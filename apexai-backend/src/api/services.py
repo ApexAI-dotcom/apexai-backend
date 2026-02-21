@@ -128,8 +128,20 @@ def _run_analysis_pipeline_sync(
             })
 
     logger.info(f"[{analysis_id}] {len(corner_analysis_list)} corners analyzed successfully")
+
+    # Virages uniques du circuit (dédupliquer par corner_id)
+    unique_by_id = {}
+    for c in corner_analysis_list:
+        cid = c.get("corner_id")
+        if cid is not None and cid not in unique_by_id:
+            unique_by_id[cid] = c
+    unique_corner_analysis = list(unique_by_id.values())
+    corners_detected = len(unique_corner_analysis)
+
     try:
-        coaching_advice_list = generate_coaching_advice(df, corner_details, score_data, corner_analysis_list)
+        coaching_advice_list = generate_coaching_advice(
+            df, corner_details, score_data, unique_corner_analysis
+        )
     except Exception as e:
         logger.warning(f"[{analysis_id}] Failed to generate coaching advice: {e}")
         coaching_advice_list = []
@@ -138,11 +150,29 @@ def _run_analysis_pipeline_sync(
     plots_urls = generate_all_plots_base64(df)
 
     processing_time = (datetime.now() - start_time).total_seconds()
-    lap_time = 0.0
-    if "time" in df.columns and len(df) > 0:
-        time_values = df["time"].dropna()
-        if len(time_values) > 0:
-            lap_time = float(time_values.iloc[-1] - time_values.iloc[0])
+
+    # Meilleur tour depuis beacon markers (pas durée session)
+    if beacon_markers and len(beacon_markers) >= 2:
+        lap_times_list = [beacon_markers[0]]
+        for i in range(1, len(beacon_markers)):
+            lap_times_list.append(beacon_markers[i] - beacon_markers[i - 1])
+        timed_laps = lap_times_list[1:] if len(lap_times_list) > 1 else lap_times_list
+        best_lap_time = round(min(timed_laps), 3)
+        avg_lap_time = round(sum(timed_laps) / len(timed_laps), 3) if timed_laps else best_lap_time
+        logger.info(
+            f"[{analysis_id}] Meilleur tour: {best_lap_time}s, "
+            f"Moyenne: {avg_lap_time}s sur {len(timed_laps)} tours"
+        )
+        lap_time = best_lap_time
+    else:
+        if "time" in df.columns and len(df) > 0:
+            time_values = df["time"].dropna()
+            if len(time_values) > 0:
+                lap_time = round(float(time_values.iloc[-1] - time_values.iloc[0]), 3)
+            else:
+                lap_time = 0.0
+        else:
+            lap_time = 0.0
 
     logger.info(f"[{analysis_id}] ✅ Completed in {processing_time:.2f}s")
 
@@ -150,7 +180,7 @@ def _run_analysis_pipeline_sync(
         success=True,
         analysis_id=analysis_id,
         timestamp=datetime.now(),
-        corners_detected=len(corner_details),
+        corners_detected=corners_detected,
         lap_time=lap_time,
         performance_score=PerformanceScore(
             overall_score=float(score_data.get("overall_score", 0.0)),
@@ -164,7 +194,7 @@ def _run_analysis_pipeline_sync(
             percentile=score_data.get("percentile", 78),
         ),
         corner_analysis=[
-            CornerAnalysis(**c) for c in corner_analysis_list[:10] if c
+            CornerAnalysis(**c) for c in unique_corner_analysis[:10] if c
         ],
         coaching_advice=[
             CoachingAdvice(**a) for a in coaching_advice_list[:5]
