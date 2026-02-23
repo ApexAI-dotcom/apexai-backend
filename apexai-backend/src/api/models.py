@@ -11,11 +11,11 @@ from datetime import datetime
 
 
 class ScoreBreakdown(BaseModel):
-    """Breakdown du score de performance"""
+    """Breakdown du score de performance (somme = overall_score, total 100 pts)"""
     apex_precision: float = Field(description="Score précision apex /30")
-    trajectory_consistency: float = Field(description="Score régularité /20")
+    trajectory_consistency: float = Field(description="Score régularité /25")
     apex_speed: float = Field(description="Score vitesse apex /25")
-    sector_times: float = Field(description="Score temps secteurs /25")
+    sector_times: float = Field(description="Score temps secteurs /20")
 
 
 class PerformanceScore(BaseModel):

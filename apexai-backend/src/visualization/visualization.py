@@ -575,9 +575,9 @@ def plot_performance_radar(df: pd.DataFrame, save_path: str) -> bool:
             score_data = df.attrs['score_data']
             breakdown = score_data.get('breakdown', {})
             apex = min(100, breakdown.get('apex_precision', 10) / 30 * 100)
-            consistency = min(100, breakdown.get('trajectory_consistency', 10) / 20 * 100)
+            consistency = min(100, breakdown.get('trajectory_consistency', 10) / 25 * 100)
             speed = min(100, breakdown.get('apex_speed', 10) / 25 * 100)
-            sectors = min(100, breakdown.get('sector_times', 10) / 25 * 100)
+            sectors = min(100, breakdown.get('sector_times', 10) / 20 * 100)
         else:
             apex = 55.0
             consistency = 70.0
@@ -660,7 +660,7 @@ def plot_performance_score_breakdown(df: pd.DataFrame, save_path: str) -> bool:
             breakdown.get('apex_speed', 15.0),
             breakdown.get('sector_times', 15.0)
         ]
-        max_scores = [30.0, 20.0, 25.0, 25.0]
+        max_scores = [30.0, 25.0, 25.0, 20.0]
         pcts = [v/m*100 for v, m in zip(values, max_scores)]
         
         colors = [COLOR_GREEN if p >= 70 else COLOR_ORANGE if p >= 50 else COLOR_RED 

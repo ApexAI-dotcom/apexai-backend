@@ -162,17 +162,17 @@ def calculate_apex_precision_score(
 
 def calculate_trajectory_consistency_score(df: pd.DataFrame) -> float:
     """
-    Calcule le score de régularité de trajectoire (0-20 points).
+    Calcule le score de régularité de trajectoire (0-25 points).
     
     Args:
         df: DataFrame avec colonnes curvature, heading
     
     Returns:
-        Score entre 0 et 20
+        Score entre 0 et 25
     """
     try:
         if 'curvature' not in df.columns:
-            return 10.0  # Score moyen par défaut
+            return 12.5  # Score moyen par défaut (25/2)
         
         curvature = pd.to_numeric(df['curvature'], errors='coerce').fillna(0).values
         
@@ -200,16 +200,16 @@ def calculate_trajectory_consistency_score(df: pd.DataFrame) -> float:
         else:
             correction_ratio = 0
         
-        # Score basé sur écart-type et corrections (fluidité en info, pas dominant)
-        consistency_from_std = 20.0 * (1 - min(curvature_std / 0.3, 1.0))
-        consistency_from_corrections = 20.0 * (1 - min(correction_ratio * 5, 1.0))  # moins pénalisant
+        # Score basé sur écart-type et corrections (max 25 pts)
+        consistency_from_std = 25.0 * (1 - min(curvature_std / 0.3, 1.0))
+        consistency_from_corrections = 25.0 * (1 - min(correction_ratio * 5, 1.0))
         score = (consistency_from_std * 0.6 + consistency_from_corrections * 0.4)
         
-        return max(0.0, min(20.0, score))
+        return max(0.0, min(25.0, score))
     
     except Exception as e:
         warnings.warn(f"Error calculating trajectory consistency: {str(e)}")
-        return 10.0
+        return 12.5
 
 
 def calculate_apex_speed_score(corner_details: List[Dict[str, Any]]) -> float:
@@ -275,30 +275,30 @@ def calculate_sector_times_score(
     corner_details: List[Dict[str, Any]]
 ) -> float:
     """
-    Calcule le score des temps secteurs (0-25 points).
+    Calcule le score des temps secteurs (0-20 points).
     
     Args:
         df: DataFrame avec colonnes cumulative_distance et time
         corner_details: Liste des détails de chaque virage
     
     Returns:
-        Score entre 0 et 25
+        Score entre 0 et 20
     """
     try:
         if 'cumulative_distance' not in df.columns or 'time' not in df.columns:
-            return 12.5  # Score moyen par défaut
+            return 10.0  # Score moyen par défaut (20/2)
         
         dist = pd.to_numeric(df['cumulative_distance'], errors='coerce').values
         time = pd.to_numeric(df['time'], errors='coerce').values
         
         if len(dist) == 0 or len(time) == 0:
-            return 12.5
+            return 10.0
         
         total_dist = dist[-1] if not pd.isna(dist[-1]) else 0
         total_time = time[-1] - time[0] if len(time) > 1 and not pd.isna(time[-1]) and not pd.isna(time[0]) else 0
         
         if total_dist == 0 or total_time == 0:
-            return 12.5
+            return 10.0
         
         # Diviser en 3 secteurs
         s1_end = total_dist / 3
@@ -339,23 +339,23 @@ def calculate_sector_times_score(
         
         avg_ratio = (ratio_s1 + ratio_s2 + ratio_s3) / 3.0
         
-        # Score basé sur ratio
+        # Score basé sur ratio (max 20 pts)
         if avg_ratio >= 1.0:
-            score = 25.0
+            score = 20.0
         elif avg_ratio >= 0.95:
-            score = 22.0
+            score = 17.5
         elif avg_ratio >= 0.90:
-            score = 18.0
+            score = 14.0
         elif avg_ratio >= 0.85:
-            score = 12.0
+            score = 10.0
         else:
-            score = max(5.0, 5.0 * (avg_ratio / 0.85))
+            score = max(5.0, 4.0 * (avg_ratio / 0.85))
         
-        return score
+        return min(20.0, score)
     
     except Exception as e:
         warnings.warn(f"Error calculating sector times score: {str(e)}")
-        return 12.5
+        return 10.0
 
 
 def calculate_performance_score(
@@ -376,16 +376,16 @@ def calculate_performance_score(
         # 1. Précision Apex (30 points)
         apex_precision = calculate_apex_precision_score(df, corner_details)
         
-        # 2. Régularité Trajectoire (20 points)
+        # 2. Régularité Trajectoire (25 points)
         trajectory_consistency = calculate_trajectory_consistency_score(df)
         
         # 3. Vitesse Apex (25 points)
         apex_speed = calculate_apex_speed_score(corner_details)
         
-        # 4. Temps Secteur (25 points)
+        # 4. Temps Secteur (20 points)
         sector_times = calculate_sector_times_score(df, corner_details)
         
-        # Score global (sera éventuellement remplacé par moyenne virages dans le service)
+        # Source de vérité unique : overall_score = somme du breakdown (total 100 pts)
         overall_score = apex_precision + trajectory_consistency + apex_speed + sector_times
         
         # Grade (sera recalculé dans le service si score = moyenne virages)
@@ -463,14 +463,16 @@ def calculate_performance_score(
         else:
             consistency_index = 0.75
         
+        breakdown = {
+            "apex_precision": round(min(30.0, apex_precision), 1),
+            "trajectory_consistency": round(min(25.0, trajectory_consistency), 1),
+            "apex_speed": round(min(25.0, apex_speed), 1),
+            "sector_times": round(min(20.0, sector_times), 1)
+        }
+        overall_score = breakdown["apex_precision"] + breakdown["trajectory_consistency"] + breakdown["apex_speed"] + breakdown["sector_times"]
         return {
             "overall_score": round(overall_score, 1),
-            "breakdown": {
-                "apex_precision": round(apex_precision, 1),
-                "trajectory_consistency": round(trajectory_consistency, 1),
-                "apex_speed": round(apex_speed, 1),
-                "sector_times": round(sector_times, 1)
-            },
+            "breakdown": breakdown,
             "grade": grade,
             "percentile": percentile,
             "details": {
@@ -488,9 +490,9 @@ def calculate_performance_score(
             "overall_score": 60.0,
             "breakdown": {
                 "apex_precision": 15.0,
-                "trajectory_consistency": 10.0,
+                "trajectory_consistency": 12.5,
                 "apex_speed": 12.5,
-                "sector_times": 12.5
+                "sector_times": 10.0
             },
             "grade": "C",
             "percentile": 50,
@@ -502,3 +504,38 @@ def calculate_performance_score(
                 "consistency_index": 0.75
             }
         }
+
+
+def validate_score_consistency(score_data: Dict[str, Any]) -> None:
+    """
+    Vérifie que overall_score = sum(breakdown). Si écart > 0.5, log une erreur
+    et force overall_score = sum(breakdown) pour cohérence API / graphiques.
+    """
+    breakdown = score_data.get("breakdown", {})
+    if not breakdown:
+        return
+    total = (
+        float(breakdown.get("apex_precision", 0))
+        + float(breakdown.get("trajectory_consistency", 0))
+        + float(breakdown.get("apex_speed", 0))
+        + float(breakdown.get("sector_times", 0))
+    )
+    overall = float(score_data.get("overall_score", 0))
+    if abs(total - overall) > 0.5:
+        import logging
+        logging.getLogger(__name__).error(
+            "CRITICAL: score inconsistency overall_score=%.1f != sum(breakdown)=%.1f; forcing overall_score=sum(breakdown)",
+            overall, total
+        )
+        score_data["overall_score"] = round(total, 1)
+        s = score_data["overall_score"]
+        if s >= 80:
+            score_data["grade"] = "A"
+        elif s >= 70:
+            score_data["grade"] = "B"
+        elif s >= 55:
+            score_data["grade"] = "C"
+        elif s >= 40:
+            score_data["grade"] = "D"
+        else:
+            score_data["grade"] = "F"
