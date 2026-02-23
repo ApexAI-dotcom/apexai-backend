@@ -92,6 +92,7 @@ class Statistics(BaseModel):
     worst_corners: List[int] = Field(description="Numéros des virages à travailler")
     avg_apex_distance: float = Field(description="Distance apex moyenne en mètres")
     avg_apex_speed_efficiency: float = Field(description="Efficacité vitesse moyenne")
+    laps_analyzed: Optional[int] = Field(default=None, description="Nombre de tours sélectionnés pour l'analyse")
 
 
 class SessionConditions(BaseModel):

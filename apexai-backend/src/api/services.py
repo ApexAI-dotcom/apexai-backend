@@ -124,11 +124,16 @@ def _run_analysis_pipeline_sync(
     df = calculate_trajectory_geometry(df)
     logger.info(f"[{analysis_id}] Step 3.5/5: Detecting laps...")
     df = detect_laps(df)
+    laps_analyzed = 1
     if lap_filter:
+        laps_analyzed = len(lap_filter)
         df = df[df["lap_number"].isin(lap_filter)].reset_index(drop=True)
         logger.info(f"[{analysis_id}] Filtered to laps {lap_filter}: {len(df)} rows")
         if len(df) < 10:
             raise ValueError("Pas assez de points après filtrage par tours (min. 10).")
+    else:
+        if "lap_number" in df.columns:
+            laps_analyzed = int(df["lap_number"].nunique())
     logger.info(f"[{analysis_id}] Step 4/5: Detecting corners...")
     df = detect_corners(df, min_lateral_g=0.25)
 
@@ -234,6 +239,7 @@ def _run_analysis_pipeline_sync(
         coaching_advice_list = generate_coaching_advice(
             df, corner_details, score_data, unique_corner_analysis,
             track_condition=track_condition,
+            laps_analyzed=laps_analyzed,
         )
     except Exception as e:
         logger.warning(f"[{analysis_id}] Failed to generate coaching advice: {e}")
@@ -302,6 +308,7 @@ def _run_analysis_pipeline_sync(
             worst_corners=score_data.get("details", {}).get("worst_corners", [])[:3],
             avg_apex_distance=float(score_data.get("details", {}).get("avg_apex_distance", 0.0)),
             avg_apex_speed_efficiency=float(score_data.get("details", {}).get("avg_apex_speed_efficiency", 0.0)),
+            laps_analyzed=laps_analyzed,
         ),
         session_conditions=SessionConditions(
             track_condition=track_condition,

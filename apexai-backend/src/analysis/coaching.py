@@ -17,9 +17,10 @@ def generate_coaching_advice(
     score_data: Dict[str, Any],
     corner_analysis: List[Dict[str, Any]],
     track_condition: str = "dry",
+    laps_analyzed: int = 1,
 ) -> List[Dict[str, Any]]:
     """
-    Génère 3-5 conseils hiérarchisés par impact sur le temps au tour.
+    Génère 3-5 conseils hiérarchisés par impact sur la session.
     
     Args:
         df: DataFrame complet avec toutes les colonnes
@@ -27,12 +28,24 @@ def generate_coaching_advice(
         score_data: Dictionnaire avec scores de performance
         corner_analysis: Liste des analyses détaillées par virage
         track_condition: dry | damp | wet | rain — en wet/rain, conseils moins agressifs (freinage)
+        laps_analyzed: Nombre de tours sélectionnés pour l'analyse (1 = un seul tour)
     
     Returns:
-        Liste de conseils triés par priorité (impact décroissant)
+        Liste de conseils triés par priorité (impact décroissant), info session en premier si laps_analyzed > 1
     """
     advice_list = []
     is_wet = (track_condition or "dry").lower() in ("wet", "rain")
+
+    if laps_analyzed > 1:
+        advice_list.append({
+            "priority": 0,
+            "category": "info",
+            "impact_seconds": 0.0,
+            "corner": None,
+            "message": f"Analyse basée sur {laps_analyzed} tour(s) sélectionné(s) — données agrégées.",
+            "explanation": f"Les conseils ci-dessous s'appuient sur les {laps_analyzed} tours analysés.",
+            "difficulty": "facile",
+        })
 
     # Enrichir corner_analysis avec labels lisibles si disponibles
     for c in corner_analysis:
@@ -74,11 +87,13 @@ def generate_coaching_advice(
                 "difficulty": "moyen",
             })
         
-        # Trier par impact (décroissant)
-        advice_list.sort(key=lambda x: x.get('impact_seconds', 0), reverse=True)
+        # Trier : conseils "info" en premier, puis par impact (décroissant)
+        advice_list.sort(key=lambda x: (0 if x.get('category') == 'info' else 1, -x.get('impact_seconds', 0)))
         
-        # Limiter à top 5
-        return advice_list[:5]
+        # Limiter à top 5 (hors info qui reste en premier)
+        info_items = [a for a in advice_list if a.get('category') == 'info']
+        rest = [a for a in advice_list if a.get('category') != 'info'][:5]
+        return info_items + rest
     
     except Exception as e:
         warnings.warn(f"Error generating coaching advice: {str(e)}")
@@ -115,7 +130,7 @@ def _generate_braking_advice(
                 explanation = (
                     f"Point de freinage actuel : {metrics.get('braking_point_distance', 0):.1f}m avant l'apex. "
                     f"Point optimal : {metrics.get('braking_point_optimal', 0):.1f}m. "
-                    f"En retardant le freinage de {braking_delta:.1f}m, tu gagneras environ {impact_seconds:.2f}s par tour. "
+                    f"En retardant le freinage de {braking_delta:.1f}m, tu gagneras environ {impact_seconds:.2f}s sur la session. "
                     f"Repère un marqueur visuel {braking_delta:.0f}m plus proche de l'apex (bottes de paille, ligne blanche) "
                     f"pour déclencher le freinage. Vitesse d'entrée cible : {metrics.get('entry_speed', 0):.1f} km/h."
                 )
@@ -127,7 +142,7 @@ def _generate_braking_advice(
                     f"Point optimal : {metrics.get('braking_point_optimal', 0):.1f}m. "
                     f"Tu entres trop vite dans ce virage, ce qui te force à corriger en plein apex. "
                     f"Anticipe le freinage de {abs(braking_delta):.1f}m pour stabiliser la trajectoire. "
-                    f"Perte estimée : {impact_seconds:.2f}s par tour."
+                    f"Perte estimée : {impact_seconds:.2f}s sur la session."
                 )
                 difficulty = "moyen"
 
@@ -172,7 +187,7 @@ def _generate_apex_advice(corner_analysis: List[Dict[str, Any]]) -> List[Dict[st
                     f"Ta trajectoire clippe l'intérieur avec {apex_error:.1f}m d'erreur. "
                     f"En visant {apex_error:.1f}m plus vers {inside}, "
                     f"tu pourras accélérer {apex_error * 0.05:.2f}s plus tôt en sortie. "
-                    f"Gain estimé : {impact_seconds:.2f}s par tour. "
+                    f"Gain estimé : {impact_seconds:.2f}s sur la session. "
                     f"Regarde l'apex au moment de tourner le volant, pas la sortie."
                 )
             else:
@@ -180,7 +195,7 @@ def _generate_apex_advice(corner_analysis: List[Dict[str, Any]]) -> List[Dict[st
                 explanation = (
                     f"Position d'apex non optimale ({apex_error:.1f}m d'erreur). "
                     f"Un apex précis te permettrait d'accélérer plus tôt en sortie. "
-                    f"Gain estimé : {impact_seconds:.2f}s par tour."
+                    f"Gain estimé : {impact_seconds:.2f}s sur la session."
                 )
 
             difficulty = "moyen" if apex_error < 3.0 else "difficile"
@@ -230,7 +245,7 @@ def _generate_speed_advice(corner_analysis: List[Dict[str, Any]]) -> List[Dict[s
                 f"Vitesse réelle à l'apex : {speed_real:.1f} km/h. "
                 f"Vitesse physiquement atteignable sur ce rayon : {speed_optimal:.1f} km/h "
                 f"(μ={1.1}, R={1/max(metrics.get('curvature', 0.01), 0.001):.0f}m). "
-                f"Tu laisses {speed_delta:.1f} km/h sur la table — c'est {impact_seconds:.2f}s perdu par tour. "
+                f"Tu laisses {speed_delta:.1f} km/h sur la table — c'est {impact_seconds:.2f}s perdu sur la session. "
                 f"Efficacité actuelle : {efficiency_pct:.0f}%. "
                 f"Pour progresser : plus de fluidité au volant et confiance progressive dans le grip."
             )
@@ -373,7 +388,7 @@ def _generate_global_advice(
                     f"la pression de frein en approchant de l'apex pour maintenir {speed_delta:.0f} km/h de plus. "
                     f"Ton G latéral max est {lateral_g:.1f}G — le grip est disponible, "
                     f"fais confiance aux pneus. "
-                    f"Gain estimé : {impact_seconds:.2f}s par tour."
+                    f"Gain estimé : {impact_seconds:.2f}s sur la session."
                 )
                 difficulty = "moyen"
 
@@ -388,7 +403,7 @@ def _generate_global_advice(
                     f"et vise-le précisément avec les yeux AVANT de tourner le volant. "
                     f"Vitesse d'entrée actuelle : {entry_speed:.0f} km/h → "
                     f"objectif sortie : {exit_speed + speed_delta:.0f} km/h. "
-                    f"Gain estimé : {impact_seconds:.2f}s par tour."
+                    f"Gain estimé : {impact_seconds:.2f}s sur la session."
                 )
                 difficulty = "moyen"
 
@@ -396,9 +411,9 @@ def _generate_global_advice(
                 # Problème général de constance
                 message = f"{label} — Score {score}/100, manque de régularité"
                 explanation = (
-                    f"Ce virage est irrégulier d'un tour à l'autre. "
+                    f"Ce virage est irrégulier d'un passage à l'autre. "
                     f"Action : choisis UN point de repère fixe pour le freinage "
-                    f"(pancarte, marque au sol) et engage-toi à l'utiliser à chaque tour. "
+                    f"(pancarte, marque au sol) et engage-toi à l'utiliser à chaque passage. "
                     f"Vitesse apex actuelle : {speed_real:.0f} km/h. "
                     f"Priorité : constance avant vitesse."
                 )
@@ -435,11 +450,11 @@ def _generate_global_advice(
                     'corner': None,
                     'message': f"Fluidité générale — {corrections} corrections de trajectoire détectées",
                     'explanation': (
-                        f"{corrections} corrections de volant >10° détectées sur le tour. "
+                        f"{corrections} corrections de volant >10° détectées sur la session. "
                         f"Action : travaille le regard loin (vise la sortie du virage dès l'entrée), "
                         f"ça réduit naturellement les micro-corrections. "
                         f"Mains souples sur le volant — pas de à-coups. "
-                        f"Gain estimé : {impact_seconds:.2f}s par tour."
+                        f"Gain estimé : {impact_seconds:.2f}s sur la session."
                     ),
                     'difficulty': 'moyen'
                 })
