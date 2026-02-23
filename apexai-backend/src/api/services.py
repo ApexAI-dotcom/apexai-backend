@@ -8,10 +8,13 @@ Service d'analyse de télémétrie
 import asyncio
 import os
 import logging
+import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 from fastapi import UploadFile
+import numpy as np
+import pandas as pd
 
 from src.core.data_loader import robust_load_telemetry
 from src.core.signal_processing import apply_savgol_filter
@@ -35,11 +38,71 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 
+def _parse_laps_sync(temp_path: str, beacon_markers: list) -> List[Dict[str, Any]]:
+    """
+    Charge le CSV, détecte les tours (réutilise load + savgol + geometry + detect_laps),
+    retourne la liste des tours avec lap_number, lap_time_seconds, points_count, is_outlier.
+    is_outlier = True si temps > 1.5 * médiane (tours stand / prépa).
+    """
+    result = robust_load_telemetry(temp_path)
+    if not result["success"]:
+        raise ValueError(result.get("error", "Échec chargement"))
+
+    df = result["data"]
+    if beacon_markers:
+        df.attrs["beacon_markers"] = beacon_markers
+    df = apply_savgol_filter(df)
+    df = calculate_trajectory_geometry(df)
+    df = detect_laps(df)
+
+    if "lap_number" not in df.columns:
+        return [{"lap_number": 1, "lap_time_seconds": 0.0, "points_count": len(df), "is_outlier": False}]
+
+    time_col = "time" if "time" in df.columns else None
+    laps_out = []
+
+    for lap_num, group in df.groupby("lap_number", sort=True):
+        lap_num = int(lap_num)
+        points_count = int(len(group))
+        if time_col and group[time_col].notna().any():
+            t = pd.to_numeric(group[time_col], errors="coerce").dropna()
+            lap_time_seconds = float(t.max() - t.min()) if len(t) >= 2 else 0.0
+        else:
+            lap_time_seconds = 0.0
+        laps_out.append({
+            "lap_number": lap_num,
+            "lap_time_seconds": round(lap_time_seconds, 3),
+            "points_count": points_count,
+            "is_outlier": False,
+        })
+
+    if not laps_out:
+        return laps_out
+
+    # Médiane des temps (tours avec temps > 0 et lap_number >= 1)
+    times_for_median = [x["lap_time_seconds"] for x in laps_out if x["lap_time_seconds"] > 0 and x["lap_number"] >= 1]
+    if times_for_median:
+        median_time = float(np.median(times_for_median))
+        threshold = 1.5 * median_time
+        for lap in laps_out:
+            if lap["lap_number"] == 0:
+                lap["is_outlier"] = True
+            elif lap["lap_time_seconds"] > threshold:
+                lap["is_outlier"] = True
+    else:
+        for lap in laps_out:
+            if lap["lap_number"] == 0:
+                lap["is_outlier"] = True
+
+    return laps_out
+
+
 def _run_analysis_pipeline_sync(
     temp_path: str,
     beacon_markers: list,
     analysis_id: str,
     start_time: datetime,
+    lap_filter: Optional[List[int]] = None,
 ) -> Dict[str, Any]:
     """Pipeline d'analyse synchrone (exécuté dans un thread pour ne pas bloquer l'event loop)."""
     logger.info(f"[{analysis_id}] Step 1/5: Loading data...")
@@ -59,6 +122,11 @@ def _run_analysis_pipeline_sync(
     df = calculate_trajectory_geometry(df)
     logger.info(f"[{analysis_id}] Step 3.5/5: Detecting laps...")
     df = detect_laps(df)
+    if lap_filter:
+        df = df[df["lap_number"].isin(lap_filter)].reset_index(drop=True)
+        logger.info(f"[{analysis_id}] Filtered to laps {lap_filter}: {len(df)} rows")
+        if len(df) < 10:
+            raise ValueError("Pas assez de points après filtrage par tours (min. 10).")
     logger.info(f"[{analysis_id}] Step 4/5: Detecting corners...")
     df = detect_corners(df, min_lateral_g=0.25)
 
@@ -239,10 +307,63 @@ def _run_analysis_pipeline_sync(
 class AnalysisService:
     """Service d'analyse de télémétrie"""
     
-    def __init__(self):
+    def __init__(self, lap_filter: Optional[List[int]] = None):
         """Initialiser le service"""
         os.makedirs(settings.TEMP_DIR, exist_ok=True)
         os.makedirs(settings.OUTPUT_DIR, exist_ok=True)
+        self._lap_filter = lap_filter if lap_filter else None
+    
+    async def parse_laps(self, file: UploadFile) -> List[Dict[str, Any]]:
+        """
+        Parse le fichier CSV et retourne la liste des tours détectés
+        (lap_number, lap_time_seconds, points_count, is_outlier).
+        Réutilise la même logique que le pipeline (load, savgol, geometry, detect_laps).
+        """
+        temp_path = None
+        try:
+            temp_path = os.path.join(settings.TEMP_DIR, f"parse_laps_{uuid.uuid4().hex[:8]}_{file.filename}")
+            content = await file.read()
+            if len(content) > 50 * 1024 * 1024:
+                raise ValueError("Fichier trop volumineux (max 50 MB).")
+            with open(temp_path, "wb") as f:
+                f.write(content)
+            await file.seek(0)
+
+            beacon_markers = []
+            try:
+                with open(temp_path, "r", encoding="utf-8", errors="ignore") as bfile:
+                    for i, bline in enumerate(bfile):
+                        if i > 20:
+                            break
+                        if "Beacon" in bline or "beacon" in bline:
+                            parts = bline.strip().replace('"', "").split(",")
+                            if len(parts) >= 2:
+                                raw = parts[1].strip()
+                                parsed = []
+                                for tok in raw.split():
+                                    try:
+                                        parsed.append(float(tok))
+                                    except ValueError:
+                                        pass
+                                if parsed:
+                                    beacon_markers = sorted(parsed)
+                                    break
+            except Exception:
+                pass
+
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(
+                None,
+                _parse_laps_sync,
+                temp_path,
+                beacon_markers,
+            )
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except Exception:
+                    pass
     
     async def process_telemetry(
         self,
@@ -311,6 +432,7 @@ class AnalysisService:
             
             # Pipeline d'analyse en thread pour ne pas bloquer l'event loop (évite timeout 30s)
             loop = asyncio.get_event_loop()
+            lap_filter = getattr(self, "_lap_filter", None)
             result = await loop.run_in_executor(
                 None,
                 _run_analysis_pipeline_sync,
@@ -318,6 +440,7 @@ class AnalysisService:
                 beacon_markers,
                 analysis_id,
                 start_time,
+                lap_filter,
             )
             return result
             

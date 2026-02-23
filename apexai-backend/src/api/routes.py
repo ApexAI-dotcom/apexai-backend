@@ -11,8 +11,9 @@ import logging
 import os
 import uuid
 from pathlib import Path
+from typing import Optional
 
-from fastapi import APIRouter, File, Request, UploadFile, HTTPException
+from fastapi import APIRouter, File, Form, Request, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
 
 from .config import settings
@@ -25,6 +26,41 @@ logger = logging.getLogger(__name__)
 
 REDIS_CACHE_TTL = 3600
 REDIS_KEY_PREFIX = "analysis:"
+
+
+@router.post(
+    "/parse-laps",
+    summary="Détecter les tours d'un fichier CSV",
+    description="Reçoit un CSV en FormData, retourne la liste des tours avec lap_number, lap_time_seconds, points_count, is_outlier (tours stand/prépa si temps > 1.5× médiane).",
+)
+async def parse_laps(
+    file: UploadFile = File(..., description="Fichier CSV de télémétrie"),
+):
+    """Parse le CSV et retourne les tours détectés (réutilise la logique detect_laps)."""
+    try:
+        validation_error = await validate_csv_file(file)
+        if validation_error:
+            raise HTTPException(
+                status_code=400,
+                detail={"success": False, "error": "Validation error", "message": validation_error},
+            )
+        service = AnalysisService()
+        laps = await service.parse_laps(file)
+        return JSONResponse(content={"success": True, "laps": laps})
+    except HTTPException:
+        raise
+    except ValueError as e:
+        logger.warning(f"parse-laps ValueError: {e}")
+        raise HTTPException(
+            status_code=400,
+            detail={"success": False, "error": "Processing error", "message": str(e)},
+        )
+    except Exception as e:
+        logger.error(f"parse-laps error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={"success": False, "error": "Internal server error", "message": str(e)},
+        )
 
 
 @router.post(
@@ -59,19 +95,30 @@ REDIS_KEY_PREFIX = "analysis:"
 )
 async def analyze_telemetry(
     request: Request,
-    file: UploadFile = File(..., description="Fichier CSV de télémétrie")
+    file: UploadFile = File(..., description="Fichier CSV de télémétrie"),
+    lap_filter: Optional[str] = Form(None, description="JSON array des numéros de tours à inclure, ex: [1,2,3]"),
 ) -> AnalysisResponse:
     """
     Analyser un fichier de télémétrie.
     
     Args:
         file: Fichier CSV uploadé
+        lap_filter: Optionnel, liste JSON des numéros de tours à analyser (ex: [1,2,3]). Si vide, tous les tours.
     
     Returns:
         AnalysisResponse avec résultats complets
     """
     analysis_id = str(uuid.uuid4())[:8]
     logger.info(f"🏁 New analysis request: {analysis_id} - {file.filename}")
+
+    lap_list = []
+    if lap_filter and lap_filter.strip():
+        try:
+            parsed = json.loads(lap_filter)
+            if isinstance(parsed, list):
+                lap_list = [int(x) for x in parsed if isinstance(x, (int, float))]
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
 
     cache_key = hashlib.md5((file.filename or "unknown").encode()).hexdigest()
     redis = getattr(request.app.state, "redis", None)
@@ -90,8 +137,8 @@ async def analyze_telemetry(
                 }
             )
 
-        # Cache HIT
-        if redis:
+        # Cache HIT (on ne met pas en cache si lap_filter différent selon les cas; clé = filename seulement)
+        if redis and not lap_list:
             cached_raw = await redis.get(f"{REDIS_KEY_PREFIX}{cache_key}")
             if cached_raw:
                 logger.info(f"[{analysis_id}] Redis cache HIT")
@@ -99,13 +146,13 @@ async def analyze_telemetry(
                 return JSONResponse(content={"cached": True, "cache_key": cache_key, **data})
 
         # Analyse (cache MISS)
-        if redis:
+        if redis and not lap_list:
             logger.info(f"[{analysis_id}] Redis cache MISS")
-        service = AnalysisService()
+        service = AnalysisService(lap_filter=lap_list if lap_list else None)
         result = await service.process_telemetry(file, analysis_id)
 
-        # Stocker en cache
-        if redis:
+        # Stocker en cache (uniquement analyse complète sans filtre de tours)
+        if redis and not lap_list:
             await redis.setex(
                 f"{REDIS_KEY_PREFIX}{cache_key}",
                 REDIS_CACHE_TTL,
