@@ -127,12 +127,14 @@ def _generate_braking_advice(
 
             if braking_delta > 0:
                 message = f"{label} — Tu freines {braking_delta:.1f}m trop tôt"
+                target_entry = corner.get('target_entry_speed') or metrics.get('entry_speed')
+                speed_cible = f" Vitesse d'entrée cible : {float(target_entry):.1f} km/h." if target_entry is not None and float(target_entry) > 0 else ""
                 explanation = (
                     f"Point de freinage actuel : {metrics.get('braking_point_distance', 0):.1f}m avant l'apex. "
                     f"Point optimal : {metrics.get('braking_point_optimal', 0):.1f}m. "
                     f"En retardant le freinage de {braking_delta:.1f}m, tu gagneras environ {impact_seconds:.2f}s sur la session. "
                     f"Repère un marqueur visuel {braking_delta:.0f}m plus proche de l'apex (bottes de paille, ligne blanche) "
-                    f"pour déclencher le freinage. Vitesse d'entrée cible : {metrics.get('entry_speed', 0):.1f} km/h."
+                    f"pour déclencher le freinage.{speed_cible}"
                 )
                 difficulty = "facile"
             else:
@@ -284,9 +286,10 @@ def _generate_trajectory_advice(corner_analysis: List[Dict[str, Any]], df) -> Li
             
             metrics1 = corner1.get('metrics', {})
             metrics2 = corner2.get('metrics', {})
-            
-            exit_speed_1 = metrics1.get('exit_speed', 0.0)
-            entry_speed_2 = metrics2.get('entry_speed', 0.0)
+            exit_speed_1 = metrics1.get('exit_speed') or corner1.get('exit_speed') or 0.0
+            entry_speed_2 = metrics2.get('entry_speed') or corner2.get('entry_speed') or 0.0
+            exit_speed_1 = float(exit_speed_1) if exit_speed_1 is not None else 0.0
+            entry_speed_2 = float(entry_speed_2) if entry_speed_2 is not None else 0.0
             
             # Si perte de vitesse importante entre deux virages
             if exit_speed_1 > 0 and entry_speed_2 > 0:
@@ -310,9 +313,12 @@ def _generate_trajectory_advice(corner_analysis: List[Dict[str, Any]], df) -> Li
         # Détecter virages avec trajectoire inefficace (double apex)
         for corner in corner_analysis:
             metrics = corner.get('metrics', {})
-            entry_speed = metrics.get('entry_speed', 0.0)
-            apex_speed = metrics.get('apex_speed_real', 0.0)
-            exit_speed = metrics.get('exit_speed', 0.0)
+            entry_speed = metrics.get('entry_speed') or corner.get('entry_speed') or 0.0
+            apex_speed = metrics.get('apex_speed_real') or corner.get('apex_speed_real') or 0.0
+            exit_speed = metrics.get('exit_speed') or corner.get('exit_speed') or 0.0
+            entry_speed = float(entry_speed) if entry_speed is not None else 0.0
+            apex_speed = float(apex_speed) if apex_speed is not None else 0.0
+            exit_speed = float(exit_speed) if exit_speed is not None else 0.0
             
             # Si perte importante entrée→apex puis récupération apex→sortie
             if entry_speed > 0 and apex_speed > 0 and exit_speed > 0:
@@ -369,8 +375,11 @@ def _generate_global_advice(
             speed_delta = max(0, speed_optimal - speed_real)
             apex_error = float(corner.get('apex_distance_error') or 0.0)
             direction = corner.get('apex_direction_error') or ''
-            entry_speed = float(corner.get('entry_speed') or 0.0)
-            exit_speed = float(corner.get('exit_speed') or 0.0)
+            entry_speed = corner.get('entry_speed')
+            exit_speed = corner.get('exit_speed')
+            target_entry = corner.get('target_entry_speed')
+            target_exit = corner.get('target_exit_speed')
+            has_speed_line = (entry_speed is not None and float(entry_speed) > 0 and target_exit is not None)
             corner_type = corner.get('corner_type', 'unknown')
             lateral_g = float(corner.get('lateral_g_max') or 0.0)
             
@@ -396,13 +405,16 @@ def _generate_global_advice(
                 # Problème de placement apex
                 side_action = "serre l'intérieur plus tôt" if direction == 'late' else "patiente avant de tourner"
                 message = f"{label} — Apex décalé de {apex_error:.1f}m, trajectoire à corriger"
+                speed_sentence = (
+                    f" Vitesse d'entrée actuelle : {float(entry_speed):.0f} km/h → objectif sortie : {float(target_exit):.0f} km/h. "
+                    if has_speed_line else " "
+                )
                 explanation = (
                     f"Ta ligne n'est pas optimale dans ce virage. "
                     f"Action : {side_action}. "
                     f"Repère un point fixe à l'intérieur du virage (vibreur, marque) "
                     f"et vise-le précisément avec les yeux AVANT de tourner le volant. "
-                    f"Vitesse d'entrée actuelle : {entry_speed:.0f} km/h → "
-                    f"objectif sortie : {exit_speed + speed_delta:.0f} km/h. "
+                    f"{speed_sentence}"
                     f"Gain estimé : {impact_seconds:.2f}s sur la session."
                 )
                 difficulty = "moyen"

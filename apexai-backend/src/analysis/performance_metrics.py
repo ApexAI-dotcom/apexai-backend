@@ -55,6 +55,48 @@ def _apex_speeds_per_lap(
         return []
 
 
+def _entry_exit_speeds_from_gps(
+    df: pd.DataFrame,
+    apex_idx: int,
+    n_points: int = 15,
+    min_points: int = 5,
+) -> tuple:
+    """
+    Calcule entry_speed (moyenne pondérée sur n_points avant l'apex) et
+    exit_speed (moyenne pondérée sur n_points après l'apex).
+    Plus de poids sur les points proches de l'apex.
+    Returns (entry_speed_kmh, exit_speed_kmh) ou (None, None) si données insuffisantes.
+    """
+    if "speed" not in df.columns:
+        return (None, None)
+    try:
+        pos_apex = df.index.get_loc(apex_idx)
+    except (KeyError, TypeError):
+        return (None, None)
+    if isinstance(pos_apex, slice):
+        pos_apex = pos_apex.start if pos_apex.start is not None else 0
+    pos_apex = int(pos_apex)
+    start = max(0, pos_apex - n_points)
+    entry_slice = df.iloc[start:pos_apex]
+    end = min(len(df), pos_apex + n_points + 1)
+    exit_slice = df.iloc[pos_apex + 1 : end]
+    if len(entry_slice) < min_points or len(exit_slice) < min_points:
+        return (None, None)
+    speed_col = pd.to_numeric(entry_slice["speed"], errors="coerce").fillna(0)
+    if speed_col.isna().all() or (speed_col <= 0).all():
+        entry_kmh = None
+    else:
+        weights_entry = np.arange(1, len(entry_slice) + 1, dtype=float)
+        entry_kmh = round(float(np.average(speed_col.values, weights=weights_entry)), 1)
+    speed_exit = pd.to_numeric(exit_slice["speed"], errors="coerce").fillna(0)
+    if speed_exit.isna().all() or (speed_exit <= 0).all():
+        exit_kmh = None
+    else:
+        weights_exit = np.arange(len(exit_slice), 0, -1, dtype=float)
+        exit_kmh = round(float(np.average(speed_exit.values, weights=weights_exit)), 1)
+    return (entry_kmh, exit_kmh)
+
+
 def calculate_optimal_apex_speed_from_laps(
     df: pd.DataFrame,
     corner_indices: List[int],
@@ -352,9 +394,10 @@ def analyze_corner_performance(
                 'score': 50
             }
         
-        # Vitesses : real = moyenne des apex par tour, optimal = max observé par tour
-        entry_speed = corner_data.get('entry_speed_kmh', 0.0)
-        exit_speed = corner_data.get('exit_speed_kmh', 0.0)
+        # Vitesses entry/exit = moyennes pondérées sur 15 points GPS avant/après apex
+        entry_speed_raw, exit_speed_raw = _entry_exit_speeds_from_gps(df, apex_idx)
+        entry_speed = float(entry_speed_raw) if entry_speed_raw is not None else corner_data.get('entry_speed_kmh', 0.0) or 0.0
+        exit_speed = float(exit_speed_raw) if exit_speed_raw is not None else corner_data.get('exit_speed_kmh', 0.0) or 0.0
         apex_speeds_per_lap = _apex_speeds_per_lap(df, corner_indices)
         if apex_speeds_per_lap:
             apex_speed_real = round(float(np.mean(apex_speeds_per_lap)), 1)
@@ -445,28 +488,35 @@ def analyze_corner_performance(
         else:
             grade = "F"
         
+        # Cibles : +3% entrée, sortie = vitesse apex optimale (affichées seulement si entry/exit calculés)
+        has_entry_exit = (entry_speed_raw is not None and exit_speed_raw is not None)
+        target_entry_speed = round(entry_speed * 1.03, 1) if entry_speed and has_entry_exit else None
+        target_exit_speed = round(apex_speed_optimal, 1) if has_entry_exit else None
+        metrics_out = {
+            'apex_speed_real': round(apex_speed_real, 1),
+            'apex_speed_optimal': round(apex_speed_optimal, 1),
+            'speed_efficiency': round(speed_efficiency / 100.0, 3),
+            'apex_distance_error': apex_error['apex_distance_error'],
+            'apex_direction_error': apex_error['apex_direction_error'],
+            'lateral_g_max': round(max_lateral_g, 2),
+            'lateral_g_optimal': round(lateral_g_optimal, 2),
+            'entry_speed': round(entry_speed, 1) if entry_speed else None,
+            'exit_speed': round(exit_speed, 1) if exit_speed else None,
+            'target_entry_speed': target_entry_speed,
+            'target_exit_speed': target_exit_speed,
+            'braking_point_distance': braking_data['braking_point_distance'],
+            'braking_point_optimal': braking_data['braking_point_optimal'],
+            'braking_delta': braking_data['braking_delta'],
+            'time_in_corner': round(time_in_corner, 2),
+            'time_lost': time_lost
+        }
         return {
             'corner_id': corner_id,
             'corner_type': corner_type,
             'corner_number': corner_id,
             'apex_lat': corner_data.get('apex_lat'),
             'apex_lon': corner_data.get('apex_lon'),
-            'metrics': {
-                'apex_speed_real': round(apex_speed_real, 1),
-                'apex_speed_optimal': round(apex_speed_optimal, 1),
-                'speed_efficiency': round(speed_efficiency / 100.0, 3),  # Ratio 0-1
-                'apex_distance_error': apex_error['apex_distance_error'],
-                'apex_direction_error': apex_error['apex_direction_error'],
-                'lateral_g_max': round(max_lateral_g, 2),
-                'lateral_g_optimal': round(lateral_g_optimal, 2),
-                'entry_speed': round(entry_speed, 1),
-                'exit_speed': round(exit_speed, 1),
-                'braking_point_distance': braking_data['braking_point_distance'],
-                'braking_point_optimal': braking_data['braking_point_optimal'],
-                'braking_delta': braking_data['braking_delta'],
-                'time_in_corner': round(time_in_corner, 2),
-                'time_lost': time_lost
-            },
+            'metrics': metrics_out,
             'grade': grade,
             'score': round(corner_score, 1)
         }

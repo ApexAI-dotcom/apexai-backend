@@ -218,7 +218,9 @@ def _run_analysis_pipeline_sync(
     def sanitize_corner_data(corner_data: Dict[str, Any]) -> Dict[str, Any]:
         try:
             metrics = corner_data.get("metrics", {})
-            return {
+            entry_speed = metrics.get("entry_speed")
+            exit_speed = metrics.get("exit_speed")
+            out = {
                 "corner_id": int(corner_data.get("corner_id", 0)),
                 "corner_number": int(corner_data.get("corner_number", corner_data.get("corner_id", 0))),
                 "corner_type": str(corner_data.get("corner_type", "unknown")),
@@ -234,6 +236,15 @@ def _run_analysis_pipeline_sync(
                 "apex_lat": corner_data.get("apex_lat"),
                 "apex_lon": corner_data.get("apex_lon"),
             }
+            if entry_speed is not None:
+                out["entry_speed"] = float(entry_speed)
+            if exit_speed is not None:
+                out["exit_speed"] = float(exit_speed)
+            if metrics.get("target_entry_speed") is not None:
+                out["target_entry_speed"] = float(metrics["target_entry_speed"])
+            if metrics.get("target_exit_speed") is not None:
+                out["target_exit_speed"] = float(metrics["target_exit_speed"])
+            return out
         except Exception as e:
             logger.warning(f"[{analysis_id}] Error sanitizing corner data: {e}")
             return {
