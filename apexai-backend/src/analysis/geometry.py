@@ -297,10 +297,14 @@ def calculate_trajectory_geometry(df: pd.DataFrame) -> pd.DataFrame:
     # Filtrer courbures trop faibles (< 0.0001 1/m ≈ rayon > 10km)
     curvature[np.abs(curvature) < 0.0001] = 0.0
     
-    # Smooth avec Savitzky-Golay
-    if len(curvature) >= 11:
+    # Smooth avec Savitzky-Golay (fenêtre adaptative selon longueur fichier)
+    window_curv = max(5, int(n_points / 500))
+    if window_curv % 2 == 0:
+        window_curv += 1
+    window_curv = min(window_curv, len(curvature) - 1 if len(curvature) % 2 == 0 else len(curvature))
+    if len(curvature) >= window_curv and window_curv >= 5:
         try:
-            curvature = savgol_filter(curvature, window_length=11, polyorder=2, mode='nearest')
+            curvature = savgol_filter(curvature, window_length=window_curv, polyorder=2, mode='nearest')
         except Exception:
             pass  # Si échec, garder curvature original
     
@@ -526,35 +530,67 @@ def detect_laps(df: pd.DataFrame, min_lap_distance_m: float = 100.0) -> pd.DataF
     return df_result
 
 
+def _resample_circuit_2m(
+    df_circuit: pd.DataFrame,
+    cumulative_dist: np.ndarray,
+    lateral_g: np.ndarray,
+    speed: np.ndarray,
+    time: Optional[np.ndarray],
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Optional[np.ndarray], np.ndarray]:
+    """
+    Resample à 1 point tous les 2m pour normaliser la densité GPS.
+    Returns (cum_dist_rs, lateral_g_rs, speed_rs, time_rs, orig_iloc_rs).
+    """
+    total_dist = float(cumulative_dist[-1]) if len(cumulative_dist) > 0 else 0.0
+    if total_dist < 4.0:
+        n_rs = len(cumulative_dist)
+        orig_iloc = np.arange(n_rs)
+        return cumulative_dist, lateral_g, speed, time, orig_iloc
+    step = 2.0
+    cum_dist_rs = np.arange(0.0, total_dist + step * 0.5, step)
+    n_rs = len(cum_dist_rs)
+    lateral_g_rs = np.zeros(n_rs)
+    speed_rs = np.zeros(n_rs)
+    time_rs = np.zeros(n_rs) if time is not None else None
+    orig_iloc_rs = np.zeros(n_rs, dtype=int)
+    for i in range(n_rs):
+        d = cum_dist_rs[i]
+        j = int(np.clip(np.searchsorted(cumulative_dist, d, side="left"), 0, len(cumulative_dist) - 1))
+        if j > 0 and j < len(cumulative_dist) and (d - cumulative_dist[j - 1]) < (cumulative_dist[j] - d):
+            j = j - 1
+        orig_iloc_rs[i] = j
+        lateral_g_rs[i] = lateral_g[j]
+        speed_rs[i] = speed[j]
+        if time_rs is not None and time is not None and j < len(time):
+            time_rs[i] = time[j]
+    return cum_dist_rs, lateral_g_rs, speed_rs, time_rs, orig_iloc_rs
+
+
 def detect_corners(
     df: pd.DataFrame,
-    min_lateral_g: float = MIN_CORNER_LATERAL_G
+    min_lateral_g: float = MIN_CORNER_LATERAL_G,
+    min_distance_between_corners: float = 12.0,
+    expected_corners: Optional[int] = None,
 ) -> pd.DataFrame:
     """
     Détecte les virages et identifie les apex avec précision F1-level.
     
     Algorithme :
-    1. Identifie zones où |lateral_g| > min_lateral_g
-    2. Groupe segments avec scipy.ndimage.label()
-    3. Filtre par durée et distance minimum
-    4. Trouve apex = point de |lateral_g| max
+    1. Resampling 1 pt / 2m (normalisation densité GPS)
+    2. Identifie zones où |lateral_g| > min_lateral_g
+    3. Groupe segments avec scipy.ndimage.label()
+    4. Filtre par durée et distance minimum ; fusionne virages trop proches (min_distance_between_corners)
+    5. Si expected_corners fourni, recherche binaire sur min_distance_between_corners (max 15 itérations)
+    6. Trouve apex = point de |lateral_g| max
     
     Args:
         df: DataFrame avec colonnes 'lateral_g', 'speed', 'cumulative_distance'
-            Optionnel : 'time' pour durée
         min_lateral_g: Seuil minimum d'accélération latérale pour virage (g)
+        min_distance_between_corners: Distance min (m) entre deux virages consécutifs ; en dessous on fusionne.
+        expected_corners: Si fourni, ajuste min_distance_between_corners par recherche binaire pour obtenir ce nombre.
     
     Returns:
-        DataFrame enrichi avec colonnes :
-        - 'is_corner' : bool
-        - 'corner_id' : int (1-indexed, 0 = ligne droite)
-        - 'is_apex' : bool
-        - 'corner_type' : "left" | "right" | "straight"
-        
-        Métadonnées dans df.attrs['corners']
-    
-    Raises:
-        ValueError: Si colonnes requises manquantes
+        DataFrame enrichi + df.attrs['corners']
     """
     # Validation colonnes requises
     required_cols = ['lateral_g', 'speed', 'cumulative_distance']
@@ -595,12 +631,25 @@ def detect_corners(
         else:
             time = None
         
-        # Gérer NaN
         lateral_g = np.nan_to_num(lateral_g, nan=0.0)
         cumulative_dist = np.nan_to_num(cumulative_dist, nan=0.0)
         
-        # 1. IDENTIFICATION ZONES VIRAGE : |lateral_g| > min_lateral_g
-        is_corner_zone = np.abs(lateral_g) > min_lateral_g
+        total_dist_m = float(cumulative_dist[-1]) if len(cumulative_dist) > 0 else 1.0
+        sampling_rate_100m = n_points / (total_dist_m / 100.0) if total_dist_m > 0 else 0.0
+        sampling_rate_hz = 0.0
+        if time is not None and len(time) > 1:
+            t_range = float(np.nanmax(time) - np.nanmin(time))
+            if t_range > 0:
+                sampling_rate_hz = n_points / t_range
+        
+        # Resampling 1 pt / 2m
+        cum_rs, lateral_g_rs, speed_rs, time_rs, orig_iloc_rs = _resample_circuit_2m(
+            df_circuit, cumulative_dist, lateral_g, speed, time
+        )
+        n_rs = len(cum_rs)
+        
+        # 1. ZONES VIRAGE (sur signal resampled)
+        is_corner_zone = np.abs(lateral_g_rs) > min_lateral_g
         
         if not is_corner_zone.any():
             df_result.attrs['corners'] = {
@@ -612,47 +661,38 @@ def detect_corners(
             }
             return df_result
         
-        # 2. GROUPER SEGMENTS AVEC scipy.ndimage.label()
+        # 2. GROUPER SEGMENTS (resampled)
         labeled_array, num_features = label(is_corner_zone)
-        
-        # 3. FILTRER VIRAGES PAR DURÉE ET DISTANCE
         valid_corners = []
-        corner_details = []
-        
         for corner_id in range(1, num_features + 1):
             corner_mask = labeled_array == corner_id
-            corner_indices = np.where(corner_mask)[0]
-            
-            if len(corner_indices) < 2:
+            corner_indices_rs = np.where(corner_mask)[0]
+            if len(corner_indices_rs) < 2:
                 continue
-            
-            start_idx = int(corner_indices[0])
-            end_idx = int(corner_indices[-1])
-            
-            # Vérifier distance
-            if start_idx < len(cumulative_dist) and end_idx < len(cumulative_dist):
-                corner_distance = cumulative_dist[end_idx] - cumulative_dist[start_idx]
-                if corner_distance < MIN_CORNER_DISTANCE_M:
+            start_rs = int(corner_indices_rs[0])
+            end_rs = int(corner_indices_rs[-1])
+            if start_rs >= len(cum_rs) or end_rs >= len(cum_rs):
+                continue
+            corner_distance = cum_rs[end_rs] - cum_rs[start_rs]
+            if corner_distance < MIN_CORNER_DISTANCE_M:
+                continue
+            if time_rs is not None and end_rs < len(time_rs) and start_rs < len(time_rs):
+                duration = float(time_rs[end_rs] - time_rs[start_rs])
+                if duration < MIN_CORNER_DURATION_S:
                     continue
-            else:
-                continue
-            
-            # Vérifier durée (si time disponible)
-            if time is not None:
-                if start_idx < len(time) and end_idx < len(time):
-                    if pd.notna(time[start_idx]) and pd.notna(time[end_idx]):
-                        duration = float(time[end_idx] - time[start_idx])
-                        if duration < MIN_CORNER_DURATION_S:
-                            continue
-            
+            indices_orig = np.array([int(orig_iloc_rs[i]) for i in corner_indices_rs], dtype=int)
+            start_orig = int(orig_iloc_rs[start_rs])
+            end_orig = int(orig_iloc_rs[end_rs])
             valid_corners.append({
                 'id': corner_id,
-                'indices': corner_indices,
-                'start': start_idx,
-                'end': end_idx
+                'indices': indices_orig,
+                'start': start_orig,
+                'end': end_orig
             })
         
-        # 3b. Filtrer faux virages (lignes droites à G quasi-nul : vrai virage karting G > 0.25)
+        candidates_before = len(valid_corners)
+        
+        # 3b. Filtrer faux virages (G max)
         MIN_LATERAL_G_REAL = 0.25
         valid_corners_final = []
         for corner_info in valid_corners:
@@ -664,6 +704,55 @@ def detect_corners(
             else:
                 warnings.warn(f"Faux virage filtré : G_max={g_max:.2f} < {MIN_LATERAL_G_REAL}")
         valid_corners = valid_corners_final
+        
+        def _merge_by_min_dist(corners: List[Dict], cum_dist: np.ndarray, min_d: float) -> List[Dict]:
+            if not corners or min_d <= 0:
+                return corners
+            out = []
+            i = 0
+            while i < len(corners):
+                cur = dict(corners[i])
+                cur['indices'] = list(cur['indices'])
+                j = i + 1
+                while j < len(corners):
+                    e1 = cur['end']
+                    s2 = corners[j]['start']
+                    if e1 < len(cum_dist) and s2 < len(cum_dist):
+                        gap = cum_dist[s2] - cum_dist[e1]
+                        if gap < min_d:
+                            cur['end'] = corners[j]['end']
+                            cur['indices'] = sorted(set(cur['indices']) | set(corners[j]['indices']))
+                            j += 1
+                            continue
+                    break
+                cur['indices'] = np.array(cur['indices'])
+                out.append(cur)
+                i = j
+            return out
+        
+        if expected_corners is not None and expected_corners >= 1:
+            lo, hi = 5.0, 60.0
+            for _ in range(15):
+                mid = (lo + hi) * 0.5
+                m = _merge_by_min_dist(valid_corners, cumulative_dist, mid)
+                if len(m) == expected_corners:
+                    min_distance_between_corners = round(mid, 1)
+                    valid_corners = m
+                    break
+                if len(m) > expected_corners:
+                    hi = mid
+                else:
+                    lo = mid
+            else:
+                valid_corners = _merge_by_min_dist(valid_corners, cumulative_dist, min_distance_between_corners)
+        else:
+            valid_corners = _merge_by_min_dist(valid_corners, cumulative_dist, min_distance_between_corners)
+        
+        import logging
+        logging.getLogger(__name__).info(
+            "detect_corners: candidates_before=%s after_merge=%s min_distance_between_corners=%s sampling_100m=%.1f hz=%.1f",
+            candidates_before, len(valid_corners), min_distance_between_corners, sampling_rate_100m, sampling_rate_hz
+        )
         
         # 4. TRAITER CHAQUE VIRAGE VALIDE avec numérotation par tour
         # (filtre lap=0 inutile : détection faite sur df_circuit = lap>=1 uniquement)
