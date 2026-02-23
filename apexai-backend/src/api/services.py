@@ -37,6 +37,55 @@ from .models import (
 
 logger = logging.getLogger(__name__)
 
+BUFFER_BEFORE_AFTER = 75
+BUFFER_BETWEEN_GROUPS = 50
+
+
+def _filter_laps_with_buffer(
+    df: "pd.DataFrame",
+    lap_filter: List[int],
+    analysis_id: str,
+) -> "pd.DataFrame":
+    """
+    Filtre le dataframe aux tours sélectionnés en ajoutant des buffers pour préserver
+    la géométrie (éviter de tronquer en bordure de tour et casser la détection des virages).
+    - 75 points avant le premier point du premier tour et après le dernier point du dernier tour.
+    - 50 points de buffer entre chaque groupe de tours non contigus (ex. entre tour 2 et tour 5).
+    """
+    if not lap_filter or "lap_number" not in df.columns:
+        return df[df["lap_number"].isin(lap_filter)].reset_index(drop=True) if lap_filter else df
+    n = len(df)
+    laps_sorted = sorted(set(lap_filter))
+    positions_to_keep = set()
+    prev_end = -1
+    for i, lap in enumerate(laps_sorted):
+        pos = np.where(df["lap_number"].values == lap)[0]
+        if len(pos) == 0:
+            continue
+        mi, ma = int(pos.min()), int(pos.max())
+        if i == 0:
+            start_buf = max(0, mi - BUFFER_BEFORE_AFTER)
+            end_buf = ma + BUFFER_BETWEEN_GROUPS if len(laps_sorted) > 1 else min(n - 1, ma + BUFFER_BEFORE_AFTER)
+            positions_to_keep.update(range(start_buf, end_buf + 1))
+        elif i == len(laps_sorted) - 1:
+            if lap - laps_sorted[i - 1] > 1:
+                gap_start = max(0, prev_end + 1)
+                gap_end = min(n - 1, prev_end + BUFFER_BETWEEN_GROUPS)
+                positions_to_keep.update(range(gap_start, gap_end + 1))
+                positions_to_keep.update(range(max(0, mi - BUFFER_BETWEEN_GROUPS), mi))
+            end_buf = min(n - 1, ma + BUFFER_BEFORE_AFTER)
+            positions_to_keep.update(range(max(0, mi - BUFFER_BETWEEN_GROUPS), end_buf + 1))
+        else:
+            if lap - laps_sorted[i - 1] > 1:
+                positions_to_keep.update(range(max(0, prev_end + 1), min(n, prev_end + BUFFER_BETWEEN_GROUPS + 1)))
+                positions_to_keep.update(range(max(0, mi - BUFFER_BETWEEN_GROUPS), mi))
+            positions_to_keep.update(range(mi, ma + 1))
+        prev_end = ma
+    pos_sorted = sorted(positions_to_keep)
+    if not pos_sorted:
+        return df[df["lap_number"].isin(lap_filter)].reset_index(drop=True)
+    return df.iloc[pos_sorted].reset_index(drop=True)
+
 
 def _parse_laps_sync(temp_path: str, beacon_markers: list) -> List[Dict[str, Any]]:
     """
@@ -127,8 +176,9 @@ def _run_analysis_pipeline_sync(
     laps_analyzed = 1
     if lap_filter:
         laps_analyzed = len(lap_filter)
-        df = df[df["lap_number"].isin(lap_filter)].reset_index(drop=True)
-        logger.info(f"[{analysis_id}] Filtered to laps {lap_filter}: {len(df)} rows")
+        n_before = len(df)
+        df = _filter_laps_with_buffer(df, lap_filter, analysis_id)
+        logger.info(f"[{analysis_id}] Filtered to laps {lap_filter} with buffer: {len(df)} rows (was {n_before})")
         if len(df) < 10:
             raise ValueError("Pas assez de points après filtrage par tours (min. 10).")
     else:
@@ -140,6 +190,26 @@ def _run_analysis_pipeline_sync(
     corners_meta = df.attrs.get("corners", {})
     corner_details = corners_meta.get("corner_details", [])
     logger.info(f"[{analysis_id}] Detected {len(corner_details)} corners")
+
+    # Refiltrer aux tours sélectionnés uniquement pour les calculs de performance (exclure buffer)
+    if lap_filter and "lap_number" in df.columns:
+        df_perf = df[df["lap_number"].isin(lap_filter)].copy()
+        valid_idx = set(df_perf.index)
+        corner_details = [
+            c for c in corner_details
+            if c.get("entry_index") in valid_idx
+            and c.get("apex_index") in valid_idx
+            and c.get("exit_index") in valid_idx
+        ]
+        df = df_perf.reset_index(drop=True)
+        old_to_new = {old: i for i, old in enumerate(df_perf.index)}
+        for c in corner_details:
+            c["entry_index"] = old_to_new.get(c["entry_index"], c["entry_index"])
+            c["apex_index"] = old_to_new.get(c["apex_index"], c["apex_index"])
+            c["exit_index"] = old_to_new.get(c["exit_index"], c["exit_index"])
+        corners_meta["corner_details"] = corner_details
+        df.attrs["corners"] = corners_meta
+        logger.info(f"[{analysis_id}] Refiltered to selected laps only: {len(df)} rows, {len(corner_details)} corners")
 
     df = calculate_optimal_trajectory(df)
     logger.info(f"[{analysis_id}] Step 5/5: Calculating score and coaching...")
