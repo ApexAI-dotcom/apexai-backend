@@ -97,6 +97,8 @@ async def analyze_telemetry(
     request: Request,
     file: UploadFile = File(..., description="Fichier CSV de télémétrie"),
     lap_filter: Optional[str] = Form(None, description="JSON array des numéros de tours à inclure, ex: [1,2,3]"),
+    track_condition: str = Form("dry", description="Condition piste: dry, damp, wet, rain"),
+    track_temperature: Optional[str] = Form(None, description="Température piste en °C"),
 ) -> AnalysisResponse:
     """
     Analyser un fichier de télémétrie.
@@ -118,6 +120,16 @@ async def analyze_telemetry(
             if isinstance(parsed, list):
                 lap_list = [int(x) for x in parsed if isinstance(x, (int, float))]
         except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+
+    cond = (track_condition or "dry").strip().lower()
+    if cond not in ("dry", "damp", "wet", "rain"):
+        cond = "dry"
+    temp_c = None
+    if track_temperature is not None and track_temperature.strip():
+        try:
+            temp_c = float(track_temperature.strip().replace(",", "."))
+        except ValueError:
             pass
 
     cache_key = hashlib.md5((file.filename or "unknown").encode()).hexdigest()
@@ -149,7 +161,11 @@ async def analyze_telemetry(
         if redis and not lap_list:
             logger.info(f"[{analysis_id}] Redis cache MISS")
         service = AnalysisService(lap_filter=lap_list if lap_list else None)
-        result = await service.process_telemetry(file, analysis_id)
+        result = await service.process_telemetry(
+            file, analysis_id,
+            track_condition=cond,
+            track_temperature=temp_c,
+        )
 
         # Stocker en cache (uniquement analyse complète sans filtre de tours)
         if redis and not lap_list:

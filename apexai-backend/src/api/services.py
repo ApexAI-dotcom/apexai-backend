@@ -32,7 +32,7 @@ from src.visualization.visualization import generate_all_plots_base64
 from .config import settings
 from .models import (
     AnalysisResponse, PerformanceScore, ScoreBreakdown,
-    CornerAnalysis, CoachingAdvice, PlotUrls, Statistics
+    CornerAnalysis, CoachingAdvice, PlotUrls, Statistics, SessionConditions
 )
 
 logger = logging.getLogger(__name__)
@@ -103,6 +103,8 @@ def _run_analysis_pipeline_sync(
     analysis_id: str,
     start_time: datetime,
     lap_filter: Optional[List[int]] = None,
+    track_condition: str = "dry",
+    track_temperature: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Pipeline d'analyse synchrone (exécuté dans un thread pour ne pas bloquer l'event loop)."""
     logger.info(f"[{analysis_id}] Step 1/5: Loading data...")
@@ -230,7 +232,8 @@ def _run_analysis_pipeline_sync(
 
     try:
         coaching_advice_list = generate_coaching_advice(
-            df, corner_details, score_data, unique_corner_analysis
+            df, corner_details, score_data, unique_corner_analysis,
+            track_condition=track_condition,
         )
     except Exception as e:
         logger.warning(f"[{analysis_id}] Failed to generate coaching advice: {e}")
@@ -300,6 +303,10 @@ def _run_analysis_pipeline_sync(
             avg_apex_distance=float(score_data.get("details", {}).get("avg_apex_distance", 0.0)),
             avg_apex_speed_efficiency=float(score_data.get("details", {}).get("avg_apex_speed_efficiency", 0.0)),
         ),
+        session_conditions=SessionConditions(
+            track_condition=track_condition,
+            track_temperature=track_temperature,
+        ),
     )
     return response.dict(exclude_none=True)
 
@@ -368,7 +375,9 @@ class AnalysisService:
     async def process_telemetry(
         self,
         file: UploadFile,
-        analysis_id: str
+        analysis_id: str,
+        track_condition: str = "dry",
+        track_temperature: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Traiter un fichier de télémétrie complet.
@@ -376,6 +385,8 @@ class AnalysisService:
         Args:
             file: Fichier CSV uploadé
             analysis_id: ID unique de l'analyse
+            track_condition: dry | damp | wet | rain
+            track_temperature: Température piste °C (optionnel)
         
         Returns:
             Dictionnaire avec résultats de l'analyse
@@ -441,6 +452,8 @@ class AnalysisService:
                 analysis_id,
                 start_time,
                 lap_filter,
+                track_condition,
+                track_temperature,
             )
             return result
             

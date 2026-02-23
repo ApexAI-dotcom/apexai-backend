@@ -15,7 +15,8 @@ def generate_coaching_advice(
     df,
     corner_details: List[Dict[str, Any]],
     score_data: Dict[str, Any],
-    corner_analysis: List[Dict[str, Any]]
+    corner_analysis: List[Dict[str, Any]],
+    track_condition: str = "dry",
 ) -> List[Dict[str, Any]]:
     """
     Génère 3-5 conseils hiérarchisés par impact sur le temps au tour.
@@ -25,11 +26,13 @@ def generate_coaching_advice(
         corner_details: Liste des détails de chaque virage
         score_data: Dictionnaire avec scores de performance
         corner_analysis: Liste des analyses détaillées par virage
+        track_condition: dry | damp | wet | rain — en wet/rain, conseils moins agressifs (freinage)
     
     Returns:
         Liste de conseils triés par priorité (impact décroissant)
     """
     advice_list = []
+    is_wet = (track_condition or "dry").lower() in ("wet", "rain")
 
     # Enrichir corner_analysis avec labels lisibles si disponibles
     for c in corner_analysis:
@@ -39,8 +42,8 @@ def generate_coaching_advice(
             c['label'] = f"Virage {c.get('corner_id', '?')}"
 
     try:
-        # === 1. CONSEILS FREINAGE ===
-        braking_advice = _generate_braking_advice(corner_analysis)
+        # === 1. CONSEILS FREINAGE (moins agressif si piste mouillée) ===
+        braking_advice = _generate_braking_advice(corner_analysis, is_wet=is_wet)
         advice_list.extend(braking_advice)
         
         # === 2. CONSEILS APEX ===
@@ -59,6 +62,18 @@ def generate_coaching_advice(
         global_advice = _generate_global_advice(score_data, corner_analysis, df)
         advice_list.extend(global_advice)
         
+        # === 6. Conseil spécifique piste mouillée ===
+        if is_wet:
+            advice_list.append({
+                "priority": 4,
+                "category": "global",
+                "impact_seconds": 0.0,
+                "corner": None,
+                "message": "Piste mouillée — privilégie la régularité et la fluidité",
+                "explanation": "En conditions humides, évite les freinages tardifs et les apex à la limite. Une conduite fluide et prévisible est plus rapide et plus sûre.",
+                "difficulty": "moyen",
+            })
+        
         # Trier par impact (décroissant)
         advice_list.sort(key=lambda x: x.get('impact_seconds', 0), reverse=True)
         
@@ -70,8 +85,11 @@ def generate_coaching_advice(
         return []
 
 
-def _generate_braking_advice(corner_analysis: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Génère conseils sur le freinage."""
+def _generate_braking_advice(
+    corner_analysis: List[Dict[str, Any]],
+    is_wet: bool = False,
+) -> List[Dict[str, Any]]:
+    """Génère conseils sur le freinage. En piste mouillée, on évite de pousser le freinage tardif."""
     advice = []
     
     for corner in corner_analysis:
@@ -83,7 +101,13 @@ def _generate_braking_advice(corner_analysis: List[Dict[str, Any]]) -> List[Dict
             if abs(braking_delta) < 2.0:  # Seuil minimum
                 continue
 
+            # En wet/rain : ne pas conseiller de freiner plus tard (braking_delta < 0 = trop tard déjà)
+            if is_wet and braking_delta < 0:
+                continue  # Skip "tu freines trop tard" en conditions mouillées
+
             impact_seconds = abs(braking_delta) * 0.05  # Approximation : 1m = 0.05s
+            if is_wet:
+                impact_seconds *= 0.5  # Réduire l'impact affiché (moins agressif)
             label = corner.get('label', f"Virage {corner_id}")
 
             if braking_delta > 0:

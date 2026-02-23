@@ -94,6 +94,12 @@ class Statistics(BaseModel):
     avg_apex_speed_efficiency: float = Field(description="Efficacité vitesse moyenne")
 
 
+class SessionConditions(BaseModel):
+    """Conditions de piste renseignées par l'utilisateur"""
+    track_condition: str = Field(default="dry", description="dry | damp | wet | rain")
+    track_temperature: Optional[float] = Field(default=None, description="Température piste en °C")
+
+
 class AnalysisResponse(BaseModel):
     """Réponse complète d'analyse"""
     success: bool = True
@@ -109,6 +115,7 @@ class AnalysisResponse(BaseModel):
     
     plots: PlotUrls
     statistics: Statistics
+    session_conditions: Optional[SessionConditions] = Field(default=None, description="Conditions de piste (sec/humide/mouillé/pluie, température)")
 
 
 class ErrorResponse(BaseModel):
