@@ -232,7 +232,7 @@ def _run_analysis_pipeline_sync(
 
     df = calculate_optimal_trajectory(df)
     logger.info(f"[{analysis_id}] Step 5/5: Calculating score and coaching...")
-    score_data = calculate_performance_score(df, corner_details)
+    score_data = calculate_performance_score(df, corner_details, track_condition=track_condition)
 
     def sanitize_corner_data(corner_data: Dict[str, Any]) -> Dict[str, Any]:
         try:
@@ -326,6 +326,7 @@ def _run_analysis_pipeline_sync(
         coaching_advice_list = generate_coaching_advice(
             df, corner_details, score_data, unique_corner_analysis,
             track_condition=track_condition,
+            track_temperature=track_temperature,
             laps_analyzed=laps_analyzed,
         )
     except Exception as e:

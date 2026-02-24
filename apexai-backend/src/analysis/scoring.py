@@ -360,7 +360,8 @@ def calculate_sector_times_score(
 
 def calculate_performance_score(
     df: pd.DataFrame,
-    corner_details: List[Dict[str, Any]]
+    corner_details: List[Dict[str, Any]],
+    track_condition: str = "dry",
 ) -> Dict[str, Any]:
     """
     Calcule le score de performance global /100.
@@ -469,9 +470,28 @@ def calculate_performance_score(
             "apex_speed": round(min(25.0, apex_speed), 1),
             "sector_times": round(min(20.0, sector_times), 1)
         }
-        overall_score = breakdown["apex_precision"] + breakdown["trajectory_consistency"] + breakdown["apex_speed"] + breakdown["sector_times"]
+        conditions_bonus = 0.0
+        cond = (track_condition or "dry").lower()
+        if cond == "wet":
+            conditions_bonus = 5.0
+        elif cond == "rain":
+            conditions_bonus = 10.0
+        breakdown["conditions_bonus"] = round(conditions_bonus, 1)
+        overall_score = sum(breakdown.values())
+        overall_score = round(min(100.0, overall_score), 1)
+        if overall_score >= 80:
+            grade = "A"
+        elif overall_score >= 70:
+            grade = "B"
+        elif overall_score >= 55:
+            grade = "C"
+        elif overall_score >= 40:
+            grade = "D"
+        else:
+            grade = "F"
+        percentile = int(min(99, max(10, 10 + (overall_score - 50) * 1.5)))
         return {
-            "overall_score": round(overall_score, 1),
+            "overall_score": overall_score,
             "breakdown": breakdown,
             "grade": grade,
             "percentile": percentile,
@@ -514,12 +534,7 @@ def validate_score_consistency(score_data: Dict[str, Any]) -> None:
     breakdown = score_data.get("breakdown", {})
     if not breakdown:
         return
-    total = (
-        float(breakdown.get("apex_precision", 0))
-        + float(breakdown.get("trajectory_consistency", 0))
-        + float(breakdown.get("apex_speed", 0))
-        + float(breakdown.get("sector_times", 0))
-    )
+    total = sum(float(v) for v in breakdown.values())
     overall = float(score_data.get("overall_score", 0))
     if abs(total - overall) > 0.5:
         import logging

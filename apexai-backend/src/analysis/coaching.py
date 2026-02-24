@@ -17,33 +17,82 @@ def generate_coaching_advice(
     score_data: Dict[str, Any],
     corner_analysis: List[Dict[str, Any]],
     track_condition: str = "dry",
+    track_temperature: Optional[float] = None,
     laps_analyzed: int = 1,
 ) -> List[Dict[str, Any]]:
     """
     Génère 3-5 conseils hiérarchisés par impact sur la session.
-    
-    Args:
-        df: DataFrame complet avec toutes les colonnes
-        corner_details: Liste des détails de chaque virage
-        score_data: Dictionnaire avec scores de performance
-        corner_analysis: Liste des analyses détaillées par virage
-        track_condition: dry | damp | wet | rain — en wet/rain, conseils moins agressifs (freinage)
-        laps_analyzed: Nombre de tours sélectionnés pour l'analyse (1 = un seul tour)
-    
-    Returns:
-        Liste de conseils triés par priorité (impact décroissant), info session en premier si laps_analyzed > 1
+    track_condition et track_temperature adaptent messages et seuils (damp, wet, rain, froid/chaud).
     """
     advice_list = []
-    is_wet = (track_condition or "dry").lower() in ("wet", "rain")
+    cond = (track_condition or "dry").lower()
+    is_wet = cond in ("wet", "rain")
+    is_rain = cond == "rain"
+    is_damp = cond == "damp"
+    temp = track_temperature
+    condition_labels = {"dry": "Sec", "damp": "Humide", "wet": "Mouillée", "rain": "Pluie"}
+    condition_label = condition_labels.get(cond, "Sec")
+    temp_str = f" {temp:.0f}°C" if temp is not None else ""
 
-    if laps_analyzed > 1:
+    session_msg = f"Analyse basée sur {laps_analyzed} tour(s) — {condition_label}{temp_str}."
+    advice_list.append({
+        "priority": 0,
+        "category": "info",
+        "impact_seconds": 0.0,
+        "corner": None,
+        "message": session_msg,
+        "explanation": f"Les conseils ci-dessous s'appuient sur les {laps_analyzed} tour(s) analysés.",
+        "difficulty": "facile",
+    })
+
+    if cond == "dry" and temp is not None and temp < 15:
         advice_list.append({
             "priority": 0,
             "category": "info",
             "impact_seconds": 0.0,
             "corner": None,
-            "message": f"Analyse basée sur {laps_analyzed} tour(s) sélectionné(s) — données agrégées.",
-            "explanation": f"Les conseils ci-dessous s'appuient sur les {laps_analyzed} tours analysés.",
+            "message": f"Piste froide ({temp:.0f}°C)",
+            "explanation": "Les pneus nécessitent plusieurs tours pour atteindre leur température optimale. Évite les attaques brusques dans les 3 premiers tours, privilégie des trajectoires plus larges pour chauffer progressivement.",
+            "difficulty": "facile",
+        })
+    elif cond == "dry" and temp is not None and temp > 30:
+        advice_list.append({
+            "priority": 0,
+            "category": "info",
+            "impact_seconds": 0.0,
+            "corner": None,
+            "message": f"Piste chaude ({temp:.0f}°C)",
+            "explanation": "Le grip est au maximum mais les pneus peuvent surchauffer sur les sessions longues. Surveille la dégradation en fin de session.",
+            "difficulty": "facile",
+        })
+    if is_damp:
+        advice_list.append({
+            "priority": 0,
+            "category": "info",
+            "impact_seconds": 0.0,
+            "corner": None,
+            "message": "Piste humide (damp)",
+            "explanation": "Grip réduit d'environ 15-20%. Privilégie des trajectoires qui évitent les bords de piste et les zones à l'ombre. Les freinages doivent être anticipés.",
+            "difficulty": "facile",
+        })
+    if cond == "wet":
+        advice_list.append({
+            "priority": 0,
+            "category": "info",
+            "impact_seconds": 0.0,
+            "corner": None,
+            "message": "Piste mouillée",
+            "explanation": "Score ajusté +5 pts (contexte difficile). Priorité à la régularité : chaque erreur coûte plus cher par faible adhérence. Évite les vibreurs et les zones peintes.",
+            "difficulty": "facile",
+        })
+    if is_rain:
+        advice_list.append({
+            "priority": 0,
+            "category": "info",
+            "impact_seconds": 0.0,
+            "corner": None,
+            "message": "Conditions pluvieuses",
+            "explanation": "Score ajusté +10 pts. La pluie change tout : vitesses de référence invalides, focuse-toi sur la fluidité et la vision. Anticipe les freinages d'au moins 20% plus tôt.",
             "difficulty": "facile",
         })
 
@@ -55,44 +104,35 @@ def generate_coaching_advice(
             c['label'] = f"Virage {c.get('corner_id', '?')}"
 
     try:
-        # === 1. CONSEILS FREINAGE (moins agressif si piste mouillée) ===
-        braking_advice = _generate_braking_advice(corner_analysis, is_wet=is_wet)
+        braking_threshold_m = 5.0 if is_damp else 2.0
+        braking_advice = _generate_braking_advice(corner_analysis, is_wet=is_wet, braking_threshold_m=braking_threshold_m)
         advice_list.extend(braking_advice)
-        
-        # === 2. CONSEILS APEX ===
+
         apex_advice = _generate_apex_advice(corner_analysis)
         advice_list.extend(apex_advice)
-        
-        # === 3. CONSEILS VITESSE ===
+
         speed_advice = _generate_speed_advice(corner_analysis)
         advice_list.extend(speed_advice)
-        
-        # === 4. CONSEILS TRAJECTOIRE ===
+
         trajectory_advice = _generate_trajectory_advice(corner_analysis, df)
         advice_list.extend(trajectory_advice)
-        
-        # === 5. CONSEILS GLOBAUX (différenciés par score / vitesse / apex_error / direction) ===
+
+        impact_mult = 0.85 if (cond == "dry" and temp is not None and temp < 15) else 1.0
         global_advice = _generate_global_advice(score_data, corner_analysis, df, laps_analyzed=laps_analyzed)
         advice_list.extend(global_advice)
-        
-        # === 6. Conseil spécifique piste mouillée ===
-        if is_wet:
-            advice_list.append({
-                "priority": 4,
-                "category": "global",
-                "impact_seconds": 0.0,
-                "corner": None,
-                "message": "Piste mouillée — privilégie la régularité et la fluidité",
-                "explanation": "En conditions humides, évite les freinages tardifs et les apex à la limite. Une conduite fluide et prévisible est plus rapide et plus sûre.",
-                "difficulty": "moyen",
-            })
-        
-        # Trier : conseils "info" en premier, puis par impact (décroissant)
-        advice_list.sort(key=lambda x: (0 if x.get('category') == 'info' else 1, -x.get('impact_seconds', 0)))
-        
-        # Limiter à top 5 (hors info qui reste en premier)
-        info_items = [a for a in advice_list if a.get('category') == 'info']
-        rest = [a for a in advice_list if a.get('category') != 'info'][:5]
+
+        if impact_mult != 1.0:
+            for a in advice_list:
+                if a.get("category") != "info":
+                    a["impact_seconds"] = round(a.get("impact_seconds", 0) * impact_mult, 2)
+
+        if is_rain:
+            advice_list = [a for a in advice_list if a.get("category") != "speed"]
+
+        advice_list.sort(key=lambda x: (0 if x.get("category") == "info" else 1, -x.get("impact_seconds", 0)))
+
+        info_items = [a for a in advice_list if a.get("category") == "info"]
+        rest = [a for a in advice_list if a.get("category") != "info"][:5]
         return info_items + rest
     
     except Exception as e:
@@ -103,17 +143,16 @@ def generate_coaching_advice(
 def _generate_braking_advice(
     corner_analysis: List[Dict[str, Any]],
     is_wet: bool = False,
+    braking_threshold_m: float = 2.0,
 ) -> List[Dict[str, Any]]:
-    """Génère conseils sur le freinage. En piste mouillée, on évite de pousser le freinage tardif."""
+    """Génère conseils sur le freinage. Seuil plus élevé en damp (5m) pour éviter conseils trop agressifs."""
     advice = []
-    
     for corner in corner_analysis:
         try:
             metrics = corner.get('metrics', {})
             braking_delta = metrics.get('braking_delta', 0.0)
             corner_id = corner.get('corner_id')
-            
-            if abs(braking_delta) < 2.0:  # Seuil minimum
+            if abs(braking_delta) < braking_threshold_m:
                 continue
 
             # En wet/rain : ne pas conseiller de freiner plus tard (braking_delta < 0 = trop tard déjà)
@@ -497,14 +536,13 @@ def _generate_global_advice(
     df,
     laps_analyzed: int = 1,
 ) -> List[Dict[str, Any]]:
-    """Génère conseils globaux actionnables avec instructions physiques (différenciés par score/vitesse/apex/direction)."""
+    """Génère conseils globaux actionnables (différenciés par score/vitesse/apex/direction)."""
     advice = []
     valid_corner_ids = {c.get('corner_id') for c in corner_analysis if c.get('corner_id') is not None}
 
     try:
         breakdown = score_data.get('breakdown', {})
 
-        # === CONSEILS PAR VIRAGE PROBLÉMATIQUE (différenciés) ===
         corners_valid = [c for c in corner_analysis if c.get('corner_id') in valid_corner_ids]
         worst_corners = sorted(corners_valid, key=lambda c: c.get('score', 100))[:5]
 

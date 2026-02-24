@@ -649,7 +649,7 @@ def plot_performance_score_breakdown(df: pd.DataFrame, save_path: str) -> bool:
             breakdown.get('apex_speed', 0.0),
             breakdown.get('sector_times', 0.0)
         ]
-        sum_values = sum(values)
+        sum_values = sum(values) + float(breakdown.get('conditions_bonus', 0))
         if abs(sum_values - overall) > 1.0:
             warnings.warn(f"plot_performance_score_breakdown: sum(breakdown)={sum_values:.1f} != overall={overall:.1f}")
         max_scores = [30.0, 25.0, 25.0, 20.0]
