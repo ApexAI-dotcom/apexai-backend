@@ -931,6 +931,19 @@ def detect_corners(
                 d += lap_length
             corner['_sort_key'] = d
         corner_details = sorted(corner_details, key=lambda c: c['_sort_key'])
+
+        # LOG DIAGNOSTIC - à retirer après correction
+        log.info("[SORT DEBUG] circuit_start_dist=%.1f lap_length=%.1f", circuit_start_dist, lap_length)
+        for c in corner_details:
+            log.info(
+                "[SORT DEBUG] V%d avg_cum=%.1f sort_key=%.1f lat=%.6f lon=%.6f",
+                c.get('id', 0),
+                c.get('avg_cumulative_distance', 0),
+                c.get('_sort_key', 0),
+                c.get('apex_lat', 0) or 0,
+                c.get('apex_lon', 0) or 0
+            )
+
         old_to_new = {}
         for i, corner in enumerate(corner_details, start=1):
             old_id = corner['id']
