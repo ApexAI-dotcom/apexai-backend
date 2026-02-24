@@ -101,27 +101,24 @@ def generate_coaching_advice(
 
     try:
         impact_mult = 0.85 if (cond == "dry" and temp is not None and temp < 15) else 1.0
-        # 1) Conseils individuels pour tous les virages avec score < 80 (triés par time_lost * laps_analyzed)
+        # Étape 1 — Conseils individuels en priorité absolue (score < 80, triés par time_lost * laps_analyzed)
         global_advice = _generate_global_advice(score_data, corner_analysis, df, laps_analyzed=laps_analyzed)
-        # 2) Enchaînements (perte > 8 km/h entre deux virages consécutifs)
+        # Étape 2 — Enchaînements (perte > 8 km/h entre Vn et Vn+1)
         trajectory_advice = _generate_trajectory_advice(corner_analysis, df)
         enchainement_only = [a for a in trajectory_advice if "Enchaînement" in (a.get("message") or "")]
-        advice_list.extend(global_advice)
-        advice_list.extend(enchainement_only)
+        # Ordre strict : individuels d'abord, puis enchaînements ; limite 7 hors info
+        rest_ordered = list(global_advice) + list(enchainement_only)
+        rest_ordered = rest_ordered[:7]
 
         if impact_mult != 1.0:
-            for a in advice_list:
-                if a.get("category") != "info":
-                    a["impact_seconds"] = round(a.get("impact_seconds", 0) * impact_mult, 2)
+            for a in rest_ordered:
+                a["impact_seconds"] = round(a.get("impact_seconds", 0) * impact_mult, 2)
 
         if is_rain:
-            advice_list = [a for a in advice_list if a.get("category") != "speed"]
-
-        advice_list.sort(key=lambda x: (0 if x.get("category") == "info" else 1, -x.get("impact_seconds", 0)))
+            rest_ordered = [a for a in rest_ordered if a.get("category") != "speed"]
 
         info_items = [a for a in advice_list if a.get("category") == "info"]
-        rest = [a for a in advice_list if a.get("category") != "info"][:6]
-        return info_items + rest
+        return info_items + rest_ordered
     
     except Exception as e:
         warnings.warn(f"Error generating coaching advice: {str(e)}")
