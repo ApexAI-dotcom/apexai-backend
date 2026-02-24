@@ -334,10 +334,14 @@ def _generate_trajectory_advice(corner_analysis: List[Dict[str, Any]], df) -> Li
             if exit_speed_1 > 0 and entry_speed_2 > 0:
                 speed_loss = exit_speed_1 - entry_speed_2
                 
-                if speed_loss > 5.0:  # Perte > 5 km/h
-                    impact_seconds = speed_loss * 0.01
-                    message = f"Enchaînement V{corner1.get('corner_id')}→V{corner2.get('corner_id')} : Perte de {speed_loss:.1f} km/h"
-                    explanation = f"Sortie de V{corner1.get('corner_id')} à {exit_speed_1:.1f} km/h, mais entrée V{corner2.get('corner_id')} à {entry_speed_2:.1f} km/h. Manques {speed_loss:.1f} km/h de largeur en sortie de V{corner1.get('corner_id')}."
+                if speed_loss > 8.0:
+                    n1, n2 = corner1.get('corner_id'), corner2.get('corner_id')
+                    message = f"Enchaînement V{n1}→V{n2} : Perte de {speed_loss:.0f} km/h ({exit_speed_1:.0f}→{entry_speed_2:.0f} km/h)"
+                    explanation = (
+                        f"Tu ne prends pas assez de largeur en sortie de V{n1}, ce qui compresse ta trajectoire d'approche de V{n2}. "
+                        f"Sors large de V{n1} pour avoir de l'espace à l'entrée de V{n2}."
+                    )
+                    impact_seconds = round(speed_loss * 0.01, 2)
                     
                     advice.append({
                         'priority': len(advice) + 1,
@@ -390,144 +394,90 @@ def _build_differentiated_corner_advice(
     laps_analyzed: int,
 ) -> Optional[Dict[str, Any]]:
     """
-    Construit un conseil unique par virage : différenciation par score, vitesse apex,
-    apex_distance_error, corner_type ; gain = time_lost * laps_analyzed ; 3 formulations par catégorie.
+    Templates type ingénieur piste : V{n} (ce gauche/ce droite), données réelles, ton impératif.
+    Rotation des formulations par corner_id % 3.
     """
-    label = corner.get('label', f"Virage {corner.get('corner_id', '?')}")
+    n = corner.get('corner_id', 0) or 0
+    label = corner.get('label', f"V{n}")
     score = float(corner.get('score', 70))
-    if score >= 80:
-        return None
-    corner_id = corner.get('corner_id', 0)
-    variant = (corner_id or 0) % 3
-    apex_speed = float(corner.get('apex_speed_real') or 0.0)
-    apex_error = float(corner.get('apex_distance_error') or 0.0)
-    time_lost = float(corner.get('time_lost') or 0.0)
     corner_type = (corner.get('corner_type') or "unknown").lower()
-    side_fr = "ce droite" if corner_type == "right" else "ce gauche"
-    gain_session = time_lost * max(1, laps_analyzed)
-    if time_lost < 0.01:
-        gain_sentence = ""
-    elif time_lost > 0.05:
-        gain_sentence = f" Gain potentiel important : {gain_session:.2f}s sur la session."
-    else:
-        gain_sentence = f" Gain estimé : {gain_session:.2f}s sur la session."
-    entry_speed = corner.get('entry_speed')
-    target_exit = corner.get('target_exit_speed')
-    has_speed_line = entry_speed is not None and float(entry_speed or 0) > 0 and target_exit is not None
-    speed_line = (
-        f" Vitesse d'entrée actuelle : {float(entry_speed):.0f} km/h → objectif sortie : {float(target_exit):.0f} km/h."
-        if has_speed_line else ""
-    )
+    dir_fr = "ce droite" if corner_type == "right" else "ce gauche"
+    apex_speed = float(corner.get('apex_speed_real') or 0.0)
+    metrics = corner.get('metrics') or {}
+    apex_opt = float(corner.get('apex_speed_optimal') or metrics.get('apex_speed_optimal') or apex_speed)
+    entry_speed = float(corner.get('entry_speed') or metrics.get('entry_speed') or 0.0)
+    apex_error = float(corner.get('apex_distance_error') or metrics.get('apex_distance_error') or 0.0)
+    time_lost = float(corner.get('time_lost') or 0.0)
+    gain = time_lost * max(1, laps_analyzed)
+    delta_speed = max(0.0, apex_opt - apex_speed)
+    variant = n % 3
+    impact_seconds = round(gain, 2) if time_lost >= 0.01 else round((100 - score) * 0.003, 2)
+    gain_str = f" Gain estimé : {gain:.2f}s sur la session." if (time_lost * laps_analyzed) > 0.05 else ""
 
-    # Bande vitesse virage (km/h à l'apex)
-    if apex_speed < 60:
-        speed_band = "slow"
-    elif apex_speed <= 90:
-        speed_band = "medium"
-    else:
-        speed_band = "fast"
+    if score > 80:
+        templates = [
+            (f"V{n} {dir_fr} — Bon virage ({score:.0f}/100). Travaille maintenant la constance : reproduis exactement cette trajectoire à chaque tour. Filme-toi si possible pour mémoriser tes repères visuels.", "facile"),
+            (f"V{n} {dir_fr} — Bonne performance ({score:.0f}/100). Le gain marginal est dans la vitesse d'entrée : tu peux tenter {entry_speed + 2:.0f} km/h en entrée sur le prochain run.", "facile"),
+        ]
+        msg, difficulty = templates[variant % 2]
+        expl = msg + gain_str
+        return {"message": msg, "explanation": expl, "difficulty": difficulty, "impact_seconds": 0.0}
 
-    # Bandes score
-    if score < 65:
-        score_band = "low"
-    elif score < 80:
-        score_band = "mid"
-    else:
-        score_band = "high"
-
-    # Apex error bandes
-    if apex_error > 30:
-        error_band = "high"
-        error_msg = (
-            f"Ton apex est très décalé ({apex_error:.0f}m). Tu rentres trop tôt dans {side_fr} — "
-            "attends le point de corde avant de tourner. Conséquence : ta trajectoire de sortie est compromise, "
-            "tu perds de la vitesse dans la partie accélération."
+    if 65 <= score <= 80:
+        expl = (
+            f"V{n} {dir_fr} — Trajectoire correcte mais {delta_speed:.1f} km/h de marge à l'apex. "
+            f"Porte ton attention sur la phase d'accélération en sortie : sors plus large pour pouvoir accélérer plus tôt."
         )
-        error_msgs = [
-            error_msg,
-            f"Apex très décalé ({apex_error:.0f}m) dans {side_fr}. Tu engages trop tôt : retarde le braquage jusqu'au point de corde pour une sortie propre.",
-            f"Dans {side_fr} ton apex est à {apex_error:.0f}m du bon point. Tu rentres trop tôt ; la sortie en pâtit. Attends le vibreur intérieur avant de tourner.",
-        ]
-    elif apex_error >= 10:
-        error_band = "mid"
-        error_msgs = [
-            f"Léger décalage d'apex ({apex_error:.0f}m). Retarde légèrement ton point de braquage. Cherche le vibreur intérieur avec la roue avant intérieure.",
-            f"Dans {side_fr}, apex décalé de {apex_error:.0f}m. Retarde un peu ton braquage et vise le vibreur avec la roue avant intérieure.",
-            f"Apex à {apex_error:.0f}m du bon point. Retarde légèrement le volant et accroche le vibreur intérieur en {side_fr}.",
-        ]
-    else:
-        error_band = "low"
-        error_msgs = [
-            "Apex précis. Travaille maintenant la vitesse d'approche et la phase d'accélération.",
-            f"Apex propre dans {side_fr}. Prochaine étape : attaquer un peu plus à l'entrée et accélérer plus tôt en sortie.",
-            "Apex précis. Cherche les dixièmes en entrée (freinage plus tardif) et en sortie (accélération plus précoce).",
-        ]
-    apex_explanation = error_msgs[variant] + speed_line + gain_sentence
+        return {
+            "message": f"V{n} {dir_fr} — Trajectoire correcte, marge à l'apex",
+            "explanation": expl + gain_str,
+            "difficulty": "moyen",
+            "impact_seconds": impact_seconds,
+        }
 
-    # Message court + explication selon score_band et speed_band (3 formulations chacune)
-    if score_band == "low":
+    if apex_speed < 60 and score < 65 and apex_error > 30:
+        templates = [
+            f"V{n} {dir_fr} — Tu rentres trop tôt et tu rates l'apex de {apex_error:.0f}m. À {entry_speed:.0f} km/h, ton point de braquage est prématuré : tu pinces l'intérieur trop tôt, ce qui écrase ta sortie. Décale le braquage de 2-3m vers l'avant, vise le vibreur avec la roue avant intérieure.{gain_str}",
+            f"V{n} {dir_fr} — Late apex à corriger. Tu traites ce virage en grand rayon uniforme : rentre plus large, braque plus tard, et sors large. L'apex à {apex_error:.0f}m trop tôt te coûte de la traction. Repère un point fixe sur le vibreur intérieur et ne tourne qu'une fois aligné dessus.{gain_str}",
+            f"V{n} {dir_fr} — Apex décalé de {apex_error:.0f}m dans un virage à {apex_speed:.0f} km/h. La conséquence directe : tu ne peux pas accélérer avant d'avoir corrigé la trajectoire, ce qui retarde ta relance de plusieurs mètres. Travaille le 'wait and rotate' : attendre, pivoter vite, accélérer.{gain_str}",
+        ]
         messages = [
-            f"{label} — Problème de trajectoire : point de corde et late apex à travailler",
-            f"{label} — Priorité trajectoire : freinage, point de corde, anticipation",
-            f"{label} — Trajectoire à corriger : late apex et point de freinage dans {side_fr}",
+            f"V{n} {dir_fr} — Entrée trop tôt, apex raté de {apex_error:.0f}m",
+            f"V{n} {dir_fr} — Late apex à corriger",
+            f"V{n} {dir_fr} — Apex décalé de {apex_error:.0f}m, relance retardée",
         ]
-        explanations_trajectory = [
-            f"Dans {side_fr} le problème principal est la trajectoire. Travaille le point de corde et le late apex : vise l'intérieur avec les yeux, freine plus tard puis tourne une seule fois. " + apex_explanation,
-            f"Ce virage demande d'abord une meilleure ligne. Anticipe le point de freinage, atteins le point de corde avant de braquer, puis late apex pour une sortie large. " + apex_explanation,
-            f"Trajectoire prioritaire ici : repère un point de freinage fixe, attends le point de corde avant de tourner, et vise le late apex pour libérer la sortie. " + apex_explanation,
-        ]
-        msg = messages[variant]
-        expl = explanations_trajectory[variant]
-        difficulty = "moyen"
-    elif score_band == "mid":
-        messages = [
-            f"{label} — Trajectoire OK, vitesse sous-optimale à l'apex",
-            f"{label} — Attaque entrée et sortie pour gagner des km/h",
-            f"{label} — Maintien de vitesse et traction en sortie à améliorer",
-        ]
-        if speed_band == "slow":
-            expl_base = [
-                f"Dans {side_fr} (virage lent) la géométrie est acceptable ; travaille l'attaque à l'entrée et la traction en sortie. Libère le frein progressivement et accélère dès que la trajectoire est engagée. " + apex_explanation,
-                f"Virage lent : priorité à l'entrée (plus de vitesse) et à la sortie (traction). Gestion de la traction et relâcher du frein au bon moment. " + apex_explanation,
-                f"Ce virage lent peut prendre plus de vitesse. Attaque l'entrée, garde la ligne et pousse l'accélération en sortie. " + apex_explanation,
-            ]
-        elif speed_band == "fast":
-            expl_base = [
-                f"Virage rapide : stabilité et confiance. Ne corrige pas en plein virage ; engage une fois et tiens la ligne. " + apex_explanation,
-                f"Dans {side_fr} (rapide) priorité à l'engagement : une seule décision, pas de correction en plein virage. Confiance dans le grip. " + apex_explanation,
-                f"Virage engagé : fixe ta ligne à l'entrée et ne corrige pas. Gestion de la peur = regard loin et mains stables. " + apex_explanation,
-            ]
-        else:
-            expl_base = [
-                f"Équilibre vitesse/trajectoire dans {side_fr}. Trail braking et stabilité en rotation pour garder de la vitesse. " + apex_explanation,
-                f"Virage moyen : travaille le trail braking (relâcher le frein en tournant) et la stabilité en rotation. " + apex_explanation,
-                f"Dans ce virage moyen, trail braking et une rotation stable te permettront de maintenir plus de vitesse. " + apex_explanation,
-            ]
-        msg = messages[variant]
-        expl = expl_base[variant]
-        difficulty = "moyen"
-    else:
-        messages = [
-            f"{label} — Bonne base : régularité et reproduction",
-            f"{label} — Reproduis ce virage à chaque tour",
-            f"{label} — Cherche les dixièmes restants",
-        ]
-        expl_base = [
-            f"Bonne base dans {side_fr}. Priorité : reproduire exactement cette ligne à chaque tour. Ensuite cherche les dixièmes (entrée plus tardive, sortie plus tôt). " + apex_explanation,
-            f"Ce virage est bien négocié. Travaille la régularité : même point de freinage, même apex, même sortie à chaque passage. " + apex_explanation,
-            f"Très bien sur {side_fr}. Prochaine étape : régularité puis petits gains (freinage 2–3m plus tard, accélération 1m plus tôt). " + apex_explanation,
-        ]
-        msg = messages[variant]
-        expl = expl_base[variant]
-        difficulty = "facile"
+        msg, expl = messages[variant], templates[variant]
+        return {"message": msg, "explanation": expl, "difficulty": "moyen", "impact_seconds": impact_seconds}
 
-    impact_seconds = round(gain_session, 2) if time_lost >= 0.01 else (100 - score) * 0.003
-    return {
-        "message": msg,
-        "explanation": expl,
-        "difficulty": difficulty,
-        "impact_seconds": round(impact_seconds, 2),
-    }
+    if 60 <= apex_speed <= 90 and score < 65:
+        templates = [
+            f"V{n} {dir_fr} — À {entry_speed:.0f} km/h d'entrée, tu perds {apex_error:.0f}m d'apex et {time_lost:.3f}s par passage. C'est un virage de vitesse moyenne qui se passe en trail braking : relâche le frein progressivement en tournant plutôt que de freiner puis tourner.{gain_str}",
+            f"V{n} {dir_fr} — Vitesse apex réelle {apex_speed:.0f} km/h vs {apex_opt:.0f} km/h optimal. Tu laisses {delta_speed:.1f} km/h sur la table. Dans ce virage de vitesse moyenne, la fluidité prime : pas de crispation au volant, relâche les épaules en entrée.{gain_str}",
+            f"V{n} {dir_fr} — L'écart d'apex ({apex_error:.0f}m) sur ce virage à {apex_speed:.0f} km/h révèle une entrée trop prudente. Tu freines suffisamment mais tu retardes trop le braquage. Avance ton point de rotation de 1-2m.{gain_str}",
+        ]
+        messages = [
+            f"V{n} {dir_fr} — Trail braking à travailler",
+            f"V{n} {dir_fr} — {delta_speed:.1f} km/h à l'apex à récupérer",
+            f"V{n} {dir_fr} — Braquage trop tardif",
+        ]
+        msg, expl = messages[variant], templates[variant]
+        return {"message": msg, "explanation": expl, "difficulty": "moyen", "impact_seconds": impact_seconds}
+
+    if apex_speed > 90 and score < 65:
+        templates = [
+            f"V{n} {dir_fr} — Virage engagé à {entry_speed:.0f} km/h. L'apex décalé de {apex_error:.0f}m indique un manque de confiance en entrée : tu te protèges en prenant un rayon plus large. Ce virage se passe en relâchant le frein progressivement (trail braking) tout en amorçant la rotation. Ne cherche pas l'apex immédiatement.{gain_str}",
+            f"V{n} {dir_fr} — À {entry_speed:.0f} km/h, chaque mètre d'apex décalé se paye en stabilité de sortie. Tu as {time_lost:.3f}s à récupérer ici. Engage plus tôt, la voiture est stable si tu es progressif. Fixe le vibreur intérieur tôt avec les yeux.{gain_str}",
+            f"V{n} {dir_fr} — Virage rapide sous-exploité ({apex_speed:.0f} km/h réel vs {apex_opt:.0f} km/h possible). La peur de l'appui te fait prendre une ligne trop conservatrice. Construis la confiance progressivement : un tour à 95%, puis 97%, puis plein engagement.{gain_str}",
+        ]
+        messages = [
+            f"V{n} {dir_fr} — Manque de confiance, rayon trop large",
+            f"V{n} {dir_fr} — Engage plus tôt, stabilité de sortie",
+            f"V{n} {dir_fr} — Ligne trop conservatrice",
+        ]
+        msg, expl = messages[variant], templates[variant]
+        return {"message": msg, "explanation": expl, "difficulty": "moyen", "impact_seconds": impact_seconds}
+
+    return None
 
 
 def _generate_global_advice(
@@ -544,12 +494,10 @@ def _generate_global_advice(
         breakdown = score_data.get('breakdown', {})
 
         corners_valid = [c for c in corner_analysis if c.get('corner_id') in valid_corner_ids]
-        worst_corners = sorted(corners_valid, key=lambda c: c.get('score', 100))[:5]
+        time_lost_key = lambda c: float(c.get('time_lost') or 0) * max(1, laps_analyzed)
+        worst_corners = sorted(corners_valid, key=time_lost_key, reverse=True)[:5]
 
         for corner in worst_corners:
-            score = float(corner.get('score', 70))
-            if score >= 80:
-                continue
             built = _build_differentiated_corner_advice(corner, laps_analyzed)
             if not built:
                 continue
