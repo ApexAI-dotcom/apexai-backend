@@ -254,6 +254,8 @@ def _run_analysis_pipeline_sync(
                 "score": float(corner_data.get("score", 50.0) or 50.0),
                 "apex_lat": corner_data.get("apex_lat"),
                 "apex_lon": corner_data.get("apex_lon"),
+                "lap": corner_data.get("lap"),
+                "per_lap_data": corner_data.get("per_lap_data", []),
             }
             if entry_speed is not None:
                 out["entry_speed"] = float(entry_speed)
@@ -288,6 +290,10 @@ def _run_analysis_pipeline_sync(
     for corner in corner_details:
         try:
             analysis = analyze_corner_performance(df, corner)
+            analysis["apex_lat"] = analysis.get("apex_lat") if analysis.get("apex_lat") is not None else corner.get("apex_lat")
+            analysis["apex_lon"] = analysis.get("apex_lon") if analysis.get("apex_lon") is not None else corner.get("apex_lon")
+            analysis["per_lap_data"] = corner.get("per_lap_data", [])
+            analysis["lap"] = corner.get("lap")
             corner_analysis_list.append(sanitize_corner_data(analysis))
         except Exception as e:
             logger.warning(f"[{analysis_id}] Failed to analyze corner {corner.get('id', 'unknown')}: {e}")
@@ -317,6 +323,9 @@ def _run_analysis_pipeline_sync(
         if cid is not None and cid not in unique_by_id:
             unique_by_id[cid] = c
     unique_corner_analysis = list(unique_by_id.values())
+    for c in unique_corner_analysis:
+        c["label"] = f"V{c.get('corner_id', '?')}"
+        c["avg_note"] = "Valeurs sur ce tour" if laps_analyzed == 1 else f"Valeurs moyennées sur {laps_analyzed} tours"
     corners_detected = len(unique_corner_analysis)
 
     # Une seule source de vérité : overall_score = sum(breakdown) depuis calculate_performance_score
