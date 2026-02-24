@@ -185,7 +185,7 @@ def _run_analysis_pipeline_sync(
         if "lap_number" in df.columns:
             laps_analyzed = int(df["lap_number"].nunique())
     logger.info(f"[{analysis_id}] Step 4/5: Detecting corners...")
-    df = detect_corners(df, min_lateral_g=0.25)
+    df = detect_corners(df, laps_analyzed=laps_analyzed)
 
     corners_meta = df.attrs.get("corners", {})
     corner_details = corners_meta.get("corner_details", [])
@@ -195,18 +195,37 @@ def _run_analysis_pipeline_sync(
     if lap_filter and "lap_number" in df.columns:
         df_perf = df[df["lap_number"].isin(lap_filter)].copy()
         valid_idx = set(df_perf.index)
-        corner_details = [
-            c for c in corner_details
-            if c.get("entry_index") in valid_idx
-            and c.get("apex_index") in valid_idx
-            and c.get("exit_index") in valid_idx
-        ]
+        lap_set = set(lap_filter)
+        kept_corners = []
+        for c in corner_details:
+            ei, ai, exi = c.get("entry_index"), c.get("apex_index"), c.get("exit_index")
+            per_lap = c.get("per_lap_data") or []
+            chosen = None
+            if per_lap:
+                for pl in per_lap:
+                    if pl.get("lap") in lap_set:
+                        e, a, ex = pl.get("entry_index"), pl.get("apex_index"), pl.get("exit_index")
+                        if e is not None and a is not None and ex is not None and e in valid_idx and a in valid_idx and ex in valid_idx:
+                            chosen = (e, a, ex)
+                            break
+            if chosen is None and ei in valid_idx and ai in valid_idx and exi in valid_idx:
+                chosen = (ei, ai, exi)
+            if chosen is not None:
+                c["entry_index"], c["apex_index"], c["exit_index"] = chosen
+                # Garder seulement per_lap_data des tours sélectionnés
+                c["per_lap_data"] = [pl for pl in per_lap if pl.get("lap") in lap_set]
+                kept_corners.append(c)
+        corner_details = kept_corners
         df = df_perf.reset_index(drop=True)
         old_to_new = {old: i for i, old in enumerate(df_perf.index)}
         for c in corner_details:
             c["entry_index"] = old_to_new.get(c["entry_index"], c["entry_index"])
             c["apex_index"] = old_to_new.get(c["apex_index"], c["apex_index"])
             c["exit_index"] = old_to_new.get(c["exit_index"], c["exit_index"])
+            for pl in c.get("per_lap_data") or []:
+                for key in ("entry_index", "apex_index", "exit_index"):
+                    if key in pl and pl[key] is not None:
+                        pl[key] = old_to_new.get(pl[key], pl[key])
         corners_meta["corner_details"] = corner_details
         df.attrs["corners"] = corners_meta
         logger.info(f"[{analysis_id}] Refiltered to selected laps only: {len(df)} rows, {len(corner_details)} corners")
