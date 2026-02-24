@@ -609,7 +609,7 @@ def _resample_adaptive(
 def detect_corners(
     df: pd.DataFrame,
     min_lateral_g: float = 0.20,
-    min_distance_between_corners: float = 8.0,
+    min_distance_between_corners: float = 6.0,
     expected_corners: Optional[int] = None,
     laps_analyzed: Optional[int] = None,
 ) -> pd.DataFrame:
@@ -729,7 +729,7 @@ def detect_corners(
             return out
 
         if expected_corners is not None and expected_corners >= 1:
-            lo, hi = 4.0, 40.0
+            lo, hi = 3.0, 40.0
             for _ in range(15):
                 mid = (lo + hi) * 0.5
                 m = _merge_by_min_dist(valid_corners, cumulative_dist, mid)
