@@ -920,15 +920,23 @@ def detect_corners(
                 if apex_idx < len(df_circuit):
                     df_result.at[df_circuit.index[apex_idx], 'is_apex'] = True
 
-        # Numérotation géographique : tri par distance cumulée moyenne (V1 = premier après ligne de départ)
-        corners_sorted = sorted(corner_details, key=lambda c: c.get('avg_cumulative_distance', 0))
+        # Numérotation géographique : tri à partir du même point que le rond vert (ligne de départ)
+        first_lap_mask = df_circuit['lap_number'] == df_circuit['lap_number'].min()
+        start_iloc = int(np.flatnonzero(first_lap_mask)[0]) if np.any(first_lap_mask) else 0
+        circuit_start_dist = float(cumulative_dist[start_iloc]) if start_iloc < len(cumulative_dist) else 0.0
+        lap_length = float(cumulative_dist[-1] - cumulative_dist[0]) if len(cumulative_dist) > 1 else 0.0
+        for corner in corner_details:
+            d = corner.get('avg_cumulative_distance', 0) - circuit_start_dist
+            if d < 0 and lap_length > 0:
+                d += lap_length
+            corner['_sort_key'] = d
+        corner_details = sorted(corner_details, key=lambda c: c['_sort_key'])
         old_to_new = {}
-        for new_id, c in enumerate(corners_sorted, start=1):
-            old_id = c['id']
-            old_to_new[old_id] = new_id
-            c['id'] = new_id
-            c['label'] = f"V{new_id}"
-        corner_details = corners_sorted
+        for i, corner in enumerate(corner_details, start=1):
+            old_id = corner['id']
+            old_to_new[old_id] = i
+            corner['id'] = i
+            corner['label'] = f"V{i}"
         for idx in df_result.index:
             if df_result.at[idx, 'is_corner']:
                 old = df_result.at[idx, 'corner_id']
