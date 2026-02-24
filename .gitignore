@@ -35,6 +35,7 @@ Thumbs.db
 
 # Frontend / temp (separate repos)
 node_modules/
+apex-ai-fresh/
 lovable-temp/
 
 .vercel
