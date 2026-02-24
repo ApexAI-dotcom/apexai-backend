@@ -96,12 +96,8 @@ def generate_coaching_advice(
             "difficulty": "facile",
         })
 
-    # Enrichir corner_analysis avec labels lisibles si disponibles
     for c in corner_analysis:
-        if 'lap' in c and 'corner_id' in c:
-            c['label'] = f"Tour {c.get('lap', 1)} / Virage {c.get('corner_id', '?')}"
-        else:
-            c['label'] = f"Virage {c.get('corner_id', '?')}"
+        c['label'] = f"V{c.get('corner_id', '?')}"
 
     try:
         impact_mult = 0.85 if (cond == "dry" and temp is not None and temp < 15) else 1.0

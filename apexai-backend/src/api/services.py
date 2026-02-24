@@ -239,8 +239,9 @@ def _run_analysis_pipeline_sync(
             metrics = corner_data.get("metrics", {})
             entry_speed = metrics.get("entry_speed")
             exit_speed = metrics.get("exit_speed")
+            corner_id = int(corner_data.get("corner_id", 0))
             out = {
-                "corner_id": int(corner_data.get("corner_id", 0)),
+                "corner_id": corner_id,
                 "corner_number": int(corner_data.get("corner_number", corner_data.get("corner_id", 0))),
                 "corner_type": str(corner_data.get("corner_type", "unknown")),
                 "apex_speed_real": float(metrics.get("apex_speed_real", corner_data.get("apex_speed_kmh", 0.0)) or corner_data.get("apex_speed_kmh", 0.0)),
@@ -256,6 +257,7 @@ def _run_analysis_pipeline_sync(
                 "apex_lon": corner_data.get("apex_lon"),
                 "lap": corner_data.get("lap"),
                 "per_lap_data": corner_data.get("per_lap_data", []),
+                "label": f"V{corner_id}",
             }
             if entry_speed is not None:
                 out["entry_speed"] = float(entry_speed)
