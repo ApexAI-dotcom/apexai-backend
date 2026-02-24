@@ -642,6 +642,8 @@ def detect_corners(
         cumulative_dist = np.nan_to_num(pd.to_numeric(df_circuit['cumulative_distance'], errors='coerce').values, nan=0.0)
         time = pd.to_numeric(df_circuit['time'], errors='coerce').values if 'time' in df_circuit.columns else None
         curvature_arr = pd.to_numeric(df_circuit['curvature'], errors='coerce').values if 'curvature' in df_circuit.columns else None
+        if curvature_arr is not None:
+            curvature_arr = np.nan_to_num(curvature_arr, nan=0.0)
         has_laps = 'lap_number' in df_circuit.columns
         lap_numbers = df_circuit['lap_number'].values if has_laps else np.ones(n_points, dtype=int)
         if laps_analyzed is None and has_laps:
@@ -649,12 +651,40 @@ def detect_corners(
         elif laps_analyzed is None:
             laps_analyzed = 1
 
+        # Jonctions de tours (indices où lap_number change)
+        if has_laps:
+            lap_arr = lap_numbers
+            lap_boundaries = set(
+                i for i in range(1, len(lap_arr))
+                if lap_arr[i] != lap_arr[i - 1]
+            )
+        else:
+            lap_boundaries = set()
+
+        # Reset du signal aux jonctions (fenêtre 8 points de part et d'autre)
+        lateral_g = lateral_g.copy()
+        n = len(lateral_g)
+        for idx in lap_boundaries:
+            for offset in range(-8, 9):
+                j = idx + offset
+                if 0 <= j < n:
+                    lateral_g[j] = 0.0
+        if curvature_arr is not None:
+            curvature_arr = curvature_arr.copy()
+            for idx in lap_boundaries:
+                for offset in range(-8, 9):
+                    j = idx + offset
+                    if 0 <= j < n:
+                        curvature_arr[j] = 0.0
+
+        import logging
+        log = logging.getLogger(__name__)
+        log.info("[detect_corners] Jonctions de tours détectées : %s à indices %s", len(lap_boundaries), sorted(lap_boundaries)[:20] if len(lap_boundaries) > 20 else sorted(lap_boundaries))
+
         avg_spacing_m = _avg_spacing_m(cumulative_dist)
         cum_rs, lateral_g_rs, speed_rs, time_rs, curvature_rs, orig_iloc_rs, resample_strategy, n_after = _resample_adaptive(
             cumulative_dist, lateral_g, speed, time, curvature_arr
         )
-        import logging
-        log = logging.getLogger(__name__)
         log.info("detect_corners: avg_spacing_m=%.3f strategy=%s n_points_after_resampling=%s", avg_spacing_m, resample_strategy, n_after)
 
         # Multi-critères
@@ -704,19 +734,29 @@ def detect_corners(
             g_vals = np.abs([lateral_g[i] for i in indices_orig if i < len(lateral_g)])
             if len(g_vals) > 0 and np.max(g_vals) < 0.20:
                 continue
-            valid_corners.append({'id': cid, 'indices': indices_orig, 'start': start_orig, 'end': end_orig})
+            apex_local = np.argmax(np.abs([lateral_g[i] for i in indices_orig if i < len(lateral_g)]))
+            apex_orig = int(indices_orig[apex_local])
+            valid_corners.append({'id': cid, 'indices': indices_orig, 'start': start_orig, 'end': end_orig, 'apex': apex_orig})
 
-        def _merge_by_min_dist(corners: List[Dict], cum_dist: np.ndarray, min_d: float) -> List[Dict]:
+        def _merge_by_min_dist(corners: List[Dict], cum_dist: np.ndarray, min_d: float, lap_boundaries_set: Optional[set] = None) -> tuple:
+            """Retourne (liste fusionnée, nombre de fusions bloquées par jonction)."""
             if not corners or min_d <= 0:
-                return corners
+                return corners, 0
+            lap_boundaries_set = lap_boundaries_set or set()
             out = []
+            n_blocked = 0
             i = 0
             while i < len(corners):
                 cur = dict(corners[i])
                 cur['indices'] = list(cur['indices'])
+                cur.setdefault('apex', cur['end'])
                 j = i + 1
                 while j < len(corners):
                     e1, s2 = cur['end'], corners[j]['start']
+                    gap = set(range(e1 + 1, s2)) if e1 + 1 < s2 else set()
+                    if lap_boundaries_set and gap & lap_boundaries_set:
+                        n_blocked += 1
+                        break
                     if e1 < len(cum_dist) and s2 < len(cum_dist) and (cum_dist[s2] - cum_dist[e1]) < min_d:
                         cur['end'] = corners[j]['end']
                         cur['indices'] = sorted(set(cur['indices']) | set(corners[j]['indices']))
@@ -726,25 +766,28 @@ def detect_corners(
                 cur['indices'] = np.array(cur['indices'])
                 out.append(cur)
                 i = j
-            return out
+            return out, n_blocked
 
+        n_merge_blocked = 0
         if expected_corners is not None and expected_corners >= 1:
             lo, hi = 3.0, 40.0
             for _ in range(15):
                 mid = (lo + hi) * 0.5
-                m = _merge_by_min_dist(valid_corners, cumulative_dist, mid)
+                m, nb = _merge_by_min_dist(valid_corners, cumulative_dist, mid, lap_boundaries)
                 if len(m) == expected_corners:
                     min_distance_between_corners = round(mid, 1)
                     valid_corners = m
+                    n_merge_blocked = nb
                     break
                 if len(m) > expected_corners:
                     hi = mid
                 else:
                     lo = mid
             else:
-                valid_corners = _merge_by_min_dist(valid_corners, cumulative_dist, min_distance_between_corners)
+                valid_corners, n_merge_blocked = _merge_by_min_dist(valid_corners, cumulative_dist, min_distance_between_corners, lap_boundaries)
         else:
-            valid_corners = _merge_by_min_dist(valid_corners, cumulative_dist, min_distance_between_corners)
+            valid_corners, n_merge_blocked = _merge_by_min_dist(valid_corners, cumulative_dist, min_distance_between_corners, lap_boundaries)
+        log.info("[detect_corners] Fusions bloquées par jonction : %s", n_merge_blocked)
 
         coherence_radius_m = 30.0
         min_laps_confirm = max(1, laps_analyzed // 2)
@@ -841,9 +884,11 @@ def detect_corners(
                 consistency_score = max(0.0, min(1.0, 1.0 - mean_dist / coherence_radius_m))
             else:
                 consistency_score = 1.0
+            avg_cum_dist = float(np.mean([cumulative_dist[seg['apex_index']] for seg in cluster if seg['apex_index'] < len(cumulative_dist)])) if cluster else 0.0
             ref = cluster[0]
             corner_details.append({
                 'id': physical_id,
+                'avg_cumulative_distance': avg_cum_dist,
                 'lap': ref['lap'],
                 'label': f"V{physical_id}",
                 'type': corner_type,
@@ -874,6 +919,25 @@ def detect_corners(
                 apex_idx = seg['apex_index']
                 if apex_idx < len(df_circuit):
                     df_result.at[df_circuit.index[apex_idx], 'is_apex'] = True
+
+        # Numérotation géographique : tri par distance cumulée moyenne (V1 = premier après ligne de départ)
+        corners_sorted = sorted(corner_details, key=lambda c: c.get('avg_cumulative_distance', 0))
+        old_to_new = {}
+        for new_id, c in enumerate(corners_sorted, start=1):
+            old_id = c['id']
+            old_to_new[old_id] = new_id
+            c['id'] = new_id
+            c['label'] = f"V{new_id}"
+        corner_details = corners_sorted
+        for idx in df_result.index:
+            if df_result.at[idx, 'is_corner']:
+                old = df_result.at[idx, 'corner_id']
+                df_result.at[idx, 'corner_id'] = old_to_new.get(old, old)
+        log.info(
+            "[detect_corners] Virages finaux : %s → %s",
+            len(corner_details),
+            [f"V{c['id']} d={c.get('avg_cumulative_distance', 0):.0f}m" for c in corner_details],
+        )
 
         total_distance = float(cumulative_dist[-1]) if len(cumulative_dist) > 0 else 0.0
         avg_speed = float(np.mean(speed[speed > 0])) if np.any(speed > 0) else 0.0
