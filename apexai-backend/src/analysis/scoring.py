@@ -476,9 +476,9 @@ def calculate_performance_score(
             conditions_bonus = 5.0
         elif cond == "rain":
             conditions_bonus = 10.0
-        breakdown["conditions_bonus"] = round(conditions_bonus, 1)
-        overall_score = sum(breakdown.values())
-        overall_score = round(min(100.0, overall_score), 1)
+        if conditions_bonus > 0:
+            breakdown["conditions_bonus"] = round(conditions_bonus, 1)
+        overall_score = round(min(100.0, sum(breakdown.values())), 1)
         if overall_score >= 80:
             grade = "A"
         elif overall_score >= 70:

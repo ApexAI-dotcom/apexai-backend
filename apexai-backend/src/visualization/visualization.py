@@ -778,43 +778,42 @@ def plot_performance_score_breakdown(df: pd.DataFrame, save_path: str) -> bool:
             breakdown.get('apex_speed', 0.0),
             breakdown.get('sector_times', 0.0)
         ]
-        sum_values = sum(values) + float(breakdown.get('conditions_bonus', 0))
+        conditions_bonus = float(breakdown.get('conditions_bonus', 0))
+        if conditions_bonus > 0:
+            categories.append(f"Bonus conditions (+{int(conditions_bonus)}pts)")
+            values.append(conditions_bonus)
+        sum_values = sum(values)
         if abs(sum_values - overall) > 1.0:
             warnings.warn(f"plot_performance_score_breakdown: sum(breakdown)={sum_values:.1f} != overall={overall:.1f}")
         max_scores = [30.0, 25.0, 25.0, 20.0]
+        if conditions_bonus > 0:
+            max_scores.append(conditions_bonus)
         pcts = [v/m*100 for v, m in zip(values, max_scores)]
-        
         colors = [COLOR_GREEN if p >= 70 else COLOR_ORANGE if p >= 50 else COLOR_RED 
                  for p in pcts]
-        
+        if conditions_bonus > 0:
+            colors[-1] = COLOR_GREEN
         fig, ax = plt.subplots(figsize=(10, 6), dpi=DPI)
         fig.patch.set_facecolor(BG_DARK)
-        
         y_pos = range(len(categories))
-        
-        # Barres background (max)
         ax.barh(list(y_pos), max_scores, color=BG_PANEL, 
                alpha=0.5, edgecolor='none', height=0.6)
-        # Barres réelles
-        bars = ax.barh(list(y_pos), values, color=colors, 
-                      alpha=0.85, edgecolor='none', height=0.6)
-        
-        # Labels
+        ax.barh(list(y_pos), values, color=colors, 
+                alpha=0.85, edgecolor='none', height=0.6)
         ax.set_yticks(list(y_pos))
         ax.set_yticklabels(categories, color=COLOR_TEXT, fontsize=11)
-        
         for pos, (v, m, p) in enumerate(zip(values, max_scores, pcts)):
-            ax.text(m + 0.3, pos, f'{v:.1f}/{m:.0f} ({p:.0f}%)', 
-                   va='center', fontsize=9, color=COLOR_MUTED)
-        
-        # Score global en haut à droite
+            if conditions_bonus > 0 and pos == len(values) - 1:
+                ax.text(m + 0.3, pos, f'+{int(v)} pts', va='center', fontsize=9, color=COLOR_MUTED)
+            else:
+                ax.text(m + 0.3, pos, f'{v:.1f}/{m:.0f} ({p:.0f}%)', 
+                       va='center', fontsize=9, color=COLOR_MUTED)
         color_grade = COLOR_GREEN if overall >= 80 else COLOR_ORANGE if overall >= 60 else COLOR_RED
         ax.text(0.98, 0.95, f'{overall:.0f}/100', transform=ax.transAxes,
                fontsize=28, fontweight='bold', color=color_grade,
                ha='right', va='top')
         ax.text(0.98, 0.82, f'Grade {grade}', transform=ax.transAxes,
                fontsize=14, color=COLOR_MUTED, ha='right', va='top')
-        
         _style_ax(ax, '📊 Score de Performance — Breakdown', 
                  'Points', '')
         ax.set_xlim(0, max(max_scores) * 1.3)
