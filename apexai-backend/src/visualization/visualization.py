@@ -570,22 +570,17 @@ def plot_apex_precision(df: pd.DataFrame, save_path: str) -> bool:
 
 def plot_performance_radar(df: pd.DataFrame, save_path: str) -> bool:
     try:
-        # Scores depuis attrs si dispo, sinon calculer
-        if 'score_data' in df.attrs:
-            score_data = df.attrs['score_data']
-            breakdown = score_data.get('breakdown', {})
-            apex = min(100, breakdown.get('apex_precision', 10) / 30 * 100)
-            consistency = min(100, breakdown.get('trajectory_consistency', 10) / 25 * 100)
-            speed = min(100, breakdown.get('apex_speed', 10) / 25 * 100)
-            sectors = min(100, breakdown.get('sector_times', 10) / 20 * 100)
-        else:
-            apex = 55.0
-            consistency = 70.0
-            speed = 60.0
-            sectors = 65.0
-        
-        # Score global depuis attribut si dispo
-        overall = df.attrs.get('overall_score', (apex + consistency + speed + sectors) / 4)
+        if 'score_data' not in df.attrs:
+            return False
+        score_data = df.attrs['score_data']
+        breakdown = score_data.get('breakdown', {})
+        apex = min(100, breakdown.get('apex_precision', 0) / 30 * 100)
+        consistency = min(100, breakdown.get('trajectory_consistency', 0) / 25 * 100)
+        speed = min(100, breakdown.get('apex_speed', 0) / 25 * 100)
+        sectors = min(100, breakdown.get('sector_times', 0) / 20 * 100)
+        overall = score_data.get('overall_score')
+        if overall is None:
+            overall = sum(breakdown.values()) if breakdown else (apex + consistency + speed + sectors) / 4
         
         categories = ['Précision\nApex', 'Régularité', 'Vitesse\nApex', 'Secteurs']
         values = [apex, consistency, speed, sectors]
@@ -638,28 +633,25 @@ def plot_performance_radar(df: pd.DataFrame, save_path: str) -> bool:
 
 def plot_performance_score_breakdown(df: pd.DataFrame, save_path: str) -> bool:
     try:
-        if 'score_data' in df.attrs:
-            score_data = df.attrs['score_data']
-            breakdown = score_data.get('breakdown', {})
-            overall = score_data.get('overall_score', 55.0)
-            grade = score_data.get('grade', 'C')
-        else:
-            breakdown = {
-                'apex_precision': 10.0,
-                'trajectory_consistency': 15.0,
-                'apex_speed': 15.0,
-                'sector_times': 15.0
-            }
-            overall = 55.0
-            grade = 'D'
-        
+        if 'score_data' not in df.attrs:
+            return False
+        score_data = df.attrs['score_data']
+        breakdown = score_data.get('breakdown', {})
+        overall = score_data.get('overall_score')
+        if overall is None:
+            overall = sum(breakdown.values()) if breakdown else 0.0
+        grade = score_data.get('grade', 'C')
+
         categories = ['Précision Apex', 'Régularité', 'Vitesse Apex', 'Temps Secteurs']
         values = [
-            breakdown.get('apex_precision', 10.0),
-            breakdown.get('trajectory_consistency', 15.0),
-            breakdown.get('apex_speed', 15.0),
-            breakdown.get('sector_times', 15.0)
+            breakdown.get('apex_precision', 0.0),
+            breakdown.get('trajectory_consistency', 0.0),
+            breakdown.get('apex_speed', 0.0),
+            breakdown.get('sector_times', 0.0)
         ]
+        sum_values = sum(values)
+        if abs(sum_values - overall) > 1.0:
+            warnings.warn(f"plot_performance_score_breakdown: sum(breakdown)={sum_values:.1f} != overall={overall:.1f}")
         max_scores = [30.0, 25.0, 25.0, 20.0]
         pcts = [v/m*100 for v, m in zip(values, max_scores)]
         

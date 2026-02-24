@@ -334,6 +334,8 @@ def _run_analysis_pipeline_sync(
 
     logger.info(f"[{analysis_id}] Generating plots...")
     df.attrs["corner_analysis"] = unique_corner_analysis
+    df.attrs["score_data"] = score_data
+    df.attrs["overall_score"] = score_data.get("overall_score", 0.0)
     plots_urls = generate_all_plots_base64(df)
 
     processing_time = (datetime.now() - start_time).total_seconds()
