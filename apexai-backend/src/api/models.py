@@ -68,20 +68,20 @@ class CoachingAdvice(BaseModel):
 
 
 class PlotUrls(BaseModel):
-    """URLs des graphiques générés"""
+    """URLs des graphiques générés (base64 data URIs)"""
     trajectory_2d: Optional[str] = None
-    speed_heatmap: Optional[str] = None
+    lap_comparison: Optional[str] = None
     lateral_g_chart: Optional[str] = None
     speed_trace: Optional[str] = None
-    throttle_brake: Optional[str] = None
-    sector_times: Optional[str] = None
-    apex_precision: Optional[str] = None
+    corner_performance_matrix: Optional[str] = None
+    time_loss_by_corner: Optional[str] = None
+    speed_delta_by_corner: Optional[str] = None
     performance_radar: Optional[str] = None
     performance_score_breakdown: Optional[str] = None
     corner_heatmap: Optional[str] = None
-    
+
     class Config:
-        extra = "allow"  # Accepter tous les plots retournés
+        extra = "allow"
 
 
 class Statistics(BaseModel):
