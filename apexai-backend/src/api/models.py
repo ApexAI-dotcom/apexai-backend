@@ -110,8 +110,7 @@ class AnalysisResponse(BaseModel):
     corners_detected: int = Field(description="Nombre de virages détectés")
     lap_time: float = Field(description="Temps du tour en secondes (rétrocompat = best_lap_time)")
     best_lap_time: Optional[float] = Field(default=None, description="Meilleur temps parmi les tours analysés")
-    avg_lap_time: Optional[float] = Field(default=None, description="Temps moyen des tours analysés")
-    lap_times: Optional[List[float]] = Field(default=None, description="Liste ordonnée des temps par tour")
+    lap_times: Optional[List[float]] = Field(default=None, description="Liste ordonnée des temps par tour (tours sélectionnés)")
     
     performance_score: PerformanceScore
     corner_analysis: List[CornerAnalysis] = Field(description="Analyse de chaque virage (max 10)")

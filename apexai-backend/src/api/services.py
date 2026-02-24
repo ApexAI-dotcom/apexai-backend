@@ -338,35 +338,39 @@ def _run_analysis_pipeline_sync(
 
     processing_time = (datetime.now() - start_time).total_seconds()
 
-    # Meilleur / moyen / liste des temps (multi-tours ou single)
+    # Temps par tour : filtrés aux tours sélectionnés (lap_filter)
     best_lap_time: Optional[float] = None
-    avg_lap_time: Optional[float] = None
     lap_times: Optional[List[float]] = None
     if beacon_markers and len(beacon_markers) >= 2:
-        lap_times_list = [beacon_markers[0]]
+        # lap_times[k] = durée du tour k+1 (beacon_markers[k] = timestamp fin du tour k+1)
+        timed_laps = []
         for i in range(1, len(beacon_markers)):
-            lap_times_list.append(beacon_markers[i] - beacon_markers[i - 1])
-        timed_laps = lap_times_list[1:] if len(lap_times_list) > 1 else lap_times_list
-        lap_times = [round(t, 3) for t in timed_laps]
-        best_lap_time = round(min(timed_laps), 3)
-        avg_lap_time = round(sum(timed_laps) / len(timed_laps), 3) if timed_laps else best_lap_time
-        lap_time = best_lap_time
-        logger.info(
-            f"[{analysis_id}] Meilleur tour: {best_lap_time}s, "
-            f"Moyenne: {avg_lap_time}s sur {len(timed_laps)} tours"
-        )
+            timed_laps.append(beacon_markers[i] - beacon_markers[i - 1])
+        all_lap_times = [round(t, 3) for t in timed_laps]
+        if lap_filter:
+            lap_times = [all_lap_times[i - 1] for i in lap_filter if 1 <= i <= len(all_lap_times)]
+        else:
+            lap_times = all_lap_times
+        best_lap_time = round(min(lap_times), 3) if lap_times else None
+        lap_time = best_lap_time or 0.0
+        logger.info(f"[{analysis_id}] Meilleur tour: {best_lap_time}s sur {len(lap_times)} tour(s)")
     else:
-        if "time" in df.columns and len(df) > 0:
-            time_values = df["time"].dropna()
-            if len(time_values) > 0:
-                lap_time = round(float(time_values.iloc[-1] - time_values.iloc[0]), 3)
+        if lap_filter and "time" in df.columns and "lap_number" in df.columns:
+            lap_times = []
+            for lap in sorted(lap_filter):
+                grp = df[df["lap_number"] == lap]["time"].dropna()
+                if len(grp) >= 2:
+                    lap_times.append(round(float(grp.max() - grp.min()), 3))
+            best_lap_time = round(min(lap_times), 3) if lap_times else None
+            lap_time = best_lap_time or 0.0
+        else:
+            if "time" in df.columns and len(df) > 0:
+                time_values = df["time"].dropna()
+                lap_time = round(float(time_values.iloc[-1] - time_values.iloc[0]), 3) if len(time_values) > 0 else 0.0
             else:
                 lap_time = 0.0
-        else:
-            lap_time = 0.0
-        lap_times = [lap_time]
-        best_lap_time = lap_time
-        avg_lap_time = lap_time
+            lap_times = [lap_time]
+            best_lap_time = lap_time
 
     logger.info(f"[{analysis_id}] ✅ Completed in {processing_time:.2f}s")
 
@@ -377,7 +381,6 @@ def _run_analysis_pipeline_sync(
         corners_detected=corners_detected,
         lap_time=lap_time,
         best_lap_time=best_lap_time,
-        avg_lap_time=avg_lap_time,
         lap_times=lap_times,
         performance_score=PerformanceScore(
             overall_score=float(score_data.get("overall_score", 0.0)),
