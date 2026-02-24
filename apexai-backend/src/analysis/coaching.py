@@ -104,22 +104,14 @@ def generate_coaching_advice(
             c['label'] = f"Virage {c.get('corner_id', '?')}"
 
     try:
-        braking_threshold_m = 5.0 if is_damp else 2.0
-        braking_advice = _generate_braking_advice(corner_analysis, is_wet=is_wet, braking_threshold_m=braking_threshold_m)
-        advice_list.extend(braking_advice)
-
-        apex_advice = _generate_apex_advice(corner_analysis)
-        advice_list.extend(apex_advice)
-
-        speed_advice = _generate_speed_advice(corner_analysis)
-        advice_list.extend(speed_advice)
-
-        trajectory_advice = _generate_trajectory_advice(corner_analysis, df)
-        advice_list.extend(trajectory_advice)
-
         impact_mult = 0.85 if (cond == "dry" and temp is not None and temp < 15) else 1.0
+        # 1) Conseils individuels pour tous les virages avec score < 80 (triés par time_lost * laps_analyzed)
         global_advice = _generate_global_advice(score_data, corner_analysis, df, laps_analyzed=laps_analyzed)
+        # 2) Enchaînements (perte > 8 km/h entre deux virages consécutifs)
+        trajectory_advice = _generate_trajectory_advice(corner_analysis, df)
+        enchainement_only = [a for a in trajectory_advice if "Enchaînement" in (a.get("message") or "")]
         advice_list.extend(global_advice)
+        advice_list.extend(enchainement_only)
 
         if impact_mult != 1.0:
             for a in advice_list:
@@ -132,7 +124,7 @@ def generate_coaching_advice(
         advice_list.sort(key=lambda x: (0 if x.get("category") == "info" else 1, -x.get("impact_seconds", 0)))
 
         info_items = [a for a in advice_list if a.get("category") == "info"]
-        rest = [a for a in advice_list if a.get("category") != "info"][:5]
+        rest = [a for a in advice_list if a.get("category") != "info"][:6]
         return info_items + rest
     
     except Exception as e:
@@ -494,10 +486,11 @@ def _generate_global_advice(
         breakdown = score_data.get('breakdown', {})
 
         corners_valid = [c for c in corner_analysis if c.get('corner_id') in valid_corner_ids]
+        corners_under_80 = [c for c in corners_valid if float(c.get('score', 100)) < 80]
         time_lost_key = lambda c: float(c.get('time_lost') or 0) * max(1, laps_analyzed)
-        worst_corners = sorted(corners_valid, key=time_lost_key, reverse=True)[:5]
+        sorted_corners = sorted(corners_under_80, key=time_lost_key, reverse=True)
 
-        for corner in worst_corners:
+        for corner in sorted_corners:
             built = _build_differentiated_corner_advice(corner, laps_analyzed)
             if not built:
                 continue
@@ -509,68 +502,6 @@ def _generate_global_advice(
                 'message': built['message'],
                 'explanation': built['explanation'],
                 'difficulty': built['difficulty'],
-            })
-
-        # === CONSTANCE GÉNÉRALE ===
-        consistency_score = breakdown.get('trajectory_consistency', 15.0)
-        if consistency_score < 15.0 and 'heading' in df.columns:
-            heading = pd.to_numeric(df['heading'], errors='coerce').ffill().fillna(0).values
-            if len(heading) > 10:
-                h = pd.Series(heading)
-                smooth = h.rolling(window=10, center=True, min_periods=1).mean()
-                diff = np.diff(smooth.values)
-                diff = np.where(diff > 180, diff - 360, np.where(diff < -180, diff + 360, diff))
-                corrections = int(np.sum(np.abs(diff) > 10.0))  # seuil 10° comme scoring
-            else:
-                corrections = 0
-            if corrections > 10:
-                impact_seconds = round((15.0 - consistency_score) * 0.02, 2)
-                advice.append({
-                    'priority': len(advice) + 1,
-                    'category': 'global',
-                    'impact_seconds': impact_seconds,
-                    'corner': None,
-                    'message': f"Fluidité générale — {corrections} corrections de trajectoire détectées",
-                    'explanation': (
-                        f"{corrections} corrections de volant >10° détectées sur la session. "
-                        f"Action : travaille le regard loin (vise la sortie du virage dès l'entrée), "
-                        f"ça réduit naturellement les micro-corrections. "
-                        f"Mains souples sur le volant — pas de à-coups. "
-                        f"Gain estimé : {impact_seconds:.2f}s sur la session."
-                    ),
-                    'difficulty': 'moyen'
-                })
-
-        # === POINT FORT ACTIONNABLE ===
-        details = score_data.get('details', {})
-        best_corners_ids = details.get('best_corners', [])
-        best_corners_ids = [cid for cid in best_corners_ids if cid in valid_corner_ids]
-        best_corners_data = [c for c in corner_analysis if c.get('corner_id') in best_corners_ids]
-
-        if best_corners_data:
-            best_labels = [c.get('label', f"V{c.get('corner_id')}") for c in best_corners_data[:3]]
-            best_str = ', '.join(best_labels)
-            
-            # Extraire ce qui est bien fait dans ces virages
-            avg_speed_best = sum(
-                float(c.get('apex_speed_real') or 0)
-                for c in best_corners_data[:3]
-            ) / max(len(best_corners_data[:3]), 1)
-
-            advice.append({
-                'priority': len(advice) + 1,
-                'category': 'global',
-                'impact_seconds': 0.0,
-                'corner': None,
-                'message': f"Points forts : {best_str} — Vitesse apex moyenne {avg_speed_best:.0f} km/h",
-                'explanation': (
-                    f"Tes meilleurs virages ({best_str}) ont une vitesse apex moyenne de "
-                    f"{avg_speed_best:.0f} km/h — c'est ton niveau de référence. "
-                    f"Identifie ce que tu fais différemment ici : "
-                    f"regard, timing freinage, relâcher progressif. "
-                    f"Reproduis exactement cette séquence dans les virages similaires."
-                ),
-                'difficulty': 'facile'
             })
 
     except Exception as e:
