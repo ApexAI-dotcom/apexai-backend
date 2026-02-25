@@ -283,6 +283,7 @@ def _run_analysis_pipeline_sync(
                 "entry_index": corner_data.get("entry_index"),
                 "apex_index": corner_data.get("apex_index"),
                 "_entry_index_first_lap": corner_data.get("_entry_index_first_lap"),
+                "avg_cumulative_distance": corner_data.get("avg_cumulative_distance"),
             }
             if entry_speed is not None:
                 out["entry_speed"] = float(entry_speed)
@@ -324,6 +325,7 @@ def _run_analysis_pipeline_sync(
             analysis["entry_index"] = corner.get("entry_index")
             analysis["apex_index"] = corner.get("apex_index")
             analysis["_entry_index_first_lap"] = corner.get("_entry_index_first_lap", corner.get("entry_index"))
+            analysis["avg_cumulative_distance"] = corner.get("avg_cumulative_distance")
             corner_analysis_list.append(sanitize_corner_data(analysis))
         except Exception as e:
             logger.warning(f"[{analysis_id}] Failed to analyze corner {corner.get('id', 'unknown')}: {e}")
@@ -345,6 +347,7 @@ def _run_analysis_pipeline_sync(
                 "entry_index": corner.get("entry_index"),
                 "apex_index": corner.get("apex_index"),
                 "_entry_index_first_lap": corner.get("_entry_index_first_lap", corner.get("entry_index")),
+                "avg_cumulative_distance": corner.get("avg_cumulative_distance"),
             })
 
     logger.info(f"[{analysis_id}] {len(corner_analysis_list)} corners analyzed successfully")
@@ -356,13 +359,20 @@ def _run_analysis_pipeline_sync(
         if cid is not None and cid not in unique_by_id:
             unique_by_id[cid] = c
     unique_corner_analysis = list(unique_by_id.values())
-    # Ordre circuit = tri par position sur le 1er tour (évite mélange entre laps)
-    _sort_idx = lambda c: c.get("_entry_index_first_lap") if c.get("_entry_index_first_lap") is not None else c.get("entry_index")
-    unique_corner_analysis.sort(key=lambda c: (_sort_idx(c) is None, _sort_idx(c) if _sort_idx(c) is not None else float("inf")))
+    # Ordre circuit = tri par distance cumulée à l'apex (position physique sur le circuit, indépendant du tour)
+    def _sort_key(c):
+        d = c.get("avg_cumulative_distance")
+        if d is not None and (isinstance(d, (int, float)) and not (d != d)):  # not NaN
+            return (0, float(d))
+        idx = c.get("_entry_index_first_lap") if c.get("_entry_index_first_lap") is not None else c.get("entry_index")
+        if idx is not None:
+            return (1, idx if isinstance(idx, (int, float)) else float("inf"))
+        return (2, float("inf"))
+    unique_corner_analysis.sort(key=_sort_key)
     logger.info(
-        "[%s] Ordre corners après tri (1er tour) : %s",
+        "[%s] Ordre corners (tri distance cumulée) : %s",
         analysis_id,
-        [f"V? idx1er={_sort_idx(c)}" for c in unique_corner_analysis],
+        [f"d={c.get('avg_cumulative_distance')}" for c in unique_corner_analysis],
     )
     # Forcer renumérotation séquentielle V1..Vn (ordre liste = ordre circuit) pour affichage cohérent
     final_id_to_new = {}
