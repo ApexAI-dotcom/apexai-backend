@@ -659,7 +659,7 @@ def _resample_adaptive(
 
 def detect_corners(
     df: pd.DataFrame,
-    min_lateral_g: float = 0.12,
+    min_lateral_g: float = 0.15,
     min_distance_between_corners: float = 6.0,
     expected_corners: Optional[int] = None,
     laps_analyzed: Optional[int] = None,
@@ -755,7 +755,7 @@ def detect_corners(
             inside = speed_rs[i]
             if before > 1 and after > 1 and inside < 0.97 * min(before, after):
                 c3[i] = True
-        vote = (c1.astype(int) + c2.astype(int) + c3.astype(int)) >= 1
+        vote = (c1.astype(int) + c2.astype(int) + c3.astype(int)) >= 2
         vote = _merge_close_runs(vote, cum_rs, max_gap_m=8.0)
         labeled_vote, num_runs = label(vote)
         is_corner_zone = np.zeros(len(vote), dtype=bool)
