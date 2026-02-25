@@ -12,6 +12,7 @@ from scipy.ndimage import label
 from typing import Dict, Any, List, Tuple, Optional
 import warnings
 import math
+import statistics
 
 # CONSTANTES
 EARTH_RADIUS_M = 6371000  # Rayon de la Terre en mètres
@@ -530,6 +531,56 @@ def detect_laps(df: pd.DataFrame, min_lap_distance_m: float = 100.0) -> pd.DataF
     return df_result
 
 
+def _merge_close_runs(
+    vote_array: np.ndarray,
+    cumulative_dist_array: np.ndarray,
+    max_gap_m: float = 25.0,
+) -> np.ndarray:
+    """
+    Fusionne les runs de True séparés par un gap de <= max_gap_m mètres.
+    Universel : fonctionne quel que soit le CSV (10Hz, 25Hz, 100Hz).
+    """
+    result = vote_array.astype(bool).copy()
+    n = len(result)
+    if n == 0 or len(cumulative_dist_array) != n:
+        return result
+    i = 0
+    while i < n:
+        if result[i]:
+            j = i
+            while j < n and result[j]:
+                j += 1
+            k = j
+            while k < n and not result[k]:
+                k += 1
+            if k < n:
+                gap_dist = float(cumulative_dist_array[k]) - float(cumulative_dist_array[j])
+                if 0 <= gap_dist <= max_gap_m:
+                    result[j:k] = True
+            i = j
+        else:
+            i += 1
+    return result
+
+
+def _renumber_corners_by_entry_index(corner_details: List[Dict]) -> Dict[int, int]:
+    """Tri par median entry_index, renumérotation V1, V2, ... Retourne old_id -> new_id."""
+    for corner in corner_details:
+        per_lap = corner.get("per_lap_data", [])
+        entry_indices = [lap["entry_index"] for lap in per_lap if lap.get("entry_index") is not None]
+        corner["_median_entry_index"] = statistics.median(entry_indices) if entry_indices else float("inf")
+    corner_details.sort(key=lambda c: c["_median_entry_index"])
+    old_to_new = {}
+    for i, corner in enumerate(corner_details, start=1):
+        old_id = corner.get("id", i)
+        old_to_new[old_id] = i
+        corner["id"] = i
+        corner["corner_id"] = i
+        corner["corner_number"] = i
+        corner["label"] = f"V{i}"
+    return old_to_new
+
+
 def _avg_spacing_m(cumulative_dist: np.ndarray) -> float:
     """Distance moyenne entre points consécutifs (m)."""
     if len(cumulative_dist) < 2:
@@ -705,6 +756,7 @@ def detect_corners(
             if before > 1 and after > 1 and inside < 0.97 * min(before, after):
                 c3[i] = True
         vote = (c1.astype(int) + c2.astype(int) + c3.astype(int)) >= 2
+        vote = _merge_close_runs(vote, cum_rs, max_gap_m=25.0)
         labeled_vote, num_runs = label(vote)
         is_corner_zone = np.zeros(len(vote), dtype=bool)
         for rid in range(1, num_runs + 1):
@@ -920,36 +972,8 @@ def detect_corners(
                 if apex_idx < len(df_circuit):
                     df_result.at[df_circuit.index[apex_idx], 'is_apex'] = True
 
-        # Numérotation géographique : tri à partir du même point que le rond vert (ligne de départ)
-        first_lap_mask = df_circuit['lap_number'] == df_circuit['lap_number'].min()
-        start_iloc = int(np.flatnonzero(first_lap_mask)[0]) if np.any(first_lap_mask) else 0
-        circuit_start_dist = float(cumulative_dist[start_iloc]) if start_iloc < len(cumulative_dist) else 0.0
-        lap_length = float(cumulative_dist[-1] - cumulative_dist[0]) if len(cumulative_dist) > 1 else 0.0
-        for corner in corner_details:
-            d = corner.get('avg_cumulative_distance', 0) - circuit_start_dist
-            if d < 0 and lap_length > 0:
-                d += lap_length
-            corner['_sort_key'] = d
-        corner_details = sorted(corner_details, key=lambda c: c['_sort_key'])
-
-        # LOG DIAGNOSTIC - à retirer après correction
-        log.info("[SORT DEBUG] circuit_start_dist=%.1f lap_length=%.1f", circuit_start_dist, lap_length)
-        for c in corner_details:
-            log.info(
-                "[SORT DEBUG] V%d avg_cum=%.1f sort_key=%.1f lat=%.6f lon=%.6f",
-                c.get('id', 0),
-                c.get('avg_cumulative_distance', 0),
-                c.get('_sort_key', 0),
-                c.get('apex_lat', 0) or 0,
-                c.get('apex_lon', 0) or 0
-            )
-
-        old_to_new = {}
-        for i, corner in enumerate(corner_details, start=1):
-            old_id = corner['id']
-            old_to_new[old_id] = i
-            corner['id'] = i
-            corner['label'] = f"V{i}"
+        # Renumérotation par ordre d'apparition (median entry_index) — universel tous CSV
+        old_to_new = _renumber_corners_by_entry_index(corner_details)
         for idx in df_result.index:
             if df_result.at[idx, 'is_corner']:
                 old = df_result.at[idx, 'corner_id']
