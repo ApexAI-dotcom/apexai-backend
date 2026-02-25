@@ -659,7 +659,7 @@ def _resample_adaptive(
 
 def detect_corners(
     df: pd.DataFrame,
-    min_lateral_g: float = 0.15,
+    min_lateral_g: float = 0.12,
     min_distance_between_corners: float = 6.0,
     expected_corners: Optional[int] = None,
     laps_analyzed: Optional[int] = None,
@@ -744,7 +744,7 @@ def detect_corners(
             curv_abs = np.abs(curvature_rs)
             nonzero = curv_abs[curv_abs > 1e-6]
             if len(nonzero) > 0:
-                thresh = float(np.percentile(nonzero, 30))
+                thresh = float(np.percentile(nonzero, 25))
                 c1 = curv_abs > thresh
         c2 = np.abs(lateral_g_rs) > min_lateral_g
         c3 = np.zeros(len(cum_rs), dtype=bool)
@@ -755,7 +755,7 @@ def detect_corners(
             inside = speed_rs[i]
             if before > 1 and after > 1 and inside < 0.97 * min(before, after):
                 c3[i] = True
-        vote = (c1.astype(int) + c2.astype(int) + c3.astype(int)) >= 2
+        vote = (c1.astype(int) + c2.astype(int) + c3.astype(int)) >= 1
         vote = _merge_close_runs(vote, cum_rs, max_gap_m=8.0)
         labeled_vote, num_runs = label(vote)
         is_corner_zone = np.zeros(len(vote), dtype=bool)
@@ -972,8 +972,25 @@ def detect_corners(
                 if apex_idx < len(df_circuit):
                     df_result.at[df_circuit.index[apex_idx], 'is_apex'] = True
 
-        # Renumérotation par ordre d'apparition (median entry_index) — universel tous CSV
-        old_to_new = _renumber_corners_by_entry_index(corner_details)
+        # Ordre géographique : V1 = premier virage après la ligne de départ (rond vert)
+        first_lap_mask = df_circuit["lap_number"] == df_circuit["lap_number"].min()
+        start_iloc = int(np.flatnonzero(first_lap_mask)[0]) if np.any(first_lap_mask) else 0
+        circuit_start_dist = float(cumulative_dist[start_iloc]) if start_iloc < len(cumulative_dist) else 0.0
+        lap_length = float(cumulative_dist[-1] - cumulative_dist[0]) if len(cumulative_dist) > 1 else 0.0
+        for corner in corner_details:
+            d = corner.get("avg_cumulative_distance", 0) - circuit_start_dist
+            if d < 0 and lap_length > 0:
+                d += lap_length
+            corner["_sort_key"] = d
+        corner_details.sort(key=lambda c: c["_sort_key"])
+        old_to_new = {}
+        for i, corner in enumerate(corner_details, start=1):
+            old_id = corner.get("id", i)
+            old_to_new[old_id] = i
+            corner["id"] = i
+            corner["corner_id"] = i
+            corner["corner_number"] = i
+            corner["label"] = f"V{i}"
         for idx in df_result.index:
             if df_result.at[idx, 'is_corner']:
                 old = df_result.at[idx, 'corner_id']
