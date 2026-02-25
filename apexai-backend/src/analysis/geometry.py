@@ -979,7 +979,7 @@ def detect_corners(
                 if apex_idx < len(df_circuit):
                     df_result.at[df_circuit.index[apex_idx], 'is_apex'] = True
 
-        # Ordre de passage : V1 = premier virage rencontré sur le premier tour du cluster (entry_index croissant)
+        # Ordre de passage : V1 = premier virage rencontré (entry_index du 1er tour du cluster)
         corner_details.sort(key=lambda c: c.get("_entry_index_first_lap", float("inf")))
         old_to_new = {}
         for i, corner in enumerate(corner_details, start=1):
@@ -989,6 +989,10 @@ def detect_corners(
             corner["corner_id"] = i
             corner["corner_number"] = i
             corner["label"] = f"V{i}"
+        log.info(
+            "[detect_corners] Ordre par entry_index 1er tour : %s",
+            [f"V{c['id']}=idx{c.get('_entry_index_first_lap', '?')}" for c in corner_details],
+        )
         for idx in df_result.index:
             if df_result.at[idx, 'is_corner']:
                 old = df_result.at[idx, 'corner_id']

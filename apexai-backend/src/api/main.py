@@ -198,14 +198,14 @@ async def root():
 async def health():
     """
     Health check endpoint.
-    
-    Returns:
-        Statut de santé de l'API
+    En prod, commit_sha permet de vérifier la version déployée (Railway injecte RAILWAY_GIT_COMMIT_SHA).
     """
+    commit_sha = os.environ.get("RAILWAY_GIT_COMMIT_SHA") or os.environ.get("GIT_COMMIT_SHA") or os.environ.get("VERCEL_GIT_COMMIT_SHA")
     return {
         "status": "healthy",
         "version": "1.0.0",
-        "environment": settings.ENVIRONMENT
+        "environment": settings.ENVIRONMENT,
+        "commit_sha": commit_sha[:7] if commit_sha else None,
     }
 
 

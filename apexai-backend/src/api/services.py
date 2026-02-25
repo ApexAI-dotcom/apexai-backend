@@ -216,7 +216,20 @@ def _run_analysis_pipeline_sync(
                 c["per_lap_data"] = [pl for pl in per_lap if pl.get("lap") in lap_set]
                 kept_corners.append(c)
         corner_details = kept_corners
+        # Renuméroter V1..Vn après suppression d’un virage (ordre conservé)
+        refilter_id_to_new = {}
+        for i, c in enumerate(corner_details, start=1):
+            old_id = c.get("id")
+            refilter_id_to_new[old_id] = i
+            c["id"] = i
+            c["corner_id"] = i
+            c["corner_number"] = i
+            c["label"] = f"V{i}"
         df = df_perf.reset_index(drop=True)
+        for idx in df.index:
+            if df.at[idx, "is_corner"]:
+                old_cid = df.at[idx, "corner_id"]
+                df.at[idx, "corner_id"] = refilter_id_to_new.get(old_cid, old_cid)
         old_to_new = {old: i for i, old in enumerate(df_perf.index)}
         for c in corner_details:
             c["entry_index"] = old_to_new.get(c["entry_index"], c["entry_index"])
