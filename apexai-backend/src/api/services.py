@@ -331,15 +331,26 @@ def _run_analysis_pipeline_sync(
 
     logger.info(f"[{analysis_id}] {len(corner_analysis_list)} corners analyzed successfully")
 
-    # Virages uniques du circuit (dédupliquer par corner_id)
+    # Virages uniques du circuit (dédupliquer par corner_id, conserver l'ordre de corner_details)
     unique_by_id = {}
     for c in corner_analysis_list:
         cid = c.get("corner_id")
         if cid is not None and cid not in unique_by_id:
             unique_by_id[cid] = c
     unique_corner_analysis = list(unique_by_id.values())
+    # Forcer renumérotation séquentielle V1..Vn (ordre liste = ordre circuit) pour affichage cohérent
+    final_id_to_new = {}
+    for i, c in enumerate(unique_corner_analysis, start=1):
+        old_id = c.get("corner_id")
+        final_id_to_new[old_id] = i
+        c["corner_id"] = i
+        c["corner_number"] = i
+        c["label"] = f"V{i}"
+    for idx in df.index:
+        if df.at[idx, "is_corner"]:
+            old_cid = df.at[idx, "corner_id"]
+            df.at[idx, "corner_id"] = final_id_to_new.get(old_cid, old_cid)
     for c in unique_corner_analysis:
-        c["label"] = f"V{c.get('corner_id', '?')}"
         c["avg_note"] = "Valeurs sur ce tour" if laps_analyzed == 1 else f"Valeurs moyennées sur {laps_analyzed} tours"
     corners_detected = len(unique_corner_analysis)
 
