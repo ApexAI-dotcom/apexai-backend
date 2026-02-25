@@ -534,7 +534,7 @@ def detect_laps(df: pd.DataFrame, min_lap_distance_m: float = 100.0) -> pd.DataF
 def _merge_close_runs(
     vote_array: np.ndarray,
     cumulative_dist_array: np.ndarray,
-    max_gap_m: float = 25.0,
+    max_gap_m: float = 8.0,
 ) -> np.ndarray:
     """
     Fusionne les runs de True séparés par un gap de <= max_gap_m mètres.
@@ -756,7 +756,7 @@ def detect_corners(
             if before > 1 and after > 1 and inside < 0.97 * min(before, after):
                 c3[i] = True
         vote = (c1.astype(int) + c2.astype(int) + c3.astype(int)) >= 2
-        vote = _merge_close_runs(vote, cum_rs, max_gap_m=25.0)
+        vote = _merge_close_runs(vote, cum_rs, max_gap_m=8.0)
         labeled_vote, num_runs = label(vote)
         is_corner_zone = np.zeros(len(vote), dtype=bool)
         for rid in range(1, num_runs + 1):
