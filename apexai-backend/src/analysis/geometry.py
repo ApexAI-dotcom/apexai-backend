@@ -938,12 +938,16 @@ def detect_corners(
                 consistency_score = 1.0
             apex_dists = [cumulative_dist[seg['apex_index']] for seg in cluster if seg['apex_index'] < len(cumulative_dist)]
             avg_cum_dist = float(np.mean(apex_dists)) if apex_dists else 0.0
-            min_cum_dist = float(min(apex_dists)) if apex_dists else 0.0  # premier passage = ordre géo
+            min_cum_dist = float(min(apex_dists)) if apex_dists else 0.0
+            first_lap_in_cluster = min(seg['lap'] for seg in cluster)
+            entry_on_first_lap = [p['entry_index'] for p in per_lap_data if p.get('lap') == first_lap_in_cluster]
+            entry_index_first_lap = min(entry_on_first_lap) if entry_on_first_lap else float('inf')
             ref = cluster[0]
             corner_details.append({
                 'id': physical_id,
                 'avg_cumulative_distance': avg_cum_dist,
                 'min_cumulative_distance': min_cum_dist,
+                '_entry_index_first_lap': entry_index_first_lap,
                 'lap': ref['lap'],
                 'label': f"V{physical_id}",
                 'type': corner_type,
@@ -975,18 +979,8 @@ def detect_corners(
                 if apex_idx < len(df_circuit):
                     df_result.at[df_circuit.index[apex_idx], 'is_apex'] = True
 
-        # Ordre géographique : V1 = premier virage après la ligne de départ (rond vert)
-        # On trie par distance du PREMIER passage (min) pour éviter décalage multi-tours
-        first_lap_mask = df_circuit["lap_number"] == df_circuit["lap_number"].min()
-        start_iloc = int(np.flatnonzero(first_lap_mask)[0]) if np.any(first_lap_mask) else 0
-        circuit_start_dist = float(cumulative_dist[start_iloc]) if start_iloc < len(cumulative_dist) else 0.0
-        lap_length = float(cumulative_dist[-1] - cumulative_dist[0]) if len(cumulative_dist) > 1 else 0.0
-        for corner in corner_details:
-            d = corner.get("min_cumulative_distance", corner.get("avg_cumulative_distance", 0)) - circuit_start_dist
-            if d < 0 and lap_length > 0:
-                d += lap_length
-            corner["_sort_key"] = d
-        corner_details.sort(key=lambda c: c["_sort_key"])
+        # Ordre de passage : V1 = premier virage rencontré sur le premier tour du cluster (entry_index croissant)
+        corner_details.sort(key=lambda c: c.get("_entry_index_first_lap", float("inf")))
         old_to_new = {}
         for i, corner in enumerate(corner_details, start=1):
             old_id = corner.get("id", i)
