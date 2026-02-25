@@ -242,6 +242,15 @@ def _run_analysis_pipeline_sync(
         corners_meta["corner_details"] = corner_details
         df.attrs["corners"] = corners_meta
         logger.info(f"[{analysis_id}] Refiltered to selected laps only: {len(df)} rows, {len(corner_details)} corners")
+        # Ordre circuit = position sur le 1er tour sélectionné (éviter mélange laps)
+        first_lap = min(lap_filter)
+        for c in corner_details:
+            for pl in c.get("per_lap_data") or []:
+                if pl.get("lap") == first_lap and pl.get("entry_index") is not None:
+                    c["_entry_index_first_lap"] = pl["entry_index"]
+                    break
+            else:
+                c["_entry_index_first_lap"] = c.get("entry_index")
 
     df = calculate_optimal_trajectory(df)
     logger.info(f"[{analysis_id}] Step 5/5: Calculating score and coaching...")
@@ -273,6 +282,7 @@ def _run_analysis_pipeline_sync(
                 "label": f"V{corner_id}",
                 "entry_index": corner_data.get("entry_index"),
                 "apex_index": corner_data.get("apex_index"),
+                "_entry_index_first_lap": corner_data.get("_entry_index_first_lap"),
             }
             if entry_speed is not None:
                 out["entry_speed"] = float(entry_speed)
@@ -313,6 +323,7 @@ def _run_analysis_pipeline_sync(
             analysis["lap"] = corner.get("lap")
             analysis["entry_index"] = corner.get("entry_index")
             analysis["apex_index"] = corner.get("apex_index")
+            analysis["_entry_index_first_lap"] = corner.get("_entry_index_first_lap", corner.get("entry_index"))
             corner_analysis_list.append(sanitize_corner_data(analysis))
         except Exception as e:
             logger.warning(f"[{analysis_id}] Failed to analyze corner {corner.get('id', 'unknown')}: {e}")
@@ -333,6 +344,7 @@ def _run_analysis_pipeline_sync(
                 "apex_lon": None,
                 "entry_index": corner.get("entry_index"),
                 "apex_index": corner.get("apex_index"),
+                "_entry_index_first_lap": corner.get("_entry_index_first_lap", corner.get("entry_index")),
             })
 
     logger.info(f"[{analysis_id}] {len(corner_analysis_list)} corners analyzed successfully")
@@ -344,12 +356,13 @@ def _run_analysis_pipeline_sync(
         if cid is not None and cid not in unique_by_id:
             unique_by_id[cid] = c
     unique_corner_analysis = list(unique_by_id.values())
-    # Ordre circuit = tri par entry_index (position sur le tour) pour que V1..Vn suivent le circuit
-    unique_corner_analysis.sort(key=lambda c: (c.get("entry_index") is None, c.get("entry_index", float("inf"))))
+    # Ordre circuit = tri par position sur le 1er tour (évite mélange entre laps)
+    _sort_idx = lambda c: c.get("_entry_index_first_lap") if c.get("_entry_index_first_lap") is not None else c.get("entry_index")
+    unique_corner_analysis.sort(key=lambda c: (_sort_idx(c) is None, _sort_idx(c) if _sort_idx(c) is not None else float("inf")))
     logger.info(
-        "[%s] Ordre corners après tri entry_index : %s",
+        "[%s] Ordre corners après tri (1er tour) : %s",
         analysis_id,
-        [f"cid={c.get('corner_id')} idx={c.get('entry_index')}" for c in unique_corner_analysis],
+        [f"V? idx1er={_sort_idx(c)}" for c in unique_corner_analysis],
     )
     # Forcer renumérotation séquentielle V1..Vn (ordre liste = ordre circuit) pour affichage cohérent
     final_id_to_new = {}
@@ -365,6 +378,15 @@ def _run_analysis_pipeline_sync(
             df.at[idx, "corner_id"] = final_id_to_new.get(old_cid, old_cid)
     for c in unique_corner_analysis:
         c["avg_note"] = "Valeurs sur ce tour" if laps_analyzed == 1 else f"Valeurs moyennées sur {laps_analyzed} tours"
+    # Remplir apex_lat/apex_lon depuis le df si manquants (pour que trajectoire + heatmap affichent tous les virages)
+    lat_col = "latitude_smooth" if "latitude_smooth" in df.columns else "latitude"
+    lon_col = "longitude_smooth" if "longitude_smooth" in df.columns else "longitude"
+    for c in unique_corner_analysis:
+        if (c.get("apex_lat") is None or c.get("apex_lon") is None) and c.get("apex_index") is not None:
+            idx = c["apex_index"]
+            if idx in df.index and lat_col in df.columns and lon_col in df.columns:
+                c["apex_lat"] = float(df.at[idx, lat_col]) if pd.notna(df.at[idx, lat_col]) else c.get("apex_lat")
+                c["apex_lon"] = float(df.at[idx, lon_col]) if pd.notna(df.at[idx, lon_col]) else c.get("apex_lon")
     corners_detected = len(unique_corner_analysis)
 
     # Une seule source de vérité : overall_score = sum(breakdown) depuis calculate_performance_score
