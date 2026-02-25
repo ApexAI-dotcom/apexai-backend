@@ -659,7 +659,7 @@ def _resample_adaptive(
 
 def detect_corners(
     df: pd.DataFrame,
-    min_lateral_g: float = 0.20,
+    min_lateral_g: float = 0.15,
     min_distance_between_corners: float = 6.0,
     expected_corners: Optional[int] = None,
     laps_analyzed: Optional[int] = None,
@@ -744,9 +744,9 @@ def detect_corners(
             curv_abs = np.abs(curvature_rs)
             nonzero = curv_abs[curv_abs > 1e-6]
             if len(nonzero) > 0:
-                thresh = float(np.percentile(nonzero, 40))
+                thresh = float(np.percentile(nonzero, 30))
                 c1 = curv_abs > thresh
-        c2 = np.abs(lateral_g_rs) > 0.20
+        c2 = np.abs(lateral_g_rs) > min_lateral_g
         c3 = np.zeros(len(cum_rs), dtype=bool)
         W = 30
         for i in range(W, len(cum_rs) - W):
@@ -761,7 +761,7 @@ def detect_corners(
         is_corner_zone = np.zeros(len(vote), dtype=bool)
         for rid in range(1, num_runs + 1):
             run_mask = labeled_vote == rid
-            if np.sum(run_mask) >= 5:
+            if np.sum(run_mask) >= 4:
                 is_corner_zone[run_mask] = True
 
         if not is_corner_zone.any():
@@ -784,7 +784,7 @@ def detect_corners(
             start_orig = int(orig_iloc_rs[start_rs])
             end_orig = int(orig_iloc_rs[end_rs])
             g_vals = np.abs([lateral_g[i] for i in indices_orig if i < len(lateral_g)])
-            if len(g_vals) > 0 and np.max(g_vals) < 0.20:
+            if len(g_vals) > 0 and np.max(g_vals) < min_lateral_g:
                 continue
             apex_local = np.argmax(np.abs([lateral_g[i] for i in indices_orig if i < len(lateral_g)]))
             apex_orig = int(indices_orig[apex_local])
