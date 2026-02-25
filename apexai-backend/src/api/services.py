@@ -271,6 +271,8 @@ def _run_analysis_pipeline_sync(
                 "lap": corner_data.get("lap"),
                 "per_lap_data": corner_data.get("per_lap_data", []),
                 "label": f"V{corner_id}",
+                "entry_index": corner_data.get("entry_index"),
+                "apex_index": corner_data.get("apex_index"),
             }
             if entry_speed is not None:
                 out["entry_speed"] = float(entry_speed)
@@ -309,6 +311,8 @@ def _run_analysis_pipeline_sync(
             analysis["apex_lon"] = analysis.get("apex_lon") if analysis.get("apex_lon") is not None else corner.get("apex_lon")
             analysis["per_lap_data"] = corner.get("per_lap_data", [])
             analysis["lap"] = corner.get("lap")
+            analysis["entry_index"] = corner.get("entry_index")
+            analysis["apex_index"] = corner.get("apex_index")
             corner_analysis_list.append(sanitize_corner_data(analysis))
         except Exception as e:
             logger.warning(f"[{analysis_id}] Failed to analyze corner {corner.get('id', 'unknown')}: {e}")
@@ -327,6 +331,8 @@ def _run_analysis_pipeline_sync(
                 "score": 50.0,
                 "apex_lat": None,
                 "apex_lon": None,
+                "entry_index": corner.get("entry_index"),
+                "apex_index": corner.get("apex_index"),
             })
 
     logger.info(f"[{analysis_id}] {len(corner_analysis_list)} corners analyzed successfully")
@@ -338,6 +344,13 @@ def _run_analysis_pipeline_sync(
         if cid is not None and cid not in unique_by_id:
             unique_by_id[cid] = c
     unique_corner_analysis = list(unique_by_id.values())
+    # Ordre circuit = tri par entry_index (position sur le tour) pour que V1..Vn suivent le circuit
+    unique_corner_analysis.sort(key=lambda c: (c.get("entry_index") is None, c.get("entry_index", float("inf"))))
+    logger.info(
+        "[%s] Ordre corners après tri entry_index : %s",
+        analysis_id,
+        [f"cid={c.get('corner_id')} idx={c.get('entry_index')}" for c in unique_corner_analysis],
+    )
     # Forcer renumérotation séquentielle V1..Vn (ordre liste = ordre circuit) pour affichage cohérent
     final_id_to_new = {}
     for i, c in enumerate(unique_corner_analysis, start=1):
