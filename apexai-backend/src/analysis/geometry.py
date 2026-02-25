@@ -936,11 +936,14 @@ def detect_corners(
                 consistency_score = max(0.0, min(1.0, 1.0 - mean_dist / coherence_radius_m))
             else:
                 consistency_score = 1.0
-            avg_cum_dist = float(np.mean([cumulative_dist[seg['apex_index']] for seg in cluster if seg['apex_index'] < len(cumulative_dist)])) if cluster else 0.0
+            apex_dists = [cumulative_dist[seg['apex_index']] for seg in cluster if seg['apex_index'] < len(cumulative_dist)]
+            avg_cum_dist = float(np.mean(apex_dists)) if apex_dists else 0.0
+            min_cum_dist = float(min(apex_dists)) if apex_dists else 0.0  # premier passage = ordre géo
             ref = cluster[0]
             corner_details.append({
                 'id': physical_id,
                 'avg_cumulative_distance': avg_cum_dist,
+                'min_cumulative_distance': min_cum_dist,
                 'lap': ref['lap'],
                 'label': f"V{physical_id}",
                 'type': corner_type,
@@ -973,12 +976,13 @@ def detect_corners(
                     df_result.at[df_circuit.index[apex_idx], 'is_apex'] = True
 
         # Ordre géographique : V1 = premier virage après la ligne de départ (rond vert)
+        # On trie par distance du PREMIER passage (min) pour éviter décalage multi-tours
         first_lap_mask = df_circuit["lap_number"] == df_circuit["lap_number"].min()
         start_iloc = int(np.flatnonzero(first_lap_mask)[0]) if np.any(first_lap_mask) else 0
         circuit_start_dist = float(cumulative_dist[start_iloc]) if start_iloc < len(cumulative_dist) else 0.0
         lap_length = float(cumulative_dist[-1] - cumulative_dist[0]) if len(cumulative_dist) > 1 else 0.0
         for corner in corner_details:
-            d = corner.get("avg_cumulative_distance", 0) - circuit_start_dist
+            d = corner.get("min_cumulative_distance", corner.get("avg_cumulative_distance", 0)) - circuit_start_dist
             if d < 0 and lap_length > 0:
                 d += lap_length
             corner["_sort_key"] = d
