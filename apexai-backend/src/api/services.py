@@ -246,11 +246,15 @@ def _run_analysis_pipeline_sync(
         first_lap = min(lap_filter)
         for c in corner_details:
             for pl in c.get("per_lap_data") or []:
-                if pl.get("lap") == first_lap and pl.get("entry_index") is not None:
-                    c["_entry_index_first_lap"] = pl["entry_index"]
+                if pl.get("lap") == first_lap:
+                    if pl.get("entry_index") is not None:
+                        c["_entry_index_first_lap"] = pl["entry_index"]
+                    if pl.get("apex_index") is not None:
+                        c["_apex_index_first_lap"] = pl["apex_index"]
                     break
             else:
                 c["_entry_index_first_lap"] = c.get("entry_index")
+                c["_apex_index_first_lap"] = c.get("apex_index")
 
     df = calculate_optimal_trajectory(df)
     logger.info(f"[{analysis_id}] Step 5/5: Calculating score and coaching...")
@@ -283,6 +287,7 @@ def _run_analysis_pipeline_sync(
                 "entry_index": corner_data.get("entry_index"),
                 "apex_index": corner_data.get("apex_index"),
                 "_entry_index_first_lap": corner_data.get("_entry_index_first_lap"),
+                "_apex_index_first_lap": corner_data.get("_apex_index_first_lap"),
                 "avg_cumulative_distance": corner_data.get("avg_cumulative_distance"),
             }
             if entry_speed is not None:
@@ -325,6 +330,7 @@ def _run_analysis_pipeline_sync(
             analysis["entry_index"] = corner.get("entry_index")
             analysis["apex_index"] = corner.get("apex_index")
             analysis["_entry_index_first_lap"] = corner.get("_entry_index_first_lap", corner.get("entry_index"))
+            analysis["_apex_index_first_lap"] = corner.get("_apex_index_first_lap", corner.get("apex_index"))
             analysis["avg_cumulative_distance"] = corner.get("avg_cumulative_distance")
             corner_analysis_list.append(sanitize_corner_data(analysis))
         except Exception as e:
@@ -347,6 +353,7 @@ def _run_analysis_pipeline_sync(
                 "entry_index": corner.get("entry_index"),
                 "apex_index": corner.get("apex_index"),
                 "_entry_index_first_lap": corner.get("_entry_index_first_lap", corner.get("entry_index")),
+                "_apex_index_first_lap": corner.get("_apex_index_first_lap", corner.get("apex_index")),
                 "avg_cumulative_distance": corner.get("avg_cumulative_distance"),
             })
 
@@ -361,30 +368,34 @@ def _run_analysis_pipeline_sync(
     unique_corner_analysis = list(unique_by_id.values())
     # Log diagnostic AVANT tri (pour débogage si ordre reste faux)
     logger.info(
-        "[%s] [ordre] AVANT tri — cid, apex_index, avg_cum_dist : %s",
+        "[%s] [ordre] AVANT tri — cid, apex1er=, apex_global= : %s",
         analysis_id,
-        [f"cid={c.get('corner_id')} apex={c.get('apex_index')} d={c.get('avg_cumulative_distance')}" for c in unique_corner_analysis],
+        [f"cid={c.get('corner_id')} apex1er={c.get('_apex_index_first_lap')} apex={c.get('apex_index')}" for c in unique_corner_analysis],
     )
-    # Ordre circuit = tri par position dans le df actuel (apex_index = ordre de passage sur les tours sélectionnés)
+    # Ordre circuit = tri par apex sur le 1er tour sélectionné (évite mélange lap 4 / lap 6 / lap 8)
     def _sort_key(c):
-        # 1) apex_index dans le df actuel = ordre chronologique garanti (lap 4, 6, 8 concaténés)
+        # 1) _apex_index_first_lap = apex sur le 1er tour uniquement → ordre de passage garanti
+        idx1er = c.get("_apex_index_first_lap")
+        if idx1er is not None and isinstance(idx1er, (int, float)) and idx1er == idx1er:
+            return (0, int(idx1er))
+        # 2) fallback: apex_index global (df concaténé)
         idx = c.get("apex_index")
-        if idx is not None and isinstance(idx, (int, float)) and idx == idx:  # not NaN
-            return (0, int(idx))
-        # 2) fallback: distance cumulée à l'apex
+        if idx is not None and isinstance(idx, (int, float)) and idx == idx:
+            return (1, int(idx))
+        # 3) fallback: distance cumulée
         d = c.get("avg_cumulative_distance")
         if d is not None and isinstance(d, (int, float)) and d == d:
-            return (1, float(d))
-        # 3) fallback: entry index 1er tour
-        idx1 = c.get("_entry_index_first_lap") or c.get("entry_index")
-        if idx1 is not None:
-            return (2, idx1 if isinstance(idx1, (int, float)) else float("inf"))
-        return (3, float("inf"))
+            return (2, float(d))
+        # 4) fallback: entry index 1er tour
+        e1 = c.get("_entry_index_first_lap") or c.get("entry_index")
+        if e1 is not None:
+            return (3, e1 if isinstance(e1, (int, float)) else float("inf"))
+        return (4, float("inf"))
     unique_corner_analysis.sort(key=_sort_key)
     logger.info(
-        "[%s] [ordre] APRÈS tri (V1..Vn) apex_index : %s",
+        "[%s] [ordre] APRÈS tri (V1..Vn) apex1er tour : %s",
         analysis_id,
-        [f"V{i}=apex{c.get('apex_index')}" for i, c in enumerate(unique_corner_analysis, start=1)],
+        [f"V{i}=apex1er{c.get('_apex_index_first_lap')}" for i, c in enumerate(unique_corner_analysis, start=1)],
     )
     # Forcer renumérotation séquentielle V1..Vn (ordre liste = ordre circuit) pour affichage cohérent
     final_id_to_new = {}

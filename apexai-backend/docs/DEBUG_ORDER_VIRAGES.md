@@ -4,15 +4,14 @@
 
 Lors d’une analyse, chercher dans les logs les lignes contenant **`[ordre]`** :
 
-1. **`[ordre] AVANT tri — cid, apex_index, avg_cum_dist`**  
-   - Donne l’ordre des virages **avant** le tri (ordre d’insertion dans `unique_by_id`).  
-   - Pour chaque virage : `cid` (id actuel), `apex` (index de l’apex dans le df), `d` (distance cumulée si dispo).  
-   - Si les `apex` ne sont **pas** croissants, le tri va les réordonner.
+1. **`[ordre] AVANT tri — cid, apex1er=, apex_global=`**  
+   - Ordre **avant** le tri. `apex1er` = apex sur le 1er tour sélectionné (lap 4), `apex` = index global (df concaténé).  
+   - Le tri utilise **apex1er** pour éviter de mélanger des indices de lap 4, 6 et 8.
 
-2. **`[ordre] APRÈS tri (V1..Vn) apex_index`**  
-   - Donne l’ordre **final** envoyé à la heatmap / trajectoire : V1=apex?, V2=apex?, …  
-   - Les `apex` doivent être **strictement croissants** (V1 = plus petit apex_index, V11 = plus grand).  
-   - Si c’est le cas en logs mais que la carte est encore fausse, le souci est côté front ou autre source de données.
+2. **`[ordre] APRÈS tri (V1..Vn) apex1er tour`**  
+   - Ordre **final** : V1=apex1er?, V2=apex1er?, …  
+   - Les `apex1er` doivent être **strictement croissants** (ordre du circuit sur le 1er tour).  
+   - Si c’est le cas en logs mais que la carte est encore fausse, le souci est côté front ou cache.
 
 3. **`[detect_corners] Ordre par entry_index 1er tour`** (dans geometry)  
    - Ordre des virages **en geometry** (avant refilter).  
