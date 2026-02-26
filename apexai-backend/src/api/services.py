@@ -254,7 +254,8 @@ def _run_analysis_pipeline_sync(
                     break
             else:
                 c["_entry_index_first_lap"] = c.get("entry_index")
-                c["_apex_index_first_lap"] = c.get("apex_index")
+                # Ne pas mettre _apex_index_first_lap (rester None) → tri utilisera avg_cumulative_distance
+                # pour placer ce virage correctement sur le circuit au lieu de l'index global (lap 6/8)
 
     df = calculate_optimal_trajectory(df)
     logger.info(f"[{analysis_id}] Step 5/5: Calculating score and coaching...")
@@ -372,20 +373,20 @@ def _run_analysis_pipeline_sync(
         analysis_id,
         [f"cid={c.get('corner_id')} apex1er={c.get('_apex_index_first_lap')} apex={c.get('apex_index')}" for c in unique_corner_analysis],
     )
-    # Ordre circuit = tri par apex sur le 1er tour sélectionné (évite mélange lap 4 / lap 6 / lap 8)
+    # Ordre circuit = tri par apex sur le 1er tour, puis par distance pour les corners sans donnée lap 1
     def _sort_key(c):
-        # 1) _apex_index_first_lap = apex sur le 1er tour uniquement → ordre de passage garanti
+        # 1) _apex_index_first_lap = apex sur le 1er tour sélectionné → ordre garanti
         idx1er = c.get("_apex_index_first_lap")
         if idx1er is not None and isinstance(idx1er, (int, float)) and idx1er == idx1er:
             return (0, int(idx1er))
-        # 2) fallback: apex_index global (df concaténé)
-        idx = c.get("apex_index")
-        if idx is not None and isinstance(idx, (int, float)) and idx == idx:
-            return (1, int(idx))
-        # 3) fallback: distance cumulée
+        # 2) pas de donnée sur le 1er tour : utiliser distance cumulée (position physique sur le circuit)
         d = c.get("avg_cumulative_distance")
         if d is not None and isinstance(d, (int, float)) and d == d:
-            return (2, float(d))
+            return (1, float(d))
+        # 3) fallback: apex_index global
+        idx = c.get("apex_index")
+        if idx is not None and isinstance(idx, (int, float)) and idx == idx:
+            return (2, int(idx))
         # 4) fallback: entry index 1er tour
         e1 = c.get("_entry_index_first_lap") or c.get("entry_index")
         if e1 is not None:
