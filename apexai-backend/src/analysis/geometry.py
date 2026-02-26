@@ -563,13 +563,48 @@ def _merge_close_runs(
     return result
 
 
-def _renumber_corners_by_entry_index(corner_details: List[Dict]) -> Dict[int, int]:
-    """Tri par median entry_index, renumérotation V1, V2, ... Retourne old_id -> new_id."""
-    for corner in corner_details:
-        per_lap = corner.get("per_lap_data", [])
-        entry_indices = [lap["entry_index"] for lap in per_lap if lap.get("entry_index") is not None]
-        corner["_median_entry_index"] = statistics.median(entry_indices) if entry_indices else float("inf")
-    corner_details.sort(key=lambda c: c["_median_entry_index"])
+def _renumber_corners_by_entry_index(
+    corner_details: List[Dict], df_circuit: pd.DataFrame
+) -> Dict[int, int]:
+    """
+    Trie les virages dans l'ordre chronologique du circuit.
+    Utilise l'entry_index RELATIF au début de chaque tour (évite le bug quand
+    un virage n'a pas le même nombre de tours que les autres).
+    Retourne old_id -> new_id.
+    """
+    if df_circuit is None or "lap_number" not in df_circuit.columns:
+        for corner in corner_details:
+            corner["_sort_index"] = corner.get("_entry_index_first_lap", float("inf"))
+        corner_details.sort(key=lambda c: c.get("_sort_index", float("inf")))
+    else:
+        lap_starts = {}
+        for lap_num in pd.unique(df_circuit["lap_number"]):
+            lap_mask = df_circuit["lap_number"] == lap_num
+            if lap_mask.any():
+                lap_starts[lap_num] = int(df_circuit.index[lap_mask].min())
+
+        for corner in corner_details:
+            per_lap = corner.get("per_lap_data", [])
+            if not per_lap:
+                corner["_sort_index"] = float("inf")
+                continue
+            relative_indices = []
+            for lap_data in per_lap:
+                lap_num = lap_data.get("lap")
+                entry_idx = lap_data.get("entry_index")
+                if (
+                    lap_num is not None
+                    and entry_idx is not None
+                    and lap_num in lap_starts
+                ):
+                    relative_indices.append(entry_idx - lap_starts[lap_num])
+            if relative_indices:
+                corner["_sort_index"] = statistics.median(relative_indices)
+            else:
+                corner["_sort_index"] = float("inf")
+
+        corner_details.sort(key=lambda c: c.get("_sort_index", float("inf")))
+
     old_to_new = {}
     for i, corner in enumerate(corner_details, start=1):
         old_id = corner.get("id", i)
@@ -979,19 +1014,11 @@ def detect_corners(
                 if apex_idx < len(df_circuit):
                     df_result.at[df_circuit.index[apex_idx], 'is_apex'] = True
 
-        # Ordre de passage : V1 = premier virage rencontré (entry_index du 1er tour du cluster)
-        corner_details.sort(key=lambda c: c.get("_entry_index_first_lap", float("inf")))
-        old_to_new = {}
-        for i, corner in enumerate(corner_details, start=1):
-            old_id = corner.get("id", i)
-            old_to_new[old_id] = i
-            corner["id"] = i
-            corner["corner_id"] = i
-            corner["corner_number"] = i
-            corner["label"] = f"V{i}"
+        # Ordre de passage : tri par entry_index RELATIF au début de chaque tour (median)
+        old_to_new = _renumber_corners_by_entry_index(corner_details, df_circuit)
         log.info(
-            "[detect_corners] Ordre par entry_index 1er tour : %s",
-            [f"V{c['id']}=idx{c.get('_entry_index_first_lap', '?')}" for c in corner_details],
+            "[detect_corners] Ordre par entry_index relatif (median) : %s",
+            [f"V{c['id']} sort_idx={c.get('_sort_index', '?')}" for c in corner_details],
         )
         for idx in df_result.index:
             if df_result.at[idx, 'is_corner']:
