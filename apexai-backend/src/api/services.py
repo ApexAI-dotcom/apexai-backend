@@ -359,20 +359,32 @@ def _run_analysis_pipeline_sync(
         if cid is not None and cid not in unique_by_id:
             unique_by_id[cid] = c
     unique_corner_analysis = list(unique_by_id.values())
-    # Ordre circuit = tri par distance cumulée à l'apex (position physique sur le circuit, indépendant du tour)
+    # Log diagnostic AVANT tri (pour débogage si ordre reste faux)
+    logger.info(
+        "[%s] [ordre] AVANT tri — cid, apex_index, avg_cum_dist : %s",
+        analysis_id,
+        [f"cid={c.get('corner_id')} apex={c.get('apex_index')} d={c.get('avg_cumulative_distance')}" for c in unique_corner_analysis],
+    )
+    # Ordre circuit = tri par position dans le df actuel (apex_index = ordre de passage sur les tours sélectionnés)
     def _sort_key(c):
+        # 1) apex_index dans le df actuel = ordre chronologique garanti (lap 4, 6, 8 concaténés)
+        idx = c.get("apex_index")
+        if idx is not None and isinstance(idx, (int, float)) and idx == idx:  # not NaN
+            return (0, int(idx))
+        # 2) fallback: distance cumulée à l'apex
         d = c.get("avg_cumulative_distance")
-        if d is not None and (isinstance(d, (int, float)) and not (d != d)):  # not NaN
-            return (0, float(d))
-        idx = c.get("_entry_index_first_lap") if c.get("_entry_index_first_lap") is not None else c.get("entry_index")
-        if idx is not None:
-            return (1, idx if isinstance(idx, (int, float)) else float("inf"))
-        return (2, float("inf"))
+        if d is not None and isinstance(d, (int, float)) and d == d:
+            return (1, float(d))
+        # 3) fallback: entry index 1er tour
+        idx1 = c.get("_entry_index_first_lap") or c.get("entry_index")
+        if idx1 is not None:
+            return (2, idx1 if isinstance(idx1, (int, float)) else float("inf"))
+        return (3, float("inf"))
     unique_corner_analysis.sort(key=_sort_key)
     logger.info(
-        "[%s] Ordre corners (tri distance cumulée) : %s",
+        "[%s] [ordre] APRÈS tri (V1..Vn) apex_index : %s",
         analysis_id,
-        [f"d={c.get('avg_cumulative_distance')}" for c in unique_corner_analysis],
+        [f"V{i}=apex{c.get('apex_index')}" for i, c in enumerate(unique_corner_analysis, start=1)],
     )
     # Forcer renumérotation séquentielle V1..Vn (ordre liste = ordre circuit) pour affichage cohérent
     final_id_to_new = {}
