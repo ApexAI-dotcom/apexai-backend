@@ -636,8 +636,8 @@ def _renumber_corners_by_entry_index(
         lap_mask = df_circuit["lap_number"] == ref_lap
         df_ref = df_circuit.loc[lap_mask].copy()
 
-        ref_lats = pd.to_numeric(df_ref[lat_col], errors="coerce").fillna(method="ffill").fillna(method="bfill").values
-        ref_lons = pd.to_numeric(df_ref[lon_col], errors="coerce").fillna(method="ffill").fillna(method="bfill").values
+        ref_lats = pd.to_numeric(df_ref[lat_col], errors="coerce").ffill().bfill().values
+        ref_lons = pd.to_numeric(df_ref[lon_col], errors="coerce").ffill().bfill().values
 
         # Compute cumulative arc-length along the reference lap
         ref_cum_dist = np.zeros(len(ref_lats))
