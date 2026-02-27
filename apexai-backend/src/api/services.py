@@ -242,20 +242,7 @@ def _run_analysis_pipeline_sync(
         corners_meta["corner_details"] = corner_details
         df.attrs["corners"] = corners_meta
         logger.info(f"[{analysis_id}] Refiltered to selected laps only: {len(df)} rows, {len(corner_details)} corners")
-        # Ordre circuit = position sur le 1er tour sélectionné (éviter mélange laps)
-        first_lap = min(lap_filter)
-        for c in corner_details:
-            for pl in c.get("per_lap_data") or []:
-                if pl.get("lap") == first_lap:
-                    if pl.get("entry_index") is not None:
-                        c["_entry_index_first_lap"] = pl["entry_index"]
-                    if pl.get("apex_index") is not None:
-                        c["_apex_index_first_lap"] = pl["apex_index"]
-                    break
-            else:
-                c["_entry_index_first_lap"] = c.get("entry_index")
-                # Ne pas mettre _apex_index_first_lap (rester None) → tri utilisera avg_cumulative_distance
-                # pour placer ce virage correctement sur le circuit au lieu de l'index global (lap 6/8)
+        # Corner order is already correct from geometry.py GPS projection — no re-sorting needed
 
     df = calculate_optimal_trajectory(df)
     logger.info(f"[{analysis_id}] Step 5/5: Calculating score and coaching...")
@@ -361,42 +348,19 @@ def _run_analysis_pipeline_sync(
     logger.info(f"[{analysis_id}] {len(corner_analysis_list)} corners analyzed successfully")
 
     # Virages uniques du circuit (dédupliquer par corner_id, conserver l'ordre de corner_details)
+    # L'ordre correct est déjà établi par geometry.py via GPS curvilinear projection
     unique_by_id = {}
     for c in corner_analysis_list:
         cid = c.get("corner_id")
         if cid is not None and cid not in unique_by_id:
             unique_by_id[cid] = c
     unique_corner_analysis = list(unique_by_id.values())
-    # Log diagnostic AVANT tri (pour débogage si ordre reste faux)
+    # Sort by corner_id — already set to the correct physical circuit order by geometry.py
+    unique_corner_analysis.sort(key=lambda c: c.get("corner_id", float("inf")))
     logger.info(
-        "[%s] [ordre] AVANT tri — cid, apex1er=, apex_global= : %s",
+        "[%s] [ordre] Corners in GPS-projected order: %s",
         analysis_id,
-        [f"cid={c.get('corner_id')} apex1er={c.get('_apex_index_first_lap')} apex={c.get('apex_index')}" for c in unique_corner_analysis],
-    )
-    # Ordre circuit = tri par apex sur le 1er tour, puis par distance pour les corners sans donnée lap 1
-    def _sort_key(c):
-        # 1) _apex_index_first_lap = apex sur le 1er tour sélectionné → ordre garanti
-        idx1er = c.get("_apex_index_first_lap")
-        if idx1er is not None and isinstance(idx1er, (int, float)) and idx1er == idx1er:
-            return (0, int(idx1er))
-        # 2) pas de donnée sur le 1er tour : utiliser distance cumulée (position physique sur le circuit)
-        d = c.get("avg_cumulative_distance")
-        if d is not None and isinstance(d, (int, float)) and d == d:
-            return (1, float(d))
-        # 3) fallback: apex_index global
-        idx = c.get("apex_index")
-        if idx is not None and isinstance(idx, (int, float)) and idx == idx:
-            return (2, int(idx))
-        # 4) fallback: entry index 1er tour
-        e1 = c.get("_entry_index_first_lap") or c.get("entry_index")
-        if e1 is not None:
-            return (3, e1 if isinstance(e1, (int, float)) else float("inf"))
-        return (4, float("inf"))
-    unique_corner_analysis.sort(key=_sort_key)
-    logger.info(
-        "[%s] [ordre] APRÈS tri (V1..Vn) apex1er tour : %s",
-        analysis_id,
-        [f"V{i}=apex1er{c.get('_apex_index_first_lap')}" for i, c in enumerate(unique_corner_analysis, start=1)],
+        [f"V{c.get('corner_id')} sort_idx={c.get('_sort_index', '?')}" for c in unique_corner_analysis],
     )
     # Forcer renumérotation séquentielle V1..Vn (ordre liste = ordre circuit) pour affichage cohérent
     final_id_to_new = {}

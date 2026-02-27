@@ -563,45 +563,141 @@ def _merge_close_runs(
     return result
 
 
+def _project_corner_on_lap_trace(
+    apex_lat: float,
+    apex_lon: float,
+    lap_lats: np.ndarray,
+    lap_lons: np.ndarray,
+    lap_cum_dist: np.ndarray,
+) -> float:
+    """
+    Project a corner's apex GPS position onto a single-lap GPS trace.
+    Returns the curvilinear distance (arc-length) along that lap trace
+    at the point closest to the corner apex.
+    """
+    min_dist = float("inf")
+    best_cum = 0.0
+    for i in range(len(lap_lats)):
+        d = _haversine_distance(apex_lat, apex_lon, float(lap_lats[i]), float(lap_lons[i]))
+        if d < min_dist:
+            min_dist = d
+            best_cum = float(lap_cum_dist[i])
+    return best_cum
+
+
 def _renumber_corners_by_entry_index(
     corner_details: List[Dict], df_circuit: pd.DataFrame
 ) -> Dict[int, int]:
     """
-    Trie les virages dans l'ordre chronologique du circuit.
-    Utilise l'entry_index RELATIF au début de chaque tour (évite le bug quand
-    un virage n'a pas le même nombre de tours que les autres).
-    Retourne old_id -> new_id.
+    Sort corners in physical circuit order using GPS curvilinear projection.
+
+    Strategy:
+    1. Pick ONE reference lap from df_circuit (the first lap with most points).
+    2. Extract its GPS trace and compute cumulative arc-length.
+    3. For each corner, project its average apex (lat, lon) onto the reference
+       lap trace → gives a curvilinear distance along one lap.
+    4. Sort corners by that distance → physically correct order regardless of
+       how many laps each corner was detected on.
+
+    Falls back to relative entry_index if GPS columns are missing.
+    Returns old_id -> new_id mapping.
     """
-    if df_circuit is None or "lap_number" not in df_circuit.columns:
-        for corner in corner_details:
-            corner["_sort_index"] = corner.get("_entry_index_first_lap", float("inf"))
-        corner_details.sort(key=lambda c: c.get("_sort_index", float("inf")))
-    else:
-        lap_starts = {}
-        for lap_num in pd.unique(df_circuit["lap_number"]):
-            lap_mask = df_circuit["lap_number"] == lap_num
-            if lap_mask.any():
-                lap_starts[lap_num] = int(df_circuit.index[lap_mask].min())
+    import logging
+    log = logging.getLogger(__name__)
+
+    lat_col = (
+        "latitude_smooth"
+        if df_circuit is not None and "latitude_smooth" in df_circuit.columns
+        else "latitude"
+    )
+    lon_col = (
+        "longitude_smooth"
+        if df_circuit is not None and "longitude_smooth" in df_circuit.columns
+        else "longitude"
+    )
+
+    gps_available = (
+        df_circuit is not None
+        and "lap_number" in df_circuit.columns
+        and lat_col in df_circuit.columns
+        and lon_col in df_circuit.columns
+    )
+
+    if gps_available:
+        # --- Pick the reference lap: the one with the MOST data points ---
+        lap_counts = df_circuit["lap_number"].value_counts()
+        # Exclude lap 0 (pit/warmup)
+        lap_counts = lap_counts[lap_counts.index >= 1]
+        if len(lap_counts) == 0:
+            gps_available = False
+
+    if gps_available:
+        ref_lap = int(lap_counts.idxmax())
+        lap_mask = df_circuit["lap_number"] == ref_lap
+        df_ref = df_circuit.loc[lap_mask].copy()
+
+        ref_lats = pd.to_numeric(df_ref[lat_col], errors="coerce").fillna(method="ffill").fillna(method="bfill").values
+        ref_lons = pd.to_numeric(df_ref[lon_col], errors="coerce").fillna(method="ffill").fillna(method="bfill").values
+
+        # Compute cumulative arc-length along the reference lap
+        ref_cum_dist = np.zeros(len(ref_lats))
+        for i in range(1, len(ref_lats)):
+            ref_cum_dist[i] = ref_cum_dist[i - 1] + _haversine_distance(
+                float(ref_lats[i - 1]), float(ref_lons[i - 1]),
+                float(ref_lats[i]), float(ref_lons[i]),
+            )
+
+        log.info(
+            "[_renumber] Using GPS projection on ref lap %d (%d pts, %.0f m)",
+            ref_lap, len(ref_lats), ref_cum_dist[-1] if len(ref_cum_dist) > 0 else 0,
+        )
 
         for corner in corner_details:
-            per_lap = corner.get("per_lap_data", [])
-            if not per_lap:
-                corner["_sort_index"] = float("inf")
-                continue
-            relative_indices = []
-            for lap_data in per_lap:
-                lap_num = lap_data.get("lap")
-                entry_idx = lap_data.get("entry_index")
-                if (
-                    lap_num is not None
-                    and entry_idx is not None
-                    and lap_num in lap_starts
-                ):
-                    relative_indices.append(entry_idx - lap_starts[lap_num])
-            if relative_indices:
-                corner["_sort_index"] = statistics.median(relative_indices)
+            apex_lat = corner.get("apex_lat")
+            apex_lon = corner.get("apex_lon")
+            if apex_lat is not None and apex_lon is not None:
+                proj_dist = _project_corner_on_lap_trace(
+                    apex_lat, apex_lon, ref_lats, ref_lons, ref_cum_dist,
+                )
+                corner["_sort_index"] = proj_dist
             else:
                 corner["_sort_index"] = float("inf")
+
+        corner_details.sort(key=lambda c: c.get("_sort_index", float("inf")))
+        log.info(
+            "[_renumber] GPS-projected order: %s",
+            [f"old_id={c.get('id')} proj={c.get('_sort_index', '?'):.1f}m" for c in corner_details],
+        )
+    else:
+        # Fallback: relative entry_index (original method)
+        if df_circuit is not None and "lap_number" in df_circuit.columns:
+            lap_starts = {}
+            for lap_num in pd.unique(df_circuit["lap_number"]):
+                lap_mask = df_circuit["lap_number"] == lap_num
+                if lap_mask.any():
+                    lap_starts[lap_num] = int(df_circuit.index[lap_mask].min())
+            for corner in corner_details:
+                per_lap = corner.get("per_lap_data", [])
+                if not per_lap:
+                    corner["_sort_index"] = float("inf")
+                    continue
+                relative_indices = []
+                for lap_data in per_lap:
+                    lap_num = lap_data.get("lap")
+                    entry_idx = lap_data.get("entry_index")
+                    if (
+                        lap_num is not None
+                        and entry_idx is not None
+                        and lap_num in lap_starts
+                    ):
+                        relative_indices.append(entry_idx - lap_starts[lap_num])
+                if relative_indices:
+                    corner["_sort_index"] = statistics.median(relative_indices)
+                else:
+                    corner["_sort_index"] = float("inf")
+        else:
+            for corner in corner_details:
+                corner["_sort_index"] = corner.get("_entry_index_first_lap", float("inf"))
 
         corner_details.sort(key=lambda c: c.get("_sort_index", float("inf")))
 
