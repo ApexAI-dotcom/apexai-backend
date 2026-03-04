@@ -861,6 +861,7 @@ def detect_corners(
 
         import logging
         log = logging.getLogger(__name__)
+        log.info("[DIAG] detect_corners appelé avec %s rows, %s tours (laps_analyzed=%s)", len(df), int(max(1, len(np.unique(lap_numbers)))) if has_laps else 1, laps_analyzed)
         log.info("[detect_corners] Jonctions de tours détectées : %s à indices %s", len(lap_boundaries), sorted(lap_boundaries)[:20] if len(lap_boundaries) > 20 else sorted(lap_boundaries))
 
         avg_spacing_m = _avg_spacing_m(cumulative_dist)
@@ -876,6 +877,7 @@ def detect_corners(
             nonzero = curv_abs[curv_abs > 1e-6]
             if len(nonzero) > 0:
                 thresh = float(np.percentile(nonzero, 25))
+                log.info("[DIAG] Curvature threshold (p25 nonzero): %.6f | min/max/mean (nonzero): %.6f / %.6f / %.6f", thresh, float(nonzero.min()), float(nonzero.max()), float(nonzero.mean()))
                 c1 = curv_abs > thresh
         c2 = np.abs(lateral_g_rs) > min_lateral_g
         c3 = np.zeros(len(cum_rs), dtype=bool)
@@ -920,6 +922,8 @@ def detect_corners(
             apex_local = np.argmax(np.abs([lateral_g[i] for i in indices_orig if i < len(lateral_g)]))
             apex_orig = int(indices_orig[apex_local])
             valid_corners.append({'id': cid, 'indices': indices_orig, 'start': start_orig, 'end': end_orig, 'apex': apex_orig})
+
+        log.info("[DIAG] Corner candidates (valid_corners avant merge): %s", len(valid_corners))
 
         def _merge_by_min_dist(corners: List[Dict], cum_dist: np.ndarray, min_d: float, lap_boundaries_set: Optional[set] = None) -> tuple:
             """Retourne (liste fusionnée, nombre de fusions bloquées par jonction)."""
@@ -970,6 +974,7 @@ def detect_corners(
                 valid_corners, n_merge_blocked = _merge_by_min_dist(valid_corners, cumulative_dist, min_distance_between_corners, lap_boundaries)
         else:
             valid_corners, n_merge_blocked = _merge_by_min_dist(valid_corners, cumulative_dist, min_distance_between_corners, lap_boundaries)
+        log.info("[DIAG] Corners après merge (valid_corners): %s", len(valid_corners))
         log.info("[detect_corners] Fusions bloquées par jonction : %s", n_merge_blocked)
 
         coherence_radius_m = 30.0
@@ -1013,6 +1018,8 @@ def detect_corners(
             laps_in_cluster = len(set(seg['lap'] for seg in cluster))
             if laps_in_cluster >= min_laps_confirm:
                 clusters.append(cluster)
+
+        log.info("[DIAG] Clusters (après coherence_radius min_laps_confirm=%s): %s", min_laps_confirm, len(clusters))
 
         corner_details = []
         physical_id = 0
@@ -1120,6 +1127,7 @@ def detect_corners(
             if df_result.at[idx, 'is_corner']:
                 old = df_result.at[idx, 'corner_id']
                 df_result.at[idx, 'corner_id'] = old_to_new.get(old, old)
+        log.info("[DIAG] Corners finaux (corner_details): %s → %s", len(corner_details), [c.get("label", "?") for c in corner_details])
         log.info(
             "[detect_corners] Virages finaux : %s → %s",
             len(corner_details),

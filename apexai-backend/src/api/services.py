@@ -174,21 +174,28 @@ def _run_analysis_pipeline_sync(
     logger.info(f"[{analysis_id}] Step 3.5/5: Detecting laps...")
     df = detect_laps(df)
     laps_analyzed = 1
+    if "lap_number" in df.columns:
+        laps_available = sorted(df["lap_number"].dropna().unique().astype(int).tolist())
+        logger.info(f"[DIAG] Tours disponibles (lap_number): {laps_available}")
     if lap_filter:
+        logger.info(f"[DIAG] Tours sélectionnés : {lap_filter}")
         laps_analyzed = len(lap_filter)
         n_before = len(df)
         df = _filter_laps_with_buffer(df, lap_filter, analysis_id)
+        logger.info(f"[DIAG] Rows après filtrage : {len(df)} (was {n_before}, full track)")
         logger.info(f"[{analysis_id}] Filtered to laps {lap_filter} with buffer: {len(df)} rows (was {n_before})")
         if len(df) < 10:
             raise ValueError("Pas assez de points après filtrage par tours (min. 10).")
     else:
         if "lap_number" in df.columns:
             laps_analyzed = int(df["lap_number"].nunique())
+    logger.info(f"[DIAG] Appel detect_corners avec {len(df)} rows, laps_analyzed={laps_analyzed}")
     logger.info(f"[{analysis_id}] Step 4/5: Detecting corners...")
     df = detect_corners(df, laps_analyzed=laps_analyzed)
 
     corners_meta = df.attrs.get("corners", {})
     corner_details = corners_meta.get("corner_details", [])
+    logger.info(f"[DIAG] detect_corners retourné : {len(corner_details)} corners")
     logger.info(f"[{analysis_id}] Detected {len(corner_details)} corners")
 
     # Refiltrer aux tours sélectionnés uniquement pour les calculs de performance (exclure buffer)
