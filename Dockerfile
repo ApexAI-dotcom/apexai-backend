@@ -1,14 +1,12 @@
 # Dockerfile à la racine pour Railway (monorepo).
-# Le backend réel est dans apexai-backend/ ; ce fichier copie depuis ce dossier.
+# Le backend réel est dans apexai-backend/ ; on copie tout le dossier en une fois.
 FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY apexai-backend/requirements.txt ./requirements.txt
+# Copie tout le backend (évite "run_api.py not found" si structure/context diffère)
+COPY apexai-backend/ ./
 RUN pip install --upgrade pip && pip install -r requirements.txt
-
-COPY apexai-backend/src/ ./src/
-COPY apexai-backend/run_api.py .
 
 RUN mkdir -p /app/output /app/temp
 
