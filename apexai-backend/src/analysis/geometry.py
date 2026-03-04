@@ -794,10 +794,14 @@ def detect_corners(
     min_distance_between_corners: float = 6.0,
     expected_corners: Optional[int] = None,
     laps_analyzed: Optional[int] = None,
+    curvature_threshold_override: Optional[float] = None,
 ) -> pd.DataFrame:
     """
     Détection multi-critères : resampling adaptatif, 3 critères (courbure, lateral_g, vitesse locale),
     validation croisée multi-tours, corner_detail avec per_lap_data.
+
+    curvature_threshold_override: si fourni, utilise ce seuil au lieu de le recalculer sur le subset
+    (pour stabilité entre sélections de tours).
     """
     required_cols = ['lateral_g', 'speed', 'cumulative_distance']
     missing_cols = [col for col in required_cols if col not in df.columns]
@@ -875,9 +879,15 @@ def detect_corners(
         if curvature_rs is not None:
             curv_abs = np.abs(curvature_rs)
             nonzero = curv_abs[curv_abs > 1e-6]
-            if len(nonzero) > 0:
+            if curvature_threshold_override is not None:
+                thresh = float(curvature_threshold_override)
+                log.info("[DIAG] Using GLOBAL curvature threshold: %.6f (override)", thresh)
+            elif len(nonzero) > 0:
                 thresh = float(np.percentile(nonzero, 25))
-                log.info("[DIAG] Curvature threshold (p25 nonzero): %.6f | min/max/mean (nonzero): %.6f / %.6f / %.6f", thresh, float(nonzero.min()), float(nonzero.max()), float(nonzero.mean()))
+                log.info("[DIAG] Curvature threshold (p25 nonzero - LOCAL): %.6f | min/max/mean (nonzero): %.6f / %.6f / %.6f", thresh, float(nonzero.min()), float(nonzero.max()), float(nonzero.mean()))
+            else:
+                thresh = 0.0
+            if thresh > 0:
                 c1 = curv_abs > thresh
         c2 = np.abs(lateral_g_rs) > min_lateral_g
         c3 = np.zeros(len(cum_rs), dtype=bool)

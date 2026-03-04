@@ -174,6 +174,17 @@ def _run_analysis_pipeline_sync(
     logger.info(f"[{analysis_id}] Step 3.5/5: Detecting laps...")
     df = detect_laps(df)
     laps_analyzed = 1
+    # Calculer curvature threshold sur FULL TRACK (avant filtrage) pour stabilité entre sélections de tours
+    curvature_threshold_global = None
+    if "curvature" in df.columns and "lap_number" in df.columns:
+        df_circuit = df[df["lap_number"] >= 1]
+        if len(df_circuit) >= 50:
+            curv = np.nan_to_num(pd.to_numeric(df_circuit["curvature"], errors="coerce").values, nan=0.0, posinf=0.0, neginf=0.0)
+            curv_abs = np.abs(curv)
+            nonzero = curv_abs[curv_abs > 1e-6]
+            if len(nonzero) > 0:
+                curvature_threshold_global = float(np.percentile(nonzero, 25))
+                logger.info(f"[DIAG] GLOBAL curvature threshold (full track): {curvature_threshold_global:.6f}")
     if "lap_number" in df.columns:
         laps_available = sorted(df["lap_number"].dropna().unique().astype(int).tolist())
         logger.info(f"[DIAG] Tours disponibles (lap_number): {laps_available}")
@@ -191,7 +202,7 @@ def _run_analysis_pipeline_sync(
             laps_analyzed = int(df["lap_number"].nunique())
     logger.info(f"[DIAG] Appel detect_corners avec {len(df)} rows, laps_analyzed={laps_analyzed}")
     logger.info(f"[{analysis_id}] Step 4/5: Detecting corners...")
-    df = detect_corners(df, laps_analyzed=laps_analyzed)
+    df = detect_corners(df, laps_analyzed=laps_analyzed, curvature_threshold_override=curvature_threshold_global)
 
     corners_meta = df.attrs.get("corners", {})
     corner_details = corners_meta.get("corner_details", [])
