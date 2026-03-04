@@ -20,7 +20,6 @@ from src.core.data_loader import robust_load_telemetry
 from src.core.signal_processing import apply_savgol_filter
 from src.analysis.geometry import (
     calculate_trajectory_geometry,
-    calibrate_track_geometry,
     detect_laps,
     detect_corners,
     calculate_optimal_trajectory
@@ -175,27 +174,18 @@ def _run_analysis_pipeline_sync(
     logger.info(f"[{analysis_id}] Step 3.5/5: Detecting laps...")
     df = detect_laps(df)
     laps_analyzed = 1
-    if "lap_number" in df.columns:
-        laps_analyzed = int(df["lap_number"].nunique())
-    # Calibration sur track complet pour seuils stables (indépendants du subset de tours)
-    global_params = calibrate_track_geometry(df)
     if lap_filter:
         laps_analyzed = len(lap_filter)
-        # 1re passe sur track complet pour obtenir le nombre de virages attendu
-        df_full_corners = detect_corners(df.copy(), laps_analyzed=int(df["lap_number"].nunique()), global_params=global_params)
-        corner_details_full = df_full_corners.attrs.get("corners", {}).get("corner_details", [])
-        expected_corners = len(corner_details_full)
-        global_params = {**global_params, "expected_corners": expected_corners}
-        logger.info(f"[{analysis_id}] Step 4/5: Detecting corners (expected={expected_corners} from full track)...")
         n_before = len(df)
         df = _filter_laps_with_buffer(df, lap_filter, analysis_id)
         logger.info(f"[{analysis_id}] Filtered to laps {lap_filter} with buffer: {len(df)} rows (was {n_before})")
         if len(df) < 10:
             raise ValueError("Pas assez de points après filtrage par tours (min. 10).")
-        df = detect_corners(df, laps_analyzed=laps_analyzed, global_params=global_params)
     else:
-        logger.info(f"[{analysis_id}] Step 4/5: Detecting corners...")
-        df = detect_corners(df, laps_analyzed=laps_analyzed, global_params=global_params)
+        if "lap_number" in df.columns:
+            laps_analyzed = int(df["lap_number"].nunique())
+    logger.info(f"[{analysis_id}] Step 4/5: Detecting corners...")
+    df = detect_corners(df, laps_analyzed=laps_analyzed)
 
     corners_meta = df.attrs.get("corners", {})
     corner_details = corners_meta.get("corner_details", [])
