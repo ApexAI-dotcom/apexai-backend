@@ -788,17 +788,81 @@ def _resample_adaptive(
     return cum_rs, lateral_g_rs, speed_rs, time_rs, curvature_rs, orig_iloc_rs, strategy, n_rs
 
 
+def _estimate_track_length_m(df: pd.DataFrame) -> float:
+    """
+    Estime la longueur d'un tour en mètres à partir de cumulative_distance.
+    Utilise la médiane des longueurs par tour (lap_number >= 1).
+    """
+    if "cumulative_distance" not in df.columns:
+        return 0.0
+    if "lap_number" not in df.columns:
+        d = np.nan_to_num(pd.to_numeric(df["cumulative_distance"], errors="coerce").values, nan=0.0)
+        return float(d[-1] - d[0]) if len(d) >= 2 else 0.0
+    lengths = []
+    for lap_num, grp in df[df["lap_number"] >= 1].groupby("lap_number", sort=True):
+        cum = np.nan_to_num(pd.to_numeric(grp["cumulative_distance"], errors="coerce").values, nan=0.0)
+        if len(cum) >= 2:
+            lengths.append(float(np.max(cum) - np.min(cum)))
+    return float(np.median(lengths)) if lengths else 0.0
+
+
+def calibrate_track_geometry(df_full: pd.DataFrame) -> dict:
+    """
+    Calibre les paramètres de détection de virages sur le TRACK COMPLET.
+    À appeler UNE FOIS avec toutes les données (tous tours) avant tout filtrage par tours.
+
+    Args:
+        df_full: DataFrame avec TOUS les tours (déjà passé par calculate_trajectory_geometry + detect_laps).
+
+    Returns:
+        dict avec curvature_threshold (seuil courbure), track_length_m (longueur tour en m).
+    """
+    import logging
+    log = logging.getLogger(__name__)
+    out = {"curvature_threshold": None, "track_length_m": 0.0}
+    if "curvature" not in df_full.columns or "cumulative_distance" not in df_full.columns:
+        log.warning("calibrate_track_geometry: colonnes manquantes, retour valeurs par défaut")
+        return out
+    df_circuit = df_full[df_full["lap_number"] >= 1].copy() if "lap_number" in df_full.columns else df_full.copy()
+    if len(df_circuit) < 50:
+        df_circuit = df_full.copy()
+    curv = np.nan_to_num(
+        pd.to_numeric(df_circuit["curvature"], errors="coerce").values,
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0,
+    )
+    curv_abs = np.abs(curv)
+    nonzero = curv_abs[curv_abs > 1e-6]
+    if len(nonzero) > 0:
+        out["curvature_threshold"] = float(np.percentile(nonzero, 25))
+    out["track_length_m"] = _estimate_track_length_m(df_full)
+    log.info(
+        "Track calibré : curvature_threshold=%.6f, track_length_m=%.0f",
+        out["curvature_threshold"] or 0.0,
+        out["track_length_m"],
+    )
+    return out
+
+
 def detect_corners(
     df: pd.DataFrame,
     min_lateral_g: float = 0.15,
     min_distance_between_corners: float = 6.0,
     expected_corners: Optional[int] = None,
     laps_analyzed: Optional[int] = None,
+    global_params: Optional[dict] = None,
 ) -> pd.DataFrame:
     """
     Détection multi-critères : resampling adaptatif, 3 critères (courbure, lateral_g, vitesse locale),
     validation croisée multi-tours, corner_detail avec per_lap_data.
+
+    Si global_params est fourni (calibré sur track complet), les seuils de courbure et
+    expected_corners sont pris depuis global_params pour garantir un comptage stable quel que soit
+    le sous-ensemble de tours.
     """
+    if global_params is not None and global_params.get("expected_corners") is not None:
+        expected_corners = global_params["expected_corners"]
     required_cols = ['lateral_g', 'speed', 'cumulative_distance']
     missing_cols = [col for col in required_cols if col not in df.columns]
     if missing_cols:
@@ -869,13 +933,18 @@ def detect_corners(
         )
         log.info("detect_corners: avg_spacing_m=%.3f strategy=%s n_points_after_resampling=%s", avg_spacing_m, resample_strategy, n_after)
 
-        # Multi-critères
+        # Multi-critères (seuil courbure : global si fourni, sinon local)
         c1 = np.zeros(len(cum_rs), dtype=bool)
         if curvature_rs is not None:
             curv_abs = np.abs(curvature_rs)
             nonzero = curv_abs[curv_abs > 1e-6]
-            if len(nonzero) > 0:
+            if global_params and global_params.get("curvature_threshold") is not None:
+                thresh = float(global_params["curvature_threshold"])
+            elif len(nonzero) > 0:
                 thresh = float(np.percentile(nonzero, 25))
+            else:
+                thresh = 0.0
+            if thresh > 0:
                 c1 = curv_abs > thresh
         c2 = np.abs(lateral_g_rs) > min_lateral_g
         c3 = np.zeros(len(cum_rs), dtype=bool)
