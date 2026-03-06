@@ -13,13 +13,44 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, File, Form, Request, UploadFile, HTTPException
+from fastapi import APIRouter, File, Form, Header, Request, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
 
 from .config import settings
 from .models import AnalysisResponse, ErrorResponse
 from .services import AnalysisService
 from .utils import validate_csv_file
+from src.core.subscription_service import check_analysis_limit, increment_analysis_count
+
+# Résolution user_id depuis JWT (optionnel pour limite abonnement)
+_SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+_SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+_supabase = None
+if _SUPABASE_URL and _SUPABASE_SERVICE_KEY and _SUPABASE_SERVICE_KEY != "ton_service_role_key":
+    try:
+        from supabase import create_client
+        _supabase = create_client(_SUPABASE_URL, _SUPABASE_SERVICE_KEY)
+    except ImportError:
+        pass
+
+
+def _get_user_id_from_authorization(authorization: Optional[str]) -> Optional[str]:
+    """Extrait user_id (UUID) depuis le header Authorization Bearer <jwt>."""
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    token = authorization.replace("Bearer ", "").strip()
+    if not _supabase:
+        return None
+    try:
+        user_response = _supabase.auth.get_user(jwt=token)
+        user = user_response.user if hasattr(user_response, "user") else user_response
+        if not user:
+            return None
+        return user.get("id") if isinstance(user, dict) else getattr(user, "id", None)
+    except Exception as e:
+        logger.debug("get_user_id_from_authorization: %s", e)
+        return None
+
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -68,6 +99,7 @@ async def parse_laps(
     response_model=AnalysisResponse,
     responses={
         400: {"model": ErrorResponse, "description": "Erreur de validation"},
+        403: {"model": ErrorResponse, "description": "Limite d'analyses atteinte (abonnement)"},
         413: {"model": ErrorResponse, "description": "Fichier trop volumineux"},
         500: {"model": ErrorResponse, "description": "Erreur serveur"}
     },
@@ -99,6 +131,7 @@ async def analyze_telemetry(
     lap_filter: Optional[str] = Form(None, description="JSON array des numéros de tours à inclure, ex: [1,2,3]"),
     track_condition: str = Form("dry", description="Condition piste: dry, damp, wet, rain"),
     track_temperature: Optional[str] = Form(None, description="Température piste en °C"),
+    authorization: Optional[str] = Header(None, description="Bearer JWT pour limite abonnement"),
 ) -> AnalysisResponse:
     """
     Analyser un fichier de télémétrie.
@@ -112,6 +145,20 @@ async def analyze_telemetry(
     """
     analysis_id = str(uuid.uuid4())[:8]
     logger.info(f"🏁 New analysis request: {analysis_id} - {file.filename}")
+
+    user_id = _get_user_id_from_authorization(authorization)
+    if user_id and not check_analysis_limit(user_id):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "success": False,
+                "error": "limit_reached",
+                "message": (
+                    "Vous avez atteint la limite d'analyses de votre abonnement ce mois-ci. "
+                    "Passez au plan Racer ou Team pour des analyses illimitées."
+                ),
+            },
+        )
 
     lap_list = []
     if lap_filter and lap_filter.strip():
@@ -150,6 +197,7 @@ async def analyze_telemetry(
             )
 
         # Cache HIT (on ne met pas en cache si lap_filter différent selon les cas; clé = filename seulement)
+        # Pas d'incrément du compteur sur cache hit (analyse déjà comptée précédemment).
         if redis and not lap_list:
             cached_raw = await redis.get(f"{REDIS_KEY_PREFIX}{cache_key}")
             if cached_raw:
@@ -174,6 +222,9 @@ async def analyze_telemetry(
                 REDIS_CACHE_TTL,
                 json.dumps(result, default=str)
             )
+
+        if user_id:
+            increment_analysis_count(user_id)
 
         logger.info(f"[{analysis_id}] ✅ Analysis completed successfully")
         from datetime import datetime, date

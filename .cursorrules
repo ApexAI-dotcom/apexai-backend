@@ -1,0 +1,31 @@
+# ApexAI - Règles Cursor
+
+## Projet
+- **Nom :** ApexAI — analyse de données télémétrie / circuit (sessions, virages, scores).
+- **Backend :** `apexai-backend/` — FastAPI, Python 3.
+- **Frontend :** `apex-ai-fresh/` — React, TypeScript, Vite.
+
+## Structure
+- API : `apexai-backend/src/api/` (main.py, routes.py, stripe_routes.py, user_routes.py, config.py, models.py).
+- Auth / Stripe : `stripe_routes.py` (checkout, webhook, customer portal), `user_routes.py` (profil).
+- Frontend : `apex-ai-fresh/src/` — hooks (useAuth, useSubscription), pages (Dashboard, Parametres, Profile, Login), lib (supabase).
+
+## Auth & utilisateurs
+- **Supabase** : auth + table publique **`profiles`** (pas `users`). Table `profiles` : id (UUID, PK), email, full_name, avatar_url, created_at, updated_at.
+- **Frontend :** `useAuth()` retourne `{ user, session, loading, signInEmail, signOut, ... }`. `user.id` (UUID) est la référence utilisateur partout.
+- **Backend :** JWT Supabase dans `Authorization: Bearer <token>`. Récupérer l’utilisateur via `supabase.auth.get_user(jwt=token)` ou via table `profiles` si besoin.
+
+## Stripe
+- **Fichier :** `apexai-backend/src/api/stripe_routes.py`. Router prefix : `/api`.
+- **Webhook :** `POST /api/webhook/stripe`. Signature vérifiée avec `STRIPE_WEBHOOK_SECRET` (env) dans `stripe.Webhook.construct_event(...)`.
+- **Endpoints :** create-checkout-session, customer-portal, subscription-status, test-supabase, set-pro (dev).
+
+## Conventions
+- Répondre en **français** à l’utilisateur.
+- Code : commentaires et noms de variables/fonctions en anglais ; messages d’erreur et logs utilisateur peuvent être en français.
+- Pas de clés API ou secrets en dur : utiliser `os.getenv()` / variables d’environnement.
+
+## Fichiers clés
+- Config backend : `apexai-backend/src/api/config.py`, `env.example` à la racine.
+- Migration Supabase (profiles) : `apex-ai-fresh/supabase/migrations/20260101000000_create_profiles.sql`.
+- Modèles API : `apexai-backend/src/api/models.py` (Pydantic : AnalysisResponse, PerformanceScore, etc.).
