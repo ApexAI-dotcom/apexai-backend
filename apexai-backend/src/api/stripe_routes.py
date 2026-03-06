@@ -33,18 +33,21 @@ else:
     logger.warning("STRIPE_SECRET_KEY not set")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+# Webhook DOIT utiliser service_role pour bypasser RLS (écriture dans profiles)
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_SERVICE_KEY", "")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
 
 supabase_client = None
 try:
     from supabase import Client, create_client
 
-    if SUPABASE_URL and SUPABASE_SERVICE_KEY and SUPABASE_SERVICE_KEY != "ton_service_role_key":
-        supabase_client: Optional[Client] = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-        logger.info("Supabase client configured for Stripe routes")
+    if SUPABASE_URL and SUPABASE_SERVICE_KEY and SUPABASE_SERVICE_KEY not in ("", "ton_service_role_key"):
+        supabase_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+        logger.info("Supabase client (service_role) configured for Stripe routes")
     else:
         supabase_client = None
+        if not SUPABASE_SERVICE_KEY:
+            logger.warning("SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_KEY not set - webhook cannot update profiles")
 except ImportError:
     logger.warning("supabase not installed, Stripe sync disabled")
 except Exception as e:
@@ -59,19 +62,25 @@ PRICE_IDS = {
     "team_annual": os.getenv("STRIPE_PRICE_TEAM_ANNUAL", ""),
 }
 
-# Mapping price_id -> (tier, billing_period) pour le webhook
+# Mapping exact price_id -> (tier, billing_period) pour le webhook (log si inconnu)
+def _build_price_to_tier() -> dict:
+    out = {}
+    for key, pid in PRICE_IDS.items():
+        if pid:
+            out[pid.strip()] = (
+                "racer" if "racer" in key else "team",
+                "annual" if "annual" in key else "monthly",
+            )
+    return out
+
+PRICE_TO_TIER = _build_price_to_tier()
+
 def _price_id_to_tier_and_period(price_id: str) -> tuple[str, str]:
     if not price_id:
         return "rookie", "monthly"
     pid = price_id.strip()
-    if pid == PRICE_IDS.get("racer_monthly"):
-        return "racer", "monthly"
-    if pid == PRICE_IDS.get("racer_annual"):
-        return "racer", "annual"
-    if pid == PRICE_IDS.get("team_monthly"):
-        return "team", "monthly"
-    if pid == PRICE_IDS.get("team_annual"):
-        return "team", "annual"
+    if pid in PRICE_TO_TIER:
+        return PRICE_TO_TIER[pid]
     if "team" in pid.lower():
         return "team", "annual" if "annual" in pid.lower() else "monthly"
     if "racer" in pid.lower() or "pro" in pid.lower():
@@ -150,7 +159,8 @@ async def create_checkout_session(body: CreateCheckoutSessionRequest) -> JSONRes
             mode="subscription",
             success_url=f"{FRONTEND_URL}/?success=true&session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{FRONTEND_URL}/pricing?canceled=true",
-            metadata={"user_id": user_id},
+            metadata={"user_id": user_id, "supabase_user_id": user_id},
+            subscription_data={"metadata": {"user_id": user_id, "supabase_user_id": user_id}},
         )
         logger.info("create_checkout_session: session_id=%s user_id=%s", session.id, user_id)
         return JSONResponse(content={"checkout_url": session.url})
@@ -266,10 +276,15 @@ def _update_profile_subscription(
         logger.exception("_update_profile_subscription failed: %s", e)
 
 
+def _log_webhook(step: str, **kwargs: object) -> None:
+    """Log structuré JSON pour le webhook."""
+    logger.info("stripe_webhook %s", json.dumps({"step": step, **kwargs}))
+
+
 @router.post("/webhook")
 async def stripe_webhook(request: Request) -> JSONResponse:
     """
-    Webhook Stripe. Écrit UNIQUEMENT dans la table profiles.
+    Webhook Stripe. Écrit UNIQUEMENT dans la table profiles (via service_role).
     Événements : checkout.session.completed, customer.subscription.updated, customer.subscription.deleted.
     """
     payload = await request.body()
@@ -290,34 +305,94 @@ async def stripe_webhook(request: Request) -> JSONResponse:
 
     event_type = event.get("type", "")
     event_id = event.get("id", "")
-    logger.info("stripe_webhook_event %s", json.dumps({"event_type": event_type, "event_id": event_id}))
+    _log_webhook("event_received", event_type=event_type, event_id=event_id)
 
     try:
         if event_type == "checkout.session.completed":
             session = event["data"]["object"]
-            customer_id = session.get("customer")
-            subscription_id = session.get("subscription")
+            session_id = session.get("id", "")
             metadata = session.get("metadata") or {}
-            user_id = (metadata.get("user_id") or "").strip()
+            _log_webhook("session_metadata", session_id=session_id, metadata=metadata)
+
+            user_id = (metadata.get("user_id") or metadata.get("supabase_user_id") or "").strip()
             if not user_id:
                 logger.warning(
-                    "webhook checkout.session.completed: user_id missing, session_id=%s",
-                    session.get("id"),
+                    "stripe_webhook user_id missing from metadata session_id=%s",
+                    session_id,
+                    extra={"step": "user_id_extract", "metadata": metadata},
                 )
+                _log_webhook("user_id_missing", session_id=session_id)
                 return JSONResponse(content={"received": True})
 
-            # Dériver tier + billing_period depuis le price_id
+            _log_webhook("user_id_extracted", user_id=user_id, session_id=session_id)
+
+            customer_id = session.get("customer")
+            subscription_id = session.get("subscription")
             tier, billing_period = "racer", "monthly"
+            start_dt, end_dt = None, None
+
             if subscription_id:
                 try:
                     sub = stripe.Subscription.retrieve(subscription_id)
-                    if sub.get("items") and sub["items"].get("data"):
-                        price_id = sub["items"]["data"][0].get("price", {}).get("id", "")
+                    items_data = sub.get("items") or {}
+                    data_list = items_data.get("data") or []
+                    _log_webhook(
+                        "subscription_retrieved",
+                        subscription_id=subscription_id,
+                        items_data_len=len(data_list),
+                    )
+                    if data_list:
+                        first_item = data_list[0]
+                        price_obj = first_item.get("price") or {}
+                        price_id = (price_obj.get("id") or "").strip()
+                        _log_webhook(
+                            "price_id_extracted",
+                            subscription_id=subscription_id,
+                            price_id=price_id,
+                            known_price_ids=list(PRICE_TO_TIER.keys()),
+                        )
                         tier, billing_period = _price_id_to_tier_and_period(price_id)
+                        if price_id and price_id not in PRICE_TO_TIER:
+                            logger.error(
+                                "stripe_webhook unknown price_id: %s (subscription_id=%s)",
+                                price_id,
+                                subscription_id,
+                                extra={"step": "price_mapping", "price_id": price_id},
+                            )
+                            _log_webhook(
+                                "price_mapping_failed",
+                                subscription_id=subscription_id,
+                                price_id=price_id,
+                                items_data=data_list,
+                                known_price_ids=list(PRICE_TO_TIER.keys()),
+                            )
                     start_ts = sub.get("current_period_start")
                     end_ts = sub.get("current_period_end")
                     start_dt = datetime.fromtimestamp(start_ts, tz=timezone.utc) if start_ts else None
                     end_dt = datetime.fromtimestamp(end_ts, tz=timezone.utc) if end_ts else None
+                except Exception as sub_err:
+                    logger.exception(
+                        "stripe_webhook subscription retrieve failed: %s (subscription_id=%s)",
+                        sub_err,
+                        subscription_id,
+                    )
+                    _log_webhook("subscription_retrieve_error", error=str(sub_err), subscription_id=subscription_id)
+
+            _log_webhook("tier_determined", user_id=user_id, tier=tier, billing_period=billing_period)
+
+            update_payload = {
+                "stripe_customer_id": customer_id,
+                "stripe_subscription_id": subscription_id,
+                "subscription_tier": tier,
+                "billing_period": billing_period,
+                "subscription_status": "active",
+                "subscription_start_date": start_dt.isoformat() if start_dt else None,
+                "subscription_end_date": end_dt.isoformat() if end_dt else None,
+            }
+            _log_webhook("update_before", user_id=user_id, payload=update_payload)
+
+            if supabase_client:
+                try:
                     _update_profile_subscription(
                         user_id,
                         stripe_customer_id=customer_id,
@@ -328,18 +403,16 @@ async def stripe_webhook(request: Request) -> JSONResponse:
                         subscription_start_date=start_dt,
                         subscription_end_date=end_dt,
                     )
-                except Exception as e:
-                    logger.exception("webhook checkout.session.completed update failed: %s", e)
+                    _log_webhook("update_after", user_id=user_id, status="ok")
+                except Exception as update_err:
+                    logger.exception(
+                        "stripe_webhook profiles update failed: %s (user_id=%s)",
+                        update_err,
+                        user_id,
+                    )
+                    _log_webhook("update_after", user_id=user_id, status="error", error=str(update_err))
             else:
-                _update_profile_subscription(
-                    user_id,
-                    stripe_customer_id=customer_id,
-                    stripe_subscription_id=subscription_id,
-                    subscription_tier=tier,
-                    billing_period=billing_period,
-                    subscription_status="active",
-                )
-            logger.info("webhook checkout.session.completed processed user_id=%s tier=%s", user_id, tier)
+                _log_webhook("update_skipped", user_id=user_id, reason="supabase_client_none")
 
         elif event_type == "customer.subscription.updated":
             sub = event["data"]["object"]
@@ -406,7 +479,8 @@ async def stripe_webhook(request: Request) -> JSONResponse:
         return JSONResponse(content={"received": True})
     except Exception as e:
         logger.exception("stripe_webhook handler: %s", e)
-        raise HTTPException(status_code=500, detail="Webhook handler failed")
+        _log_webhook("handler_exception", error=str(e))
+        return JSONResponse(content={"received": True})
 
 
 @router.get("/set-pro")
