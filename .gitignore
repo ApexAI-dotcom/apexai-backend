@@ -33,9 +33,14 @@ test_*.csv
 .DS_Store
 Thumbs.db
 
-# Frontend / temp (separate repos)
+# Frontend (apex-ai-fresh déployé sur Vercel)
 node_modules/
-apex-ai-fresh/
 lovable-temp/
+# Ancien dépôt imbriqué (on track les fichiers, pas le .git)
+apex-ai-fresh/.git.bak/
+# Env frontend (secrets)
+apex-ai-fresh/.env
+apex-ai-fresh/.env.*
+!apex-ai-fresh/.env.example
 
 .vercel

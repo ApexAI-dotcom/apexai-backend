@@ -1,0 +1,13 @@
+node_modules
+dist
+build
+.next
+.nuxt
+.vscode
+.idea
+*.log
+*.lock
+package-lock.json
+bun.lockb
+coverage
+.vitest
