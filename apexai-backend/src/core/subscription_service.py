@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 # Configuration Supabase (service_role pour bypass RLS)
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_SERVICE_KEY", "")
 
 _supabase_client: Optional[Any] = None
 
