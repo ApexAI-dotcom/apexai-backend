@@ -37,22 +37,17 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_SERVICE_KEY", "")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
 
-supabase_client = None
-try:
-    from supabase import Client, create_client
+from supabase import Client, create_client
 
-    if SUPABASE_URL and SUPABASE_SERVICE_KEY and SUPABASE_SERVICE_KEY not in ("", "ton_service_role_key"):
-        supabase_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-        logger.info("Supabase client (service_role) configured for Stripe routes")
-    else:
-        supabase_client = None
-        if not SUPABASE_SERVICE_KEY:
-            logger.warning("SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_KEY not set - webhook cannot update profiles")
-except ImportError:
-    logger.warning("supabase not installed, Stripe sync disabled")
-except Exception as e:
-    logger.warning("Supabase init failed: %s", e)
+supabase_client: Optional[Client]
+if not SUPABASE_URL or not SUPABASE_SERVICE_KEY or SUPABASE_SERVICE_KEY in ("", "ton_service_role_key"):
+    logger.error(
+        "Supabase client is None - check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_SERVICE_KEY)"
+    )
     supabase_client = None
+else:
+    supabase_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    logger.info("Supabase client initialized: %s", SUPABASE_URL)
 
 # Price IDs : racer_monthly/annual, team_monthly/annual (configurables via env)
 PRICE_IDS = {
@@ -403,7 +398,7 @@ async def stripe_webhook(request: Request) -> JSONResponse:
                         subscription_start_date=start_dt,
                         subscription_end_date=end_dt,
                     )
-                    _log_webhook("update_after", user_id=user_id, status="ok")
+                    _log_webhook("update_after", user_id=user_id, status="ok", count=1, success=True)
                 except Exception as update_err:
                     logger.exception(
                         "stripe_webhook profiles update failed: %s (user_id=%s)",
