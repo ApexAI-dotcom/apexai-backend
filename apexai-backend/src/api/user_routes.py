@@ -145,13 +145,58 @@ def get_current_user(
 
 @router.get("/api/user/subscription")
 async def get_user_subscription(
-    current: Tuple[str, str] = Depends(get_current_user),
+    user_id: Optional[str] = Query(None, description="User UUID (optionnel si Bearer JWT fourni)"),
+    authorization: Optional[str] = Header(None),
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
 ):
     """
     Retourne l'abonnement depuis la table profiles.
-    Auth : Bearer JWT (recommandé) ou user_id en query / X-User-Id (fallback si pas de JWT secret).
+    user_id optionnel : si absent, on utilise le JWT Bearer ou le header X-User-Id. Sinon 401.
     """
-    user_id, source = current
+    # Résolution user_id : query > JWT > X-User-Id
+    resolved_id: Optional[str] = None
+    source = "none"
+    if user_id:
+        resolved_id = user_id.strip()
+        source = "query_param"
+    elif authorization and authorization.startswith("Bearer "):
+        token = authorization.replace("Bearer ", "").strip()
+        if JWT_SECRET:
+            try:
+                payload = jwt.decode(
+                    token,
+                    JWT_SECRET,
+                    audience="authenticated",
+                    algorithms=["HS256"],
+                )
+                resolved_id = payload.get("sub") and str(payload["sub"])
+                source = "jwt"
+            except PyJWTError as e:
+                logger.warning("JWT decode failed: %s", e)
+                raise HTTPException(status_code=401, detail="Token invalide ou expiré")
+        else:
+            # Fallback: supabase.auth.get_user
+            if supabase:
+                try:
+                    user_response = supabase.auth.get_user(jwt=token)
+                    user = user_response.user if hasattr(user_response, "user") else user_response
+                    if user:
+                        uid = user.get("id") if isinstance(user, dict) else getattr(user, "id", None)
+                        if uid:
+                            resolved_id = str(uid)
+                            source = "jwt"
+                except Exception as e:
+                    logger.warning("get_user(jwt) failed: %s", e)
+    if not resolved_id and x_user_id:
+        resolved_id = x_user_id.strip()
+        source = "header"
+    if not resolved_id:
+        _log_subscription_request("missing", "none", "unauthorized")
+        raise HTTPException(
+            status_code=401,
+            detail="user_id required in query param or Authorization header",
+        )
+    user_id = resolved_id
     if not supabase:
         _log_subscription_request(user_id, source, "error", "Supabase client not initialized")
         raise HTTPException(
