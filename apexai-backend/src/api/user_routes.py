@@ -3,23 +3,37 @@
 """
 Apex AI - User Profile API
 Endpoints pour le profil utilisateur et l'abonnement (table profiles).
+Auth : JWT Bearer (SUPABASE_JWT_SECRET) ou fallback user_id query/header si secret absent.
 """
 
-from fastapi import APIRouter, Header, HTTPException, Query
-from fastapi.responses import JSONResponse
-from typing import Optional
-import os
+import json
 import logging
+import os
+from typing import Optional, Tuple
 
-from supabase import create_client, Client
+import jwt
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi.responses import JSONResponse
+from jwt import PyJWTError
+from supabase import Client, create_client
+
+from .config import settings
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Initialiser le client Supabase avec service_role
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_SERVICE_KEY")
+# Avertissement au démarrage si JWT secret absent
+if not (getattr(settings, "SUPABASE_JWT_SECRET", "") or os.getenv("SUPABASE_JWT_SECRET")):
+    logger.warning("SUPABASE_JWT_SECRET not set, using insecure user_id param (query or X-User-Id header)")
+
+SUPABASE_URL = os.getenv("SUPABASE_URL") or getattr(settings, "SUPABASE_URL", "")
+SUPABASE_SERVICE_ROLE_KEY = (
+    os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    or os.getenv("SUPABASE_SERVICE_KEY")
+    or getattr(settings, "SUPABASE_SERVICE_ROLE_KEY", "")
+)
+JWT_SECRET = getattr(settings, "SUPABASE_JWT_SECRET", "") or os.getenv("SUPABASE_JWT_SECRET", "")
 
 supabase: Optional[Client] = None
 if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY and SUPABASE_SERVICE_ROLE_KEY not in ("", "ton_service_role_key"):
@@ -57,7 +71,7 @@ TIER_LIMITS = {
         "max_cars": 1,
     },
     "racer": {
-        "analyses_per_month": None,  # illimité
+        "analyses_per_month": None,
         "analyses_used": 0,
         "can_export_csv": True,
         "can_export_pdf": False,
@@ -79,39 +93,71 @@ TIER_LIMITS = {
 }
 
 
-@router.get("/api/user/subscription")
-async def get_user_subscription(
-    user_id: str = Query(..., description="User UUID from Supabase auth"),
-    authorization: Optional[str] = Header(None),
-):
-    """
-    Retourne l'abonnement actuel de l'utilisateur depuis la table profiles.
-    Peut être appelé avec user_id en query OU avec Bearer JWT (user_id dérivé du token).
-    """
-    if not supabase:
-        logger.warning("get_user_subscription: Supabase client not initialized")
-        return {
-            "tier": "rookie",
-            "status": None,
-            "billing_period": None,
-            "subscription_end_date": None,
-            "stripe_customer_id": None,
-            "stripe_subscription_id": None,
-            "limits": _default_limits(),
-        }
+def _log_subscription_request(user_id: str, source: str, result: str, error: Optional[str] = None):
+    log_obj = {
+        "step": "subscription_request",
+        "user_id": user_id,
+        "source": source,
+        "result": result,
+    }
+    if error:
+        log_obj["error"] = error
+    logger.info("subscription_request %s", json.dumps(log_obj))
 
-    # Si Bearer fourni, dériver user_id du JWT (priorité pour le frontend)
-    if authorization and authorization.startswith("Bearer "):
+
+def get_current_user(
+    authorization: Optional[str] = Header(None),
+    user_id: Optional[str] = Query(None, description="Fallback: user UUID (si SUPABASE_JWT_SECRET non configuré)"),
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+) -> Tuple[str, str]:
+    """
+    Retourne (user_id, source).
+    Option A : si SUPABASE_JWT_SECRET configuré → décode le Bearer JWT, retourne (sub, "jwt"), sinon 401.
+    Option B : sinon → user_id depuis query puis X-User-Id, retourne (user_id, "query_param"|"header"), sinon 401.
+    """
+    if JWT_SECRET:
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Token manquant")
         token = authorization.replace("Bearer ", "").strip()
         try:
-            user_response = supabase.auth.get_user(jwt=token)
-            user = user_response.user if hasattr(user_response, "user") else user_response
-            if user:
-                uid = user.get("id") if isinstance(user, dict) else getattr(user, "id", None)
-                if uid:
-                    user_id = uid
-        except Exception as e:
-            logger.warning("get_user_subscription: JWT parse failed: %s", e)
+            payload = jwt.decode(
+                token,
+                JWT_SECRET,
+                audience="authenticated",
+                algorithms=["HS256"],
+            )
+            uid = payload.get("sub")
+            if not uid:
+                raise HTTPException(status_code=401, detail="Token invalide (sub manquant)")
+            return (str(uid), "jwt")
+        except PyJWTError as e:
+            logger.warning("JWT decode failed: %s", e)
+            raise HTTPException(status_code=401, detail="Token invalide ou expiré")
+
+    # Fallback : query puis header
+    uid = user_id or x_user_id
+    if not uid:
+        raise HTTPException(status_code=401, detail="Token ou user_id manquant (query param ou header X-User-Id)")
+    source = "query_param" if user_id else "header"
+    logger.info("user_id from %s: %s", source, uid)
+    return (uid.strip(), source)
+
+
+@router.get("/api/user/subscription")
+async def get_user_subscription(
+    current: Tuple[str, str] = Depends(get_current_user),
+):
+    """
+    Retourne l'abonnement depuis la table profiles.
+    Auth : Bearer JWT (recommandé) ou user_id en query / X-User-Id (fallback si pas de JWT secret).
+    """
+    user_id, source = current
+    if not supabase:
+        _log_subscription_request(user_id, source, "error", "Supabase client not initialized")
+        raise HTTPException(
+            status_code=503,
+            detail="Service temporairement indisponible",
+        )
 
     try:
         result = (
@@ -128,15 +174,8 @@ async def get_user_subscription(
         )
 
         if not result.data or len(result.data) == 0:
-            return {
-                "tier": "rookie",
-                "status": None,
-                "billing_period": None,
-                "subscription_end_date": None,
-                "stripe_customer_id": None,
-                "stripe_subscription_id": None,
-                "limits": _default_limits(),
-            }
+            _log_subscription_request(user_id, source, "not_found")
+            raise HTTPException(status_code=404, detail="Profil non trouvé")
 
         data = result.data[0]
         tier = (data.get("subscription_tier") or "rookie").lower()
@@ -147,28 +186,36 @@ async def get_user_subscription(
         if data.get("analyses_count_current_month") is not None:
             limits["analyses_used"] = int(data["analyses_count_current_month"])
 
-        sub_end = data.get("subscription_end_date")
-        subscription_end_date = sub_end.isoformat() if hasattr(sub_end, "isoformat") else str(sub_end) if sub_end else None
-
-        logger.info(
-            "get_user_subscription: user_id=%s tier=%s status=%s",
-            user_id,
-            tier,
-            data.get("subscription_status"),
+        sub_start = data.get("subscription_start_date")
+        subscription_start_date = (
+            sub_start.isoformat() if hasattr(sub_start, "isoformat") else str(sub_start) if sub_start else None
         )
+        sub_end = data.get("subscription_end_date")
+        subscription_end_date = (
+            sub_end.isoformat() if hasattr(sub_end, "isoformat") else str(sub_end) if sub_end else None
+        )
+        analyses_limit = 3 if tier == "rookie" else None
+
+        _log_subscription_request(user_id, source, tier)
 
         return {
             "tier": tier,
             "status": data.get("subscription_status"),
             "billing_period": data.get("billing_period"),
+            "subscription_start_date": subscription_start_date,
             "subscription_end_date": subscription_end_date,
+            "analyses_count_current_month": data.get("analyses_count_current_month"),
+            "analyses_limit": analyses_limit,
             "stripe_customer_id": data.get("stripe_customer_id"),
             "stripe_subscription_id": data.get("stripe_subscription_id"),
             "limits": limits,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("get_user_subscription error for user_id=%s: %s", user_id, e)
+        _log_subscription_request(user_id, source, "error", str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -185,11 +232,20 @@ async def get_user_profile(authorization: Optional[str] = Header(None)):
 
     token = authorization.replace("Bearer ", "").strip()
     try:
-        user_response = supabase.auth.get_user(jwt=token)
-        user = user_response.user if hasattr(user_response, "user") else user_response
-        if not user:
-            raise HTTPException(status_code=401, detail="Token invalide")
-        user_id = user.get("id") if isinstance(user, dict) else getattr(user, "id", None)
+        if JWT_SECRET:
+            payload = jwt.decode(
+                token,
+                JWT_SECRET,
+                audience="authenticated",
+                algorithms=["HS256"],
+            )
+            user_id = payload.get("sub")
+        else:
+            user_response = supabase.auth.get_user(jwt=token)
+            user = user_response.user if hasattr(user_response, "user") else user_response
+            if not user:
+                raise HTTPException(status_code=401, detail="Token invalide")
+            user_id = user.get("id") if isinstance(user, dict) else getattr(user, "id", None)
         if not user_id:
             raise HTTPException(status_code=401, detail="Token invalide")
 
@@ -207,10 +263,16 @@ async def get_user_profile(authorization: Optional[str] = Header(None)):
             tier = "racer" if (r.get("subscription_tier") or "").lower() in ("racer", "team") else "free"
             analyses_count = int(r.get("analyses_count_current_month") or 0)
 
-        email = user.get("email") if isinstance(user, dict) else getattr(user, "email", None)
+        if JWT_SECRET:
+            email = payload.get("email")
+        else:
+            user = user_response.user if hasattr(user_response, "user") else user_response
+            email = user.get("email") if isinstance(user, dict) else getattr(user, "email", None)
         return {"tier": tier, "analyses_count": analyses_count, "trial_status": "active", "email": email}
     except HTTPException:
         raise
+    except PyJWTError:
+        raise HTTPException(status_code=401, detail="Token invalide ou expiré")
     except Exception as e:
         logger.warning("Profile error: %s", e)
         raise HTTPException(status_code=401, detail="Token invalide ou expiré")

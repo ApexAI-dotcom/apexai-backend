@@ -32,5 +32,5 @@ API disponible sur http://localhost:8000
 - `POST /api/v1/analyze` - Analyse CSV télémétrie
 - `POST /api/create-checkout-session` - Stripe Checkout
 - `POST /api/webhook/stripe` - Webhook Stripe
-- `GET /api/subscription-status` - Statut abonnement
+- `GET /api/user/subscription` - Statut abonnement (Bearer JWT ou user_id en query/X-User-Id)
 - `GET /health` - Health check

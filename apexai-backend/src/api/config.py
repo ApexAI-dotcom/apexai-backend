@@ -43,6 +43,8 @@ class Settings:
     # Supabase (service_role pour webhook Stripe / RLS bypass)
     SUPABASE_URL = os.getenv("SUPABASE_URL", "")
     SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_SERVICE_KEY", "")
+    # JWT Secret (Project Settings > API) pour vérifier les tokens sans appel Supabase
+    SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
 
     # Stripe Configuration
     STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
