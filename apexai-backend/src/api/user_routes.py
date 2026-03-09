@@ -3,29 +3,26 @@
 """
 Apex AI - User Profile API
 Endpoints pour le profil utilisateur et l'abonnement (table profiles).
-Auth : JWT Bearer (SUPABASE_JWT_SECRET) ou fallback user_id query/header si secret absent.
+Auth : JWT Bearer obligatoire via get_current_user (SEC-001).
 """
 
 import json
 import logging
 import os
-from typing import Optional, Tuple
+from typing import Optional
 
 import jwt
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from jwt import PyJWTError
 from supabase import Client, create_client
 
+from .auth import get_current_user
 from .config import settings
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-# Avertissement au démarrage si JWT secret absent
-if not (getattr(settings, "SUPABASE_JWT_SECRET", "") or os.getenv("SUPABASE_JWT_SECRET")):
-    logger.warning("SUPABASE_JWT_SECRET not set, using insecure user_id param (query or X-User-Id header)")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL") or getattr(settings, "SUPABASE_URL", "")
 SUPABASE_SERVICE_ROLE_KEY = (
@@ -105,100 +102,25 @@ def _log_subscription_request(user_id: str, source: str, result: str, error: Opt
     logger.info("subscription_request %s", json.dumps(log_obj))
 
 
-def get_current_user(
-    authorization: Optional[str] = Header(None),
-    user_id: Optional[str] = Query(None, description="Fallback: user UUID (si SUPABASE_JWT_SECRET non configuré)"),
-    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
-) -> Tuple[str, str]:
-    """
-    Retourne (user_id, source).
-    Option A : si SUPABASE_JWT_SECRET configuré → décode le Bearer JWT, retourne (sub, "jwt"), sinon 401.
-    Option B : sinon → user_id depuis query puis X-User-Id, retourne (user_id, "query_param"|"header"), sinon 401.
-    """
-    if JWT_SECRET:
-        if not authorization or not authorization.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Token manquant")
-        token = authorization.replace("Bearer ", "").strip()
-        try:
-            payload = jwt.decode(
-                token,
-                JWT_SECRET,
-                audience="authenticated",
-                algorithms=["HS256"],
-            )
-            uid = payload.get("sub")
-            if not uid:
-                raise HTTPException(status_code=401, detail="Token invalide (sub manquant)")
-            return (str(uid), "jwt")
-        except PyJWTError as e:
-            logger.warning("JWT decode failed: %s", e)
-            raise HTTPException(status_code=401, detail="Token invalide ou expiré")
-
-    # Fallback : query puis header
-    uid = user_id or x_user_id
-    if not uid:
-        raise HTTPException(status_code=401, detail="Token ou user_id manquant (query param ou header X-User-Id)")
-    source = "query_param" if user_id else "header"
-    logger.info("user_id from %s: %s", source, uid)
-    return (uid.strip(), source)
-
-
 @router.get("/api/user/subscription")
 async def get_user_subscription(
-    user_id: Optional[str] = Query(None, description="User UUID (optionnel si Bearer JWT fourni)"),
-    authorization: Optional[str] = Header(None),
-    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    request: Request,
+    current_user: str = Depends(get_current_user),
 ):
     """
-    Retourne l'abonnement depuis la table profiles.
-    user_id optionnel : si absent, on utilise le JWT Bearer ou le header X-User-Id. Sinon 401.
+    Retourne l'abonnement depuis la table profiles. Auth JWT obligatoire.
     """
-    # Résolution user_id : query > JWT > X-User-Id
-    resolved_id: Optional[str] = None
-    source = "none"
-    if user_id:
-        resolved_id = user_id.strip()
-        source = "query_param"
-    elif authorization and authorization.startswith("Bearer "):
-        token = authorization.replace("Bearer ", "").strip()
-        if JWT_SECRET:
-            try:
-                payload = jwt.decode(
-                    token,
-                    JWT_SECRET,
-                    audience="authenticated",
-                    algorithms=["HS256"],
-                )
-                resolved_id = payload.get("sub") and str(payload["sub"])
-                source = "jwt"
-            except PyJWTError as e:
-                logger.warning("JWT decode failed: %s", e)
-                raise HTTPException(status_code=401, detail="Token invalide ou expiré")
-        else:
-            # Fallback: supabase.auth.get_user
-            if supabase:
-                try:
-                    user_response = supabase.auth.get_user(jwt=token)
-                    user = user_response.user if hasattr(user_response, "user") else user_response
-                    if user:
-                        uid = user.get("id") if isinstance(user, dict) else getattr(user, "id", None)
-                        if uid:
-                            resolved_id = str(uid)
-                            source = "jwt"
-                except Exception as e:
-                    logger.warning("get_user(jwt) failed: %s", e)
-    if not resolved_id and x_user_id:
-        resolved_id = x_user_id.strip()
-        source = "header"
-    if not resolved_id:
-        _log_subscription_request("missing", "none", "unauthorized")
-        raise HTTPException(
-            status_code=401,
-            detail="user_id required in query param or Authorization header",
-        )
-    user_id = resolved_id
+    logger.info(
+        "user_action",
+        extra={
+            "action": "subscription",
+            "user_id": current_user,
+            "ip": request.client.host if request.client else None,
+            "user_agent": request.headers.get("user-agent"),
+        },
+    )
     if not supabase:
-        _log_subscription_request(user_id, source, "error", "Supabase client not initialized")
+        _log_subscription_request(current_user, "jwt", "error", "Supabase client not initialized")
         raise HTTPException(
             status_code=503,
             detail="Service temporairement indisponible",
@@ -213,13 +135,13 @@ async def get_user_subscription(
                 "subscription_start_date, subscription_end_date, "
                 "analyses_count_current_month, last_analysis_reset_date",
             )
-            .eq("id", user_id)
+            .eq("id", current_user)
             .limit(1)
             .execute()
         )
 
         if not result.data or len(result.data) == 0:
-            _log_subscription_request(user_id, source, "not_found")
+            _log_subscription_request(current_user, "jwt", "not_found")
             raise HTTPException(status_code=404, detail="Profil non trouvé")
 
         data = result.data[0]
@@ -241,7 +163,7 @@ async def get_user_subscription(
         )
         analyses_limit = 3 if tier == "rookie" else None
 
-        _log_subscription_request(user_id, source, tier)
+        _log_subscription_request(current_user, "jwt", tier)
 
         return {
             "tier": tier,
@@ -259,8 +181,8 @@ async def get_user_subscription(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception("get_user_subscription error for user_id=%s: %s", user_id, e)
-        _log_subscription_request(user_id, source, "error", str(e))
+        logger.exception("get_user_subscription error for user_id=%s: %s", current_user, e)
+        _log_subscription_request(current_user, "jwt", "error", str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -297,7 +219,7 @@ async def get_user_profile(authorization: Optional[str] = Header(None)):
         row = (
             supabase.table("profiles")
             .select("subscription_tier, analyses_count_current_month")
-            .eq("id", user_id)
+            .eq("id", current_user)
             .limit(1)
             .execute()
         )

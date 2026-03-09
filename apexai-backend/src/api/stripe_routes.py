@@ -14,9 +14,12 @@ import logging
 import os
 
 import stripe
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+
+from .auth import get_current_user
+from .config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -88,12 +91,11 @@ def _price_id_to_tier_and_period(price_id: str) -> tuple[str, str]:
 # ---------------------------------------------------------------------------
 
 class CreateCheckoutSessionRequest(BaseModel):
-    user_id: str
     price_id: str  # racer_monthly | racer_annual | team_monthly | team_annual
 
 
 class CreatePortalSessionRequest(BaseModel):
-    user_id: str
+    pass  # user_id from JWT (current_user)
 
 
 # ---------------------------------------------------------------------------
@@ -101,13 +103,25 @@ class CreatePortalSessionRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 @router.post("/create-checkout-session")
-async def create_checkout_session(body: CreateCheckoutSessionRequest) -> JSONResponse:
+async def create_checkout_session(
+    request: Request,
+    body: CreateCheckoutSessionRequest,
+    current_user: str = Depends(get_current_user),
+) -> JSONResponse:
     """
-    Crée une session Stripe Checkout. Retourne checkout_url.
+    Crée une session Stripe Checkout. Auth JWT obligatoire.
     Idempotence : 400 si l'utilisateur a déjà un abonnement actif.
     """
     try:
-        user_id = body.user_id.strip()
+        logger.info(
+            "user_action",
+            extra={
+                "action": "checkout_session",
+                "user_id": current_user,
+                "ip": request.client.host if request.client else None,
+                "user_agent": request.headers.get("user-agent"),
+            },
+        )
         price_id_key = body.price_id.strip()
         if price_id_key not in PRICE_IDS:
             logger.warning("create_checkout_session: invalid price_id=%s", price_id_key)
@@ -130,14 +144,14 @@ async def create_checkout_session(body: CreateCheckoutSessionRequest) -> JSONRes
                 r = (
                     supabase_client.table("profiles")
                     .select("subscription_status", "stripe_subscription_id")
-                    .eq("id", user_id)
+                    .eq("id", current_user)
                     .limit(1)
                     .execute()
                 )
                 if r.data and len(r.data) > 0:
                     row = r.data[0]
                     if row.get("subscription_status") == "active" and row.get("stripe_subscription_id"):
-                        logger.warning("create_checkout_session: user %s already subscribed", user_id)
+                        logger.warning("create_checkout_session: user %s already subscribed", current_user)
                         return JSONResponse(
                             status_code=400,
                             content={
@@ -154,10 +168,10 @@ async def create_checkout_session(body: CreateCheckoutSessionRequest) -> JSONRes
             mode="subscription",
             success_url=f"{FRONTEND_URL}/?success=true&session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{FRONTEND_URL}/pricing?canceled=true",
-            metadata={"user_id": user_id, "supabase_user_id": user_id},
-            subscription_data={"metadata": {"user_id": user_id, "supabase_user_id": user_id}},
+            metadata={"user_id": current_user, "supabase_user_id": current_user},
+            subscription_data={"metadata": {"user_id": current_user, "supabase_user_id": current_user}},
         )
-        logger.info("create_checkout_session: session_id=%s user_id=%s", session.id, user_id)
+        logger.info("create_checkout_session: session_id=%s user_id=%s", session.id, current_user)
         return JSONResponse(content={"checkout_url": session.url})
     except stripe.error.StripeError as e:
         logger.error("create_checkout_session StripeError: %s", e, exc_info=True)
@@ -168,13 +182,24 @@ async def create_checkout_session(body: CreateCheckoutSessionRequest) -> JSONRes
 
 
 @router.post("/create-portal-session")
-async def create_portal_session(body: CreatePortalSessionRequest) -> JSONResponse:
+async def create_portal_session(
+    request: Request,
+    current_user: str = Depends(get_current_user),
+) -> JSONResponse:
     """
-    Crée une session Stripe Customer Portal à partir du user_id.
+    Crée une session Stripe Customer Portal. Auth JWT obligatoire.
     Récupère stripe_customer_id depuis la table profiles.
     """
     try:
-        user_id = body.user_id.strip()
+        logger.info(
+            "user_action",
+            extra={
+                "action": "portal_session",
+                "user_id": current_user,
+                "ip": request.client.host if request.client else None,
+                "user_agent": request.headers.get("user-agent"),
+            },
+        )
         if not STRIPE_SECRET_KEY:
             return JSONResponse(status_code=500, content={"error": "Stripe non configuré"})
         if not supabase_client:
@@ -182,7 +207,7 @@ async def create_portal_session(body: CreatePortalSessionRequest) -> JSONRespons
         r = (
             supabase_client.table("profiles")
             .select("stripe_customer_id")
-            .eq("id", user_id)
+            .eq("id", current_user)
             .limit(1)
             .execute()
         )
@@ -201,7 +226,7 @@ async def create_portal_session(body: CreatePortalSessionRequest) -> JSONRespons
             customer=customer_id,
             return_url=f"{FRONTEND_URL}/profile",
         )
-        logger.info("create_portal_session: user_id=%s", user_id)
+        logger.info("create_portal_session: user_id=%s", current_user)
         return JSONResponse(content={"portal_url": portal_session.url})
     except stripe.error.StripeError as e:
         logger.error("create_portal_session StripeError: %s", e, exc_info=True)
@@ -212,14 +237,40 @@ async def create_portal_session(body: CreatePortalSessionRequest) -> JSONRespons
 
 
 @router.get("/customer-portal")
-async def get_customer_portal(user_id: str, customer_id: str) -> JSONResponse:
+async def get_customer_portal(
+    request: Request,
+    current_user: str = Depends(get_current_user),
+) -> JSONResponse:
     """
-    Legacy: crée une session Portal à partir de user_id + customer_id (query params).
-    Préférer POST /api/stripe/create-portal-session avec { user_id }.
+    Crée une session Portal pour l'utilisateur authentifié. Auth JWT obligatoire.
+    Récupère stripe_customer_id depuis profiles.
     """
     try:
+        logger.info(
+            "user_action",
+            extra={
+                "action": "customer_portal",
+                "user_id": current_user,
+                "ip": request.client.host if request.client else None,
+                "user_agent": request.headers.get("user-agent"),
+            },
+        )
         if not STRIPE_SECRET_KEY:
             raise HTTPException(status_code=500, detail="Stripe non configuré")
+        if not supabase_client:
+            raise HTTPException(status_code=503, detail="Service indisponible")
+        r = (
+            supabase_client.table("profiles")
+            .select("stripe_customer_id")
+            .eq("id", current_user)
+            .limit(1)
+            .execute()
+        )
+        if not r.data or len(r.data) == 0:
+            raise HTTPException(status_code=404, detail="Aucun abonnement associé à ce compte.")
+        customer_id = (r.data[0] or {}).get("stripe_customer_id")
+        if not customer_id:
+            raise HTTPException(status_code=404, detail="Aucun abonnement associé à ce compte.")
         stripe.Customer.retrieve(customer_id)
         portal_session = stripe.billing_portal.Session.create(
             customer=customer_id,
@@ -481,6 +532,8 @@ async def stripe_webhook(request: Request) -> JSONResponse:
 @router.get("/set-pro")
 async def set_pro(user_id: str) -> JSONResponse:
     """Dev/test only: force PRO in local cache. Ne pas utiliser en production."""
+    if settings.ENVIRONMENT == "production":
+        raise HTTPException(status_code=404, detail="Not Found")
     try:
         if not supabase_client:
             return JSONResponse(status_code=503, content={"error": "Supabase non configuré"})
@@ -498,6 +551,8 @@ async def set_pro(user_id: str) -> JSONResponse:
 @router.get("/test-supabase")
 async def test_supabase() -> JSONResponse:
     """Test connexion Supabase (table profiles)."""
+    if settings.ENVIRONMENT == "production":
+        raise HTTPException(status_code=404, detail="Not Found")
     if not supabase_client:
         return JSONResponse(status_code=503, content={"error": "Supabase non configuré"})
     try:
