@@ -52,13 +52,23 @@ else:
     supabase_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
     logger.info("Supabase client initialized: %s", SUPABASE_URL)
 
-# Price IDs : racer_monthly/annual, team_monthly/annual (configurables via env)
+# Price IDs : env vars UNIQUEMENT (pas de fallback hardcodé)
+STRIPE_PRICE_RACER_MONTHLY = (os.getenv("STRIPE_PRICE_RACER_MONTHLY") or "").strip()
+STRIPE_PRICE_RACER_ANNUAL = (os.getenv("STRIPE_PRICE_RACER_ANNUAL") or "").strip()
+STRIPE_PRICE_TEAM_MONTHLY = (os.getenv("STRIPE_PRICE_TEAM_MONTHLY") or "").strip()
+STRIPE_PRICE_TEAM_ANNUAL = (os.getenv("STRIPE_PRICE_TEAM_ANNUAL") or "").strip()
+
+if not STRIPE_PRICE_RACER_MONTHLY:
+    raise RuntimeError("Missing STRIPE_PRICE_*")
+
 PRICE_IDS = {
-    "racer_monthly": os.getenv("STRIPE_PRICE_RACER_MONTHLY", "price_1SrnvFJY5DvWR2lKaJ7Fg0aY"),
-    "racer_annual": os.getenv("STRIPE_PRICE_RACER_ANNUAL", ""),
-    "team_monthly": os.getenv("STRIPE_PRICE_TEAM_MONTHLY", "price_1SrnvuJY5DvWR2lKeHBwJdSc"),
-    "team_annual": os.getenv("STRIPE_PRICE_TEAM_ANNUAL", ""),
+    "racer_monthly": STRIPE_PRICE_RACER_MONTHLY,
+    "racer_annual": STRIPE_PRICE_RACER_ANNUAL,
+    "team_monthly": STRIPE_PRICE_TEAM_MONTHLY,
+    "team_annual": STRIPE_PRICE_TEAM_ANNUAL,
 }
+
+logger.info("prices_loaded", extra={"racer_monthly": STRIPE_PRICE_RACER_MONTHLY})
 
 # Mapping exact price_id -> (tier, billing_period) pour le webhook (log si inconnu)
 def _build_price_to_tier() -> dict:
