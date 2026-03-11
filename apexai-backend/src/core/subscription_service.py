@@ -108,6 +108,12 @@ def _fetch_profile(user_id: str) -> Optional[dict[str, Any]]:
         return None
 
 
+def get_subscription_tier(user_id: str) -> str:
+    """Retourne le tier de l'utilisateur (rookie, racer, team)."""
+    profile = _fetch_profile(user_id)
+    return _parse_tier(profile.get("subscription_tier") if profile else None)
+
+
 def _reset_monthly_count(user_id: str) -> bool:
     """Remet le compteur mensuel à 0 et met à jour last_analysis_reset_date. Retourne True si OK."""
     supabase = _get_supabase()

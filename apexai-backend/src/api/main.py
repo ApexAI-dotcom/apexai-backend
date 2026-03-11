@@ -168,6 +168,14 @@ try:
 except ImportError as e:
     logger.warning("⚠ User routes not loaded: %s", e)
 
+# Routes Analyses (paginated, JWT + RLS)
+try:
+    from .analyses_routes import router as analyses_router
+    app.include_router(analyses_router)
+    logger.info("✓ Analyses routes loaded (GET /api/analyses)")
+except ImportError as e:
+    logger.warning("⚠ Analyses routes not loaded: %s", e)
+
 # Importer process-video depuis routes pour accès direct /api/process-video
 from .routes import process_video
 app.post("/api/process-video")(process_video)
