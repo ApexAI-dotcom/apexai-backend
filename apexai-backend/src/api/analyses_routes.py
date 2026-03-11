@@ -120,6 +120,7 @@ async def test_data(
     current_user: str = Depends(get_current_user),
 ):
     """
+    BACK-010 test-data endpoint.
     TEMPORAIRE. Insère 3 analyses de test pour current_user (visibles en UI).
     """
     if not supabase:
