@@ -91,10 +91,13 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
     raise HTTPException(status_code=401, detail="Invalid/expired token")
 
 
-# Router auth (endpoint debug temporaire)
-from fastapi import APIRouter as _APIRouter
+# Router auth (debug + on-login)
+from fastapi import APIRouter as _APIRouter, Request
 
 auth_router = _APIRouter(prefix="/api/auth", tags=["auth"])
+
+# Noms des pistes utilisées pour les données de test (on-login)
+_TEST_TRACK_NAMES = ("Monaco Kart", "Monza Kart", "Local Kart")
 
 
 @auth_router.get("/debug")
@@ -103,3 +106,46 @@ async def auth_debug(current_user: str = Depends(get_current_user)):
     from ..core.subscription_service import get_subscription_tier
     tier = get_subscription_tier(current_user)
     return {"user_id": current_user, "tier": tier}
+
+
+@auth_router.post("/on-login")
+async def on_login(request: Request, current_user: str = Depends(get_current_user)):
+    """
+    Appelé après login frontend : supprime les anciennes analyses test puis insère 3 nouvelles
+    (Monaco Kart, Monza Kart, Local Kart) pour current_user.
+    """
+    supabase = _get_supabase_auth()
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Service temporairement indisponible")
+    try:
+        supabase.table("analyses").delete().eq("user_id", current_user).in_(
+            "track_name", list(_TEST_TRACK_NAMES)
+        ).execute()
+        supabase.table("analyses").insert([
+            {
+                "user_id": current_user,
+                "track_name": "Monaco Kart",
+                "lap_count": 12,
+                "ai_insights": {"braking_score": 85, "lap_improvement": "+0.3s"},
+            },
+            {
+                "user_id": current_user,
+                "track_name": "Monza Kart",
+                "lap_count": 15,
+                "ai_insights": {"braking_score": 92, "lap_improvement": "+0.1s"},
+            },
+            {
+                "user_id": current_user,
+                "track_name": "Local Kart",
+                "lap_count": 8,
+                "ai_insights": {"braking_score": 78, "lap_improvement": "-0.2s"},
+            },
+        ]).execute()
+        logger.info(
+            "auto_test_data_created",
+            extra={"user_id": current_user, "ip": request.client.host if request.client else None},
+        )
+        return {"inserted": 3}
+    except Exception as e:
+        logger.exception("on_login failed for user_id=%s: %s", current_user, e)
+        raise HTTPException(status_code=500, detail="Erreur on-login")
