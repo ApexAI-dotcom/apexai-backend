@@ -184,6 +184,14 @@ try:
 except ImportError as e:
     logger.warning("⚠ Auth routes not loaded: %s", e)
 
+# Routes Admin (TEMPORAIRE : run-migrations)
+try:
+    from .admin_routes import router as admin_router
+    app.include_router(admin_router)
+    logger.info("✓ Admin routes loaded (POST /api/admin/run-migrations)")
+except ImportError as e:
+    logger.warning("⚠ Admin routes not loaded: %s", e)
+
 # Importer process-video depuis routes pour accès direct /api/process-video
 from .routes import process_video
 app.post("/api/process-video")(process_video)

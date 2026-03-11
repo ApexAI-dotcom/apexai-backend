@@ -112,3 +112,56 @@ async def get_analyses(
     except Exception as e:
         logger.exception("get_analyses failed for user_id=%s: %s", current_user, e)
         raise HTTPException(status_code=500, detail="Erreur lors de la récupération des analyses")
+
+
+@router.post("/analyses/test-data")
+async def create_test_data(
+    request: Request,
+    current_user: str = Depends(get_current_user),
+) -> JSONResponse:
+    """
+    TEMPORAIRE. Insère 3 analyses de test pour current_user.
+    """
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Service temporairement indisponible")
+
+    fake_analyses = [
+        {
+            "user_id": current_user,
+            "track_name": "Circuit Test 1",
+            "session_date": "2025-03-01",
+            "telemetry_data": {},
+            "ai_insights": {"summary": "Session test 1", "score": 75},
+            "lap_count": 12,
+        },
+        {
+            "user_id": current_user,
+            "track_name": "Circuit Test 2",
+            "session_date": "2025-03-05",
+            "telemetry_data": {},
+            "ai_insights": {"summary": "Session test 2", "score": 82},
+            "lap_count": 15,
+        },
+        {
+            "user_id": current_user,
+            "track_name": "Circuit Test 3",
+            "session_date": "2025-03-08",
+            "telemetry_data": {},
+            "ai_insights": {"summary": "Session test 3", "score": 78},
+            "lap_count": 10,
+        },
+    ]
+    try:
+        supabase.table("analyses").insert(fake_analyses).execute()
+        logger.info(
+            "test_data_created",
+            extra={
+                "user_id": current_user,
+                "ip": request.client.host if request.client else None,
+                "count": 3,
+            },
+        )
+        return JSONResponse(content={"ok": True, "inserted": 3})
+    except Exception as e:
+        logger.exception("create_test_data failed for user_id=%s: %s", current_user, e)
+        raise HTTPException(status_code=500, detail="Erreur lors de l'insertion des données test")
