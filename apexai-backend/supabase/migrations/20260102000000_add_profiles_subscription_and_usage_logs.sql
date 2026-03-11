@@ -1,7 +1,7 @@
 -- =============================================================================
--- Migration: colonnes abonnement Stripe sur profiles + table usage_logs
--- À exécuter dans Supabase SQL Editor (ou via Supabase CLI)
--- Ne modifie pas les colonnes existantes de profiles (ADD COLUMN uniquement).
+-- Migration: 20260102000000 — colonnes abonnement Stripe sur profiles + usage_logs
+-- Description: ADD COLUMN sur profiles (abonnement) ; CREATE TABLE usage_logs + RLS.
+-- RLS: usage_logs — SELECT/INSERT WHERE auth.uid() = user_id ; user_id FK → profiles.id.
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
