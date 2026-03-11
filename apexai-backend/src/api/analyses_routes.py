@@ -9,7 +9,7 @@ import logging
 import os
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from supabase import Client, create_client
 
@@ -42,11 +42,18 @@ async def get_analyses(
     current_user: str = Depends(get_current_user),
     page: int = 1,
     limit: int = 20,
+    user_id: Optional[str] = Query(None, include_in_schema=False),
 ) -> JSONResponse:
     """
     Liste paginée des analyses de l'utilisateur (JWT obligatoire).
     RLS : seules les lignes user_id = current_user sont visibles.
+    Le query ?user_id= est ignoré (toujours current_user du JWT).
     """
+    if user_id is not None and user_id.strip():
+        logger.warning(
+            "analyses_list: query user_id ignored (use JWT)",
+            extra={"user_id": current_user, "query_user_id": user_id},
+        )
     if not supabase:
         raise HTTPException(status_code=503, detail="Service temporairement indisponible")
 

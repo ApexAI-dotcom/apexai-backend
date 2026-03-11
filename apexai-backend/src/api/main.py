@@ -176,6 +176,14 @@ try:
 except ImportError as e:
     logger.warning("⚠ Analyses routes not loaded: %s", e)
 
+# Routes Auth (debug temporaire)
+try:
+    from .auth import auth_router
+    app.include_router(auth_router)
+    logger.info("✓ Auth routes loaded (GET /api/auth/debug)")
+except ImportError as e:
+    logger.warning("⚠ Auth routes not loaded: %s", e)
+
 # Importer process-video depuis routes pour accès direct /api/process-video
 from .routes import process_video
 app.post("/api/process-video")(process_video)
