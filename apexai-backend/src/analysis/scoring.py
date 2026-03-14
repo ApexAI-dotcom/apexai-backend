@@ -138,26 +138,18 @@ def calculate_apex_precision_score(
     
     if not distances:
         return 15.0  # Score moyen par défaut
-    
-    avg_distance = np.mean(distances)
-    
-    # Score basé sur moyenne des écarts
-    # 0-0.5m = 30 pts, 0.5-1.5m = 25 pts, 1.5-3m = 20 pts, 3-5m = 15 pts, >5m = 5-10 pts
-    if avg_distance <= 0.5:
-        score = 30.0
-    elif avg_distance <= 1.5:
-        score = 25.0
-    elif avg_distance <= 3.0:
-        score = 20.0
-    elif avg_distance <= 5.0:
-        score = 15.0
+
+    # Médiane pour ne pas être écrasé par 1-2 virages aberrants
+    med_distance = float(np.median(distances))
+    # Recalibration : 0-5m médiane → 25-30/30, 5-15m → 15-25/30, >15m → 0-15/30
+    if med_distance <= 5.0:
+        score = 25.0 + 5.0 * (1.0 - med_distance / 5.0)  # 25-30
+    elif med_distance <= 15.0:
+        score = 15.0 + 10.0 * (1.0 - (med_distance - 5.0) / 10.0)  # 15-25
     else:
-        score = max(5.0, 10.0 * (1 - (avg_distance - 5.0) / 10.0))
-    
-    # Formule alternative pour continuité
-    score_continuous = 30.0 * (1 - min(avg_distance / 5.0, 1.0))
-    
-    return max(score, score_continuous)
+        score = max(0.0, 15.0 - (med_distance - 15.0) / 2.0)  # 0-15
+
+    return max(0.0, min(30.0, score))
 
 
 def calculate_trajectory_consistency_score(df: pd.DataFrame) -> float:

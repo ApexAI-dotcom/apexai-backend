@@ -133,6 +133,8 @@ async def analyze_telemetry(
     track_temperature: Optional[str] = Form(None, description="Température piste en °C"),
     authorization: Optional[str] = Header(None, description="Bearer JWT pour limite abonnement"),
 ) -> AnalysisResponse:
+    # Mode debug : ?debug=true retourne debug_laps, debug_beacons, debug_breakdown
+    debug = request.query_params.get("debug", "").lower() == "true"
     """
     Analyser un fichier de télémétrie.
     
@@ -179,7 +181,6 @@ async def analyze_telemetry(
         except ValueError:
             pass
 
-    cache_key = hashlib.md5((file.filename or "unknown").encode()).hexdigest()
     redis = getattr(request.app.state, "redis", None)
 
     try:
@@ -196,7 +197,13 @@ async def analyze_telemetry(
                 }
             )
 
-        # Cache HIT (on ne met pas en cache si lap_filter différent selon les cas; clé = filename seulement)
+        # Cache key = hash(contenu + nom) pour éviter collision entre fichiers différents avec même nom
+        content_head = await file.read(8192)
+        await file.seek(0)
+        cache_key = hashlib.md5(
+            content_head + (file.filename or "unknown").encode("utf-8")
+        ).hexdigest()
+        # Cache HIT (on ne met pas en cache si lap_filter différent selon les cas)
         # Pas d'incrément du compteur sur cache hit (analyse déjà comptée précédemment).
         if redis and not lap_list:
             cached_raw = await redis.get(f"{REDIS_KEY_PREFIX}{cache_key}")
@@ -213,6 +220,7 @@ async def analyze_telemetry(
             file, analysis_id,
             track_condition=cond,
             track_temperature=temp_c,
+            debug=debug,
         )
 
         # Stocker en cache (uniquement analyse complète sans filtre de tours)
@@ -234,8 +242,9 @@ async def analyze_telemetry(
                 return obj.isoformat()
             raise TypeError(f"Type {type(obj)} not serializable")
 
+        debug_extra = {k: result.pop(k) for k in list(result.keys()) if k.startswith("debug_")}
         resp = AnalysisResponse(**result)
-        content = {"cache_key": cache_key, **resp.model_dump()}
+        content = {"cache_key": cache_key, **resp.model_dump(mode="python", exclude_none=True), **debug_extra}
         return JSONResponse(
             content=json.loads(json.dumps(content, default=json_serializer))
         )

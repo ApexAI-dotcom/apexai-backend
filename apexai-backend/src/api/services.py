@@ -41,6 +41,87 @@ BUFFER_BEFORE_AFTER = 75
 BUFFER_BETWEEN_GROUPS = 50
 
 
+def _build_plot_data(
+    df: "pd.DataFrame",
+    corner_analysis: List[Dict[str, Any]],
+    score_data: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Données brutes pour recréer les graphiques côté frontend (Recharts)."""
+    out = {}
+    try:
+        if "cumulative_distance" in df.columns and "speed" in df.columns:
+            dist = pd.to_numeric(df["cumulative_distance"], errors="coerce").values
+            speed = pd.to_numeric(df["speed"], errors="coerce").values
+            d_min = np.nanmin(dist)
+            dist_rel = np.where(np.isnan(dist), np.nan, dist - d_min)
+            track_len = float(np.nanmax(dist_rel)) if np.any(np.isfinite(dist_rel)) else 0.0
+            laps_list = []
+            if "lap_number" in df.columns:
+                for lap_num in sorted(df["lap_number"].dropna().unique()):
+                    mask = df["lap_number"].values == lap_num
+                    if lap_num >= 1 and mask.any():
+                        d = dist_rel[mask]
+                        s = speed[mask]
+                        laps_list.append({
+                            "lap_number": int(lap_num),
+                            "distance_m": d[~np.isnan(d)].tolist()[:500],
+                            "speed_kmh": s[~np.isnan(s)].tolist()[:500],
+                        })
+            if not laps_list:
+                laps_list = [{"lap_number": 1, "distance_m": dist_rel[~np.isnan(dist_rel)].tolist()[:500], "speed_kmh": speed[~np.isnan(speed)].tolist()[:500]}]
+            out["speed_trace"] = {
+                "laps": laps_list,
+                "sectors": [
+                    {"name": "S1", "start_m": 0, "end_m": track_len / 3.0},
+                    {"name": "S2", "start_m": track_len / 3.0, "end_m": 2.0 * track_len / 3.0},
+                    {"name": "S3", "start_m": 2.0 * track_len / 3.0, "end_m": track_len},
+                ],
+                "avg_speed_kmh": float(np.nanmean(speed)) if len(speed) else 0,
+            }
+    except Exception as e:
+        logger.warning("_build_plot_data speed_trace: %s", e)
+    try:
+        if "latitude" in df.columns and "longitude" in df.columns:
+            lat_col = "latitude_smooth" if "latitude_smooth" in df.columns else "latitude"
+            lon_col = "longitude_smooth" if "longitude_smooth" in df.columns else "longitude"
+            laps_list = []
+            if "lap_number" in df.columns:
+                for lap_num in sorted(df["lap_number"].dropna().unique()):
+                    if lap_num >= 1:
+                        mask = df["lap_number"].values == lap_num
+                        laps_list.append({
+                            "lap_number": int(lap_num),
+                            "lat": df.loc[mask, lat_col].dropna().tolist()[:300],
+                            "lon": df.loc[mask, lon_col].dropna().tolist()[:300],
+                            "speed_kmh": df.loc[mask, "speed"].dropna().tolist()[:300] if "speed" in df.columns else [],
+                        })
+            corners_list = [{"id": c.get("corner_id"), "lat": c.get("apex_lat"), "lon": c.get("apex_lon"), "label": f"Virage {c.get('corner_id', 0)}"} for c in corner_analysis[:15]]
+            out["trajectory_2d"] = {"laps": laps_list or [], "corners": corners_list}
+    except Exception as e:
+        logger.warning("_build_plot_data trajectory_2d: %s", e)
+    try:
+        bd = score_data.get("breakdown", {})
+        out["performance_radar"] = {
+            "axes": ["Précision Apex", "Régularité", "Vitesse Apex", "Secteurs"],
+            "values": [float(bd.get("apex_precision", 0)), float(bd.get("trajectory_consistency", 0)), float(bd.get("apex_speed", 0)), float(bd.get("sector_times", 0))],
+            "max_values": [30, 25, 25, 20],
+        }
+    except Exception as e:
+        logger.warning("_build_plot_data performance_radar: %s", e)
+    try:
+        apex_list = []
+        for c in corner_analysis[:15]:
+            real = float(c.get("apex_speed_real") or 0)
+            opt = float(c.get("apex_speed_optimal") or real)
+            margin = round(opt - real, 1) if opt >= real else 0
+            status = "optimal" if margin <= 0.5 else ("warning" if margin <= 5 else "critical")
+            apex_list.append({"label": f"Virage {c.get('corner_id', 0)}", "margin_kmh": margin, "status": status})
+        out["apex_margin"] = {"corners": apex_list}
+    except Exception as e:
+        logger.warning("_build_plot_data apex_margin: %s", e)
+    return out
+
+
 def _filter_laps_with_buffer(
     df: "pd.DataFrame",
     lap_filter: List[int],
@@ -154,6 +235,7 @@ def _run_analysis_pipeline_sync(
     lap_filter: Optional[List[int]] = None,
     track_condition: str = "dry",
     track_temperature: Optional[float] = None,
+    debug: bool = False,
 ) -> Dict[str, Any]:
     """Pipeline d'analyse synchrone (exécuté dans un thread pour ne pas bloquer l'event loop)."""
     logger.info(f"[{analysis_id}] Step 1/5: Loading data...")
@@ -174,6 +256,19 @@ def _run_analysis_pipeline_sync(
     logger.info(f"[{analysis_id}] Step 3.5/5: Detecting laps...")
     df = detect_laps(df)
     laps_analyzed = 1
+
+    # Si beacons présents et pas de lap_filter : sélectionner les 3 meilleurs tours (non-outlier)
+    if lap_filter is None and beacon_markers and len(beacon_markers) >= 2:
+        lap_times_s = [beacon_markers[i + 1] - beacon_markers[i] for i in range(len(beacon_markers) - 1)]
+        if lap_times_s:
+            median_t = float(np.median(lap_times_s))
+            threshold_t = 1.5 * median_t
+            fast_laps = [(i + 1, t) for i, t in enumerate(lap_times_s) if t <= threshold_t]
+            fast_laps.sort(key=lambda x: x[1])
+            lap_filter = [lap_num for lap_num, _ in fast_laps[:3]]
+            if lap_filter:
+                logger.info(f"[{analysis_id}] Auto-selected 3 best laps from beacons: {lap_filter}")
+
     # Calculer curvature threshold sur FULL TRACK (avant filtrage) pour stabilité entre sélections de tours
     curvature_threshold_global = None
     if "curvature" in df.columns and "lap_number" in df.columns:
@@ -185,9 +280,10 @@ def _run_analysis_pipeline_sync(
             if len(nonzero) > 0:
                 curvature_threshold_global = float(np.percentile(nonzero, 25))
                 logger.info(f"[DIAG] GLOBAL curvature threshold (full track): {curvature_threshold_global:.6f}")
+    laps_available_full = []
     if "lap_number" in df.columns:
-        laps_available = sorted(df["lap_number"].dropna().unique().astype(int).tolist())
-        logger.info(f"[DIAG] Tours disponibles (lap_number): {laps_available}")
+        laps_available_full = sorted(df["lap_number"].dropna().unique().astype(int).tolist())
+        logger.info(f"[DIAG] Tours disponibles (lap_number): {laps_available_full}")
     if lap_filter:
         logger.info(f"[DIAG] Tours sélectionnés : {lap_filter}")
         laps_analyzed = len(lap_filter)
@@ -503,8 +599,14 @@ def _run_analysis_pipeline_sync(
             track_condition=track_condition,
             track_temperature=track_temperature,
         ),
+        plot_data=_build_plot_data(df, unique_corner_analysis, score_data),
     )
-    return response.dict(exclude_none=True)
+    result = response.model_dump(mode="python", exclude_none=True)
+    if debug:
+        result["debug_laps"] = laps_available_full
+        result["debug_beacons"] = len(beacon_markers) if beacon_markers else 0
+        result["debug_breakdown"] = score_data.get("breakdown")
+    return result
 
 
 class AnalysisService:
@@ -574,6 +676,7 @@ class AnalysisService:
         analysis_id: str,
         track_condition: str = "dry",
         track_temperature: Optional[float] = None,
+        debug: bool = False,
     ) -> Dict[str, Any]:
         """
         Traiter un fichier de télémétrie complet.
@@ -583,6 +686,7 @@ class AnalysisService:
             analysis_id: ID unique de l'analyse
             track_condition: dry | damp | wet | rain
             track_temperature: Température piste °C (optionnel)
+            debug: Si True, ajoute debug_laps, debug_beacons, debug_breakdown à la réponse
         
         Returns:
             Dictionnaire avec résultats de l'analyse
@@ -650,6 +754,7 @@ class AnalysisService:
                 lap_filter,
                 track_condition,
                 track_temperature,
+                debug,
             )
             return result
             

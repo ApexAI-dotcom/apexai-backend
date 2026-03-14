@@ -6,7 +6,7 @@ Modèles Pydantic pour l'API REST
 """
 
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional
+from typing import Any, List, Dict, Optional
 from datetime import datetime
 
 
@@ -119,6 +119,7 @@ class AnalysisResponse(BaseModel):
     plots: PlotUrls
     statistics: Statistics
     session_conditions: Optional[SessionConditions] = Field(default=None, description="Conditions de piste (sec/humide/mouillé/pluie, température)")
+    plot_data: Optional[Dict[str, Any]] = Field(default=None, description="Données brutes pour recréer les graphiques côté frontend (Recharts)")
 
 
 class ErrorResponse(BaseModel):

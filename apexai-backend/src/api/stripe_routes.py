@@ -59,7 +59,7 @@ STRIPE_PRICE_TEAM_MONTHLY = (os.getenv("STRIPE_PRICE_TEAM_MONTHLY") or "").strip
 STRIPE_PRICE_TEAM_ANNUAL = (os.getenv("STRIPE_PRICE_TEAM_ANNUAL") or "").strip()
 
 if not STRIPE_PRICE_RACER_MONTHLY:
-    raise RuntimeError("Missing STRIPE_PRICE_*")
+    logger.warning("Missing STRIPE_PRICE_* — définir les variables d'env pour Stripe Checkout ; les routes Stripe renverront 400 si utilisées.")
 
 PRICE_IDS = {
     "racer_monthly": STRIPE_PRICE_RACER_MONTHLY,
@@ -68,7 +68,8 @@ PRICE_IDS = {
     "team_annual": STRIPE_PRICE_TEAM_ANNUAL,
 }
 
-logger.info("prices_loaded", extra={"racer_monthly": STRIPE_PRICE_RACER_MONTHLY})
+if STRIPE_PRICE_RACER_MONTHLY:
+    logger.info("prices_loaded", extra={"racer_monthly": STRIPE_PRICE_RACER_MONTHLY})
 
 # Mapping exact price_id -> (tier, billing_period) pour le webhook (log si inconnu)
 def _build_price_to_tier() -> dict:

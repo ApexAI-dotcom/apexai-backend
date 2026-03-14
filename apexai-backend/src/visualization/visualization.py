@@ -342,66 +342,89 @@ def plot_speed_trace(df: pd.DataFrame, save_path: str) -> bool:
     try:
         if 'cumulative_distance' not in df.columns or 'speed' not in df.columns:
             return False
-        
-        dist = pd.to_numeric(df['cumulative_distance'], errors='coerce').values
+
+        cumdist = pd.to_numeric(df['cumulative_distance'], errors='coerce').values
         speed = pd.to_numeric(df['speed'], errors='coerce').values
-        
+
+        # Distance relative : 0 = début du premier tour analysé (S1 visible dès x=0)
+        if 'lap_number' in df.columns:
+            lap_col = pd.to_numeric(df['lap_number'], errors='coerce').fillna(0)
+            laps_analyzed = lap_col[lap_col >= 1].unique()
+            if len(laps_analyzed) >= 1:
+                first_lap = int(laps_analyzed.min())
+                mask_lap = (lap_col.values == first_lap)
+                if mask_lap.any():
+                    d_start = np.nanmin(cumdist[mask_lap])
+                    dist = np.where(np.isnan(cumdist), np.nan, cumdist - d_start)
+                    track_length = np.nanmax(dist) if np.any(np.isfinite(dist)) else (np.nanmax(cumdist) - d_start)
+                else:
+                    dist = cumdist - np.nanmin(cumdist)
+                    track_length = np.nanmax(dist) if np.any(np.isfinite(dist)) else np.nanmax(cumdist) - np.nanmin(cumdist)
+            else:
+                dist = cumdist - np.nanmin(cumdist)
+                track_length = np.nanmax(dist) if np.any(np.isfinite(dist)) else 1.0
+        else:
+            dist = cumdist - np.nanmin(cumdist)
+            track_length = np.nanmax(dist) if np.any(np.isfinite(dist)) else 1.0
+
         fig, ax = plt.subplots(figsize=FIG_SIZE, dpi=DPI)
         fig.patch.set_facecolor(BG_DARK)
-        
-        # Zones virages en fond
-        if 'corner_id' in df.columns:
+
+        # Zones virages en fond (avec dist relative)
+        if 'corner_id' in df.columns and len(dist) > 0:
             corner_ids = df['corner_id'].values
             in_corner = False
             start_d = 0
             for i, cid in enumerate(corner_ids):
                 if cid > 0 and not in_corner:
-                    start_d = dist[i]
+                    start_d = dist[i] if i < len(dist) else 0
                     in_corner = True
                 elif cid == 0 and in_corner:
-                    ax.axvspan(start_d, dist[i], alpha=0.12, 
+                    end_d = dist[i] if i < len(dist) else start_d
+                    ax.axvspan(start_d, end_d, alpha=0.12,
                               color=COLOR_PURPLE, zorder=0)
                     in_corner = False
-        
-        # Ligne vitesse avec gradient d'épaisseur
-        ax.plot(dist, speed, color=COLOR_ORANGE, linewidth=2, 
+
+        # Ligne vitesse
+        ax.plot(dist, speed, color=COLOR_ORANGE, linewidth=2,
                alpha=0.9, label='Vitesse', zorder=2)
         ax.fill_between(dist, 0, speed, color=COLOR_ORANGE, alpha=0.08, zorder=1)
-        
+
         # Vitesse moyenne
         avg = np.nanmean(speed)
-        ax.axhline(y=avg, color=COLOR_PURPLE, linestyle='--', 
-                  linewidth=1.2, alpha=0.7, 
+        ax.axhline(y=avg, color=COLOR_PURPLE, linestyle='--',
+                  linewidth=1.2, alpha=0.7,
                   label=f'Moyenne {avg:.0f} km/h')
-        
+
         # Apex markers
         if 'is_apex' in df.columns:
             apex_mask = df['is_apex'] == True
             if apex_mask.any():
                 apex_d = dist[apex_mask.values]
                 apex_s = speed[apex_mask.values]
-                ax.scatter(apex_d, apex_s, marker='v', s=80, 
+                ax.scatter(apex_d, apex_s, marker='v', s=80,
                           color=COLOR_ORANGE, edgecolors=BG_DARK,
                           linewidths=0.5, zorder=5, label='Apex')
-        
-        # Secteurs
-        if len(dist) > 0 and not np.isnan(dist[-1]):
-            total = dist[-1]
-            for frac, label in [(1/3, 'S1'), (2/3, 'S2')]:
-                ax.axvline(x=total*frac, color=COLOR_MUTED, 
+
+        # Secteurs S1/S2/S3 = 1/3 de la longueur du tour (distance relative)
+        if np.any(np.isfinite(dist)) and track_length > 0:
+            s1_end = track_length / 3.0
+            s2_end = 2.0 * track_length / 3.0
+            for x_val, label in [(s1_end, 'S1'), (s2_end, 'S2')]:
+                ax.axvline(x=x_val, color=COLOR_MUTED,
                           linestyle=':', alpha=0.4, linewidth=1)
+            ypos = np.nanmax(speed) * 0.95 if np.any(np.isfinite(speed)) else 0
             for frac, label in [(1/6, 'S1'), (1/2, 'S2'), (5/6, 'S3')]:
-                ypos = np.nanmax(speed) * 0.95
-                ax.text(total*frac, ypos, label, ha='center', 
+                ax.text(track_length * frac, ypos, label, ha='center',
                        fontsize=10, color=COLOR_MUTED,
-                       bbox=dict(boxstyle='round,pad=0.2', 
+                       bbox=dict(boxstyle='round,pad=0.2',
                                 facecolor=BG_PANEL, alpha=0.8,
                                 edgecolor='none'))
-        
-        _style_ax(ax, '📈 Trace de Vitesse — Tour Complet', 
+
+        _style_ax(ax, '📈 Trace de Vitesse — Tour Complet',
                  'Distance (m)', 'Vitesse (km/h)')
         ax.legend(fontsize=9)
-        
+
         fig.tight_layout()
         plt.savefig(save_path, dpi=DPI, bbox_inches='tight', facecolor=BG_DARK)
         plt.close(fig)

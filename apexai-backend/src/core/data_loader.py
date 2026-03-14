@@ -361,6 +361,45 @@ def _calculate_metadata(df: pd.DataFrame) -> Dict[str, Any]:
     return metadata
 
 
+def _lttb_indices(df: pd.DataFrame, n_target: int) -> List[int]:
+    """
+    Largest Triangle Three Buckets : retourne n_target indices préservant la forme
+    du signal (précision apex/vitesse préservée vs step uniforme).
+    """
+    n = len(df)
+    if n <= n_target:
+        return list(range(n))
+    y_col = "speed" if "speed" in df.columns else "latitude"
+    if y_col not in df.columns:
+        step = max(1, n // n_target)
+        return list(range(0, n, step))[:n_target] + ([n - 1] if n - 1 not in range(0, n, step) else [])
+    y = pd.to_numeric(df[y_col], errors="coerce").fillna(0).values
+    x = np.arange(n, dtype=float)
+    indices = [0]
+    bucket_size = (n - 2) / (n_target - 2)
+    for i in range(n_target - 2):
+        start = int((i + 1) * bucket_size) + 1
+        end = min(int((i + 2) * bucket_size) + 1, n)
+        if start >= end:
+            continue
+        prev_idx = indices[-1]
+        next_avg_x = (end + min(end + int(bucket_size), n - 1)) / 2.0 if end < n - 1 else end
+        next_avg_y = np.mean(y[end:min(end + int(bucket_size), n)]) if end < n else y[-1]
+        max_area = -1.0
+        best_idx = start
+        for j in range(start, end):
+            area = 0.5 * abs(
+                (x[prev_idx] - next_avg_x) * (y[j] - y[prev_idx])
+                - (x[prev_idx] - x[j]) * (next_avg_y - y[prev_idx])
+            )
+            if area > max_area:
+                max_area = area
+                best_idx = j
+        indices.append(best_idx)
+    indices.append(n - 1)
+    return indices
+
+
 def robust_load_telemetry(file_path: str) -> Dict[str, Any]:
     """
     Charge un fichier de télémétrie de manière robuste avec détection automatique.
@@ -448,20 +487,8 @@ def robust_load_telemetry(file_path: str) -> Dict[str, Any]:
     if df is None or len(df) == 0:
         result['error'] = "❌ Impossible de parser le fichier avec toutes les méthodes essayées"
         return result
-    
-    # === DOWNSAMPLING : max 6000 points pour performance (évite timeout 30s) ===
-    MAX_POINTS = 6000
-    if len(df) > MAX_POINTS:
-        n_orig = len(df)
-        step = max(1, n_orig // MAX_POINTS)
-        df = df.iloc[::step].reset_index(drop=True)
-        msg = (
-            f"✓ Downsampling : {n_orig} → {len(df)} points (step={step})"
-        )
-        warnings.warn(msg)
-        result['warnings'].append(msg)
-    
-    # Normalisation des colonnes
+
+    # Normalisation des colonnes (avant downsampling pour avoir speed/latitude)
     try:
         df, norm_warnings = _normalize_columns(df)
         result['warnings'].extend(norm_warnings)
@@ -482,7 +509,17 @@ def robust_load_telemetry(file_path: str) -> Dict[str, Any]:
     
     # Utiliser le DataFrame nettoyé
     df = df_clean
-    
+
+    # === DOWNSAMPLING INTELLIGENT : LTTB max 6000 points (préserve apex/vitesse) ===
+    MAX_POINTS = 6000
+    if len(df) > MAX_POINTS:
+        n_orig = len(df)
+        indices = _lttb_indices(df, MAX_POINTS)
+        df = df.iloc[indices].reset_index(drop=True)
+        msg = f"✓ Downsampling LTTB : {n_orig} → {len(df)} points"
+        warnings.warn(msg)
+        result['warnings'].append(msg)
+
     # NOTE: Extraction des Beacon Markers déplacée dans services.py
     # après la sauvegarde du fichier pour garantir l'accès au filepath original
     
