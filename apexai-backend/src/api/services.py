@@ -45,41 +45,74 @@ def _build_plot_data(
     df: "pd.DataFrame",
     corner_analysis: List[Dict[str, Any]],
     score_data: Dict[str, Any],
+    lap_time_by_lap: Optional[Dict[int, float]] = None,
 ) -> Dict[str, Any]:
     """Données brutes pour recréer les graphiques côté frontend (Recharts)."""
     out = {}
+    # --- speed_trace : laps avec lap_time, is_reference ; secteurs sur 1 tour ; avg_speed_kmh arrondi ---
     try:
         if "cumulative_distance" in df.columns and "speed" in df.columns:
             dist = pd.to_numeric(df["cumulative_distance"], errors="coerce").values
             speed = pd.to_numeric(df["speed"], errors="coerce").values
             d_min = np.nanmin(dist)
             dist_rel = np.where(np.isnan(dist), np.nan, dist - d_min)
-            track_len = float(np.nanmax(dist_rel)) if np.any(np.isfinite(dist_rel)) else 0.0
+            total_distance = float(np.nanmax(dist_rel)) if np.any(np.isfinite(dist_rel)) else 0.0
             laps_list = []
+            lap_distances: List[float] = []
+            lap_numbers_sorted: List[int] = []
             if "lap_number" in df.columns:
-                for lap_num in sorted(df["lap_number"].dropna().unique()):
+                for i, lap_num in enumerate(sorted(df["lap_number"].dropna().unique())):
+                    if lap_num < 1:
+                        continue
                     mask = df["lap_number"].values == lap_num
-                    if lap_num >= 1 and mask.any():
-                        d = dist_rel[mask]
-                        s = speed[mask]
-                        laps_list.append({
-                            "lap_number": int(lap_num),
-                            "distance_m": d[~np.isnan(d)].tolist()[:500],
-                            "speed_kmh": s[~np.isnan(s)].tolist()[:500],
-                        })
+                    if not mask.any():
+                        continue
+                    d = dist_rel[mask]
+                    s = speed[mask]
+                    d_clean = d[~np.isnan(d)]
+                    lap_len = float(np.nanmax(d_clean) - np.nanmin(d_clean)) if len(d_clean) else 0.0
+                    lap_distances.append(lap_len)
+                    lap_numbers_sorted.append(int(lap_num))
+                    lap_time = None
+                    if lap_time_by_lap is not None:
+                        lap_time = round(lap_time_by_lap.get(int(lap_num)), 3) if lap_time_by_lap.get(int(lap_num)) is not None else None
+                    best_lap_num = min(lap_time_by_lap, key=lap_time_by_lap.get) if lap_time_by_lap else None
+                    is_ref = best_lap_num is not None and int(lap_num) == int(best_lap_num)
+                    laps_list.append({
+                        "lap_number": int(lap_num),
+                        "lap_time": lap_time,
+                        "distance_m": [round(x, 1) for x in d_clean.tolist()[:500]],
+                        "speed_kmh": [round(float(x), 1) for x in s[~np.isnan(s)].tolist()[:500]],
+                        "is_reference": is_ref,
+                    })
             if not laps_list:
-                laps_list = [{"lap_number": 1, "distance_m": dist_rel[~np.isnan(dist_rel)].tolist()[:500], "speed_kmh": speed[~np.isnan(speed)].tolist()[:500]}]
+                laps_list = [{
+                    "lap_number": 1,
+                    "lap_time": round(lap_time_by_lap.get(1), 3) if lap_time_by_lap and lap_time_by_lap.get(1) is not None else None,
+                    "distance_m": [round(x, 1) for x in (dist_rel[~np.isnan(dist_rel)].tolist()[:500])],
+                    "speed_kmh": [round(float(x), 1) for x in speed[~np.isnan(speed)].tolist()[:500]],
+                    "is_reference": True,
+                }]
+                lap_distances = [total_distance]
+            track_length_one_lap = lap_distances[0] if lap_distances else (total_distance / max(1, len(laps_list)))
+            sectors = [
+                {"name": "S1", "start_m": round(0, 1), "end_m": round(track_length_one_lap / 3.0, 1)},
+                {"name": "S2", "start_m": round(track_length_one_lap / 3.0, 1), "end_m": round(2.0 * track_length_one_lap / 3.0, 1)},
+                {"name": "S3", "start_m": round(2.0 * track_length_one_lap / 3.0, 1), "end_m": round(track_length_one_lap, 1)},
+            ]
+            if np.any(np.isfinite(speed)):
+                raw_mean = float(np.nanmean(speed))
+                avg_speed = round(raw_mean * 3.6, 1) if raw_mean < 100 else round(raw_mean, 1)
+            else:
+                avg_speed = 0.0
             out["speed_trace"] = {
                 "laps": laps_list,
-                "sectors": [
-                    {"name": "S1", "start_m": 0, "end_m": track_len / 3.0},
-                    {"name": "S2", "start_m": track_len / 3.0, "end_m": 2.0 * track_len / 3.0},
-                    {"name": "S3", "start_m": 2.0 * track_len / 3.0, "end_m": track_len},
-                ],
-                "avg_speed_kmh": float(np.nanmean(speed)) if len(speed) else 0,
+                "sectors": sectors,
+                "avg_speed_kmh": avg_speed,
             }
     except Exception as e:
-        logger.warning("_build_plot_data speed_trace: %s", e)
+        logger.warning("_build_plot_data speed_trace: %s", e, exc_info=False)
+    # --- trajectory_2d : corners avec grade, corner_type, apex_speed ---
     try:
         if "latitude" in df.columns and "longitude" in df.columns:
             lat_col = "latitude_smooth" if "latitude_smooth" in df.columns else "latitude"
@@ -91,34 +124,136 @@ def _build_plot_data(
                         mask = df["lap_number"].values == lap_num
                         laps_list.append({
                             "lap_number": int(lap_num),
-                            "lat": df.loc[mask, lat_col].dropna().tolist()[:300],
-                            "lon": df.loc[mask, lon_col].dropna().tolist()[:300],
-                            "speed_kmh": df.loc[mask, "speed"].dropna().tolist()[:300] if "speed" in df.columns else [],
+                            "lat": [round(float(x), 6) for x in df.loc[mask, lat_col].dropna().tolist()[:300]],
+                            "lon": [round(float(x), 6) for x in df.loc[mask, lon_col].dropna().tolist()[:300]],
+                            "speed_kmh": [round(float(x), 1) for x in (df.loc[mask, "speed"].dropna().tolist()[:300] if "speed" in df.columns else [])],
                         })
-            corners_list = [{"id": c.get("corner_id"), "lat": c.get("apex_lat"), "lon": c.get("apex_lon"), "label": f"Virage {c.get('corner_id', 0)}"} for c in corner_analysis[:15]]
+            corners_list = [
+                {
+                    "id": c.get("corner_number", c.get("corner_id")),
+                    "lat": round(float(c.get("apex_lat") or 0), 6),
+                    "lon": round(float(c.get("apex_lon") or 0), 6),
+                    "label": c.get("label", f"Virage {c.get('corner_number', c.get('corner_id', 0))}"),
+                    "grade": c.get("grade", "C"),
+                    "corner_type": c.get("corner_type", "right"),
+                    "apex_speed": round(float(c.get("apex_speed_real") or 0), 1),
+                }
+                for c in corner_analysis[:15]
+            ]
             out["trajectory_2d"] = {"laps": laps_list or [], "corners": corners_list}
     except Exception as e:
-        logger.warning("_build_plot_data trajectory_2d: %s", e)
+        logger.warning("_build_plot_data trajectory_2d: %s", e, exc_info=False)
+    # --- performance_radar (déjà arrondi via float) ---
     try:
         bd = score_data.get("breakdown", {})
         out["performance_radar"] = {
             "axes": ["Précision Apex", "Régularité", "Vitesse Apex", "Secteurs"],
-            "values": [float(bd.get("apex_precision", 0)), float(bd.get("trajectory_consistency", 0)), float(bd.get("apex_speed", 0)), float(bd.get("sector_times", 0))],
+            "values": [round(float(bd.get("apex_precision", 0)), 1), round(float(bd.get("trajectory_consistency", 0)), 1), round(float(bd.get("apex_speed", 0)), 1), round(float(bd.get("sector_times", 0)), 1)],
             "max_values": [30, 25, 25, 20],
         }
     except Exception as e:
-        logger.warning("_build_plot_data performance_radar: %s", e)
+        logger.warning("_build_plot_data performance_radar: %s", e, exc_info=False)
+    # --- apex_margin : corners enrichis (corner_type, grade, score, apex_speed_real/optimal, time_lost, entry/exit_speed) ---
     try:
         apex_list = []
         for c in corner_analysis[:15]:
             real = float(c.get("apex_speed_real") or 0)
             opt = float(c.get("apex_speed_optimal") or real)
-            margin = round(opt - real, 1) if opt >= real else 0
-            status = "optimal" if margin <= 0.5 else ("warning" if margin <= 5 else "critical")
-            apex_list.append({"label": f"Virage {c.get('corner_id', 0)}", "margin_kmh": margin, "status": status})
+            margin = round(opt - real, 1) if opt >= real else 0.0
+            status = "optimal" if margin <= 0.5 else ("good" if margin <= 3 else "warning")
+            apex_list.append({
+                "label": c.get("label", f"Virage {c.get('corner_number', c.get('corner_id', 0))}"),
+                "margin_kmh": margin,
+                "status": status,
+                "corner_type": c.get("corner_type", "right"),
+                "grade": c.get("grade", "C"),
+                "score": round(float(c.get("score", 0)), 1),
+                "apex_speed_real": round(real, 1),
+                "apex_speed_optimal": round(opt, 1),
+                "time_lost": round(float(c.get("time_lost") or 0), 3),
+                "entry_speed": round(float(c.get("entry_speed") or c.get("entry_speed_kmh") or 0), 1),
+                "exit_speed": round(float(c.get("exit_speed") or c.get("exit_speed_kmh") or 0), 1),
+            })
         out["apex_margin"] = {"corners": apex_list}
     except Exception as e:
-        logger.warning("_build_plot_data apex_margin: %s", e)
+        logger.warning("_build_plot_data apex_margin: %s", e, exc_info=False)
+    # --- throttle_brake (si throttle/brake ou AccelerometerX) ---
+    try:
+        has_throttle_brake = "throttle" in df.columns and "brake" in df.columns
+        if not has_throttle_brake and "AccelerometerX" in df.columns:
+            has_throttle_brake = True
+        if has_throttle_brake and "cumulative_distance" in df.columns:
+            dist_col = pd.to_numeric(df["cumulative_distance"], errors="coerce").values
+            if "throttle" in df.columns and "brake" in df.columns:
+                throttle_vals = pd.to_numeric(df["throttle"], errors="coerce").fillna(0).values
+                brake_vals = pd.to_numeric(df["brake"], errors="coerce").fillna(0).values
+            else:
+                ax = pd.to_numeric(df["AccelerometerX"], errors="coerce").fillna(0).values
+                throttle_vals = np.clip(ax * 50 + 50, 0, 100) if np.nanmin(ax) < 0 else np.clip(ax, 0, 100)
+                brake_vals = np.clip(-ax * 50 + 50, 0, 100) if np.nanmin(ax) < 0 else np.zeros_like(ax)
+            tb_laps = []
+            if "lap_number" in df.columns:
+                for lap_num in sorted(df["lap_number"].dropna().unique()):
+                    if lap_num < 1:
+                        continue
+                    mask = df["lap_number"].values == lap_num
+                    d = dist_col[mask]
+                    t = throttle_vals[mask]
+                    b = brake_vals[mask]
+                    tb_laps.append({
+                        "lap_number": int(lap_num),
+                        "distance_m": [round(float(x), 1) for x in d[~np.isnan(d)].tolist()[:500]],
+                        "throttle_pct": [round(float(x), 1) for x in t.tolist()[:500]],
+                        "brake_pct": [round(float(x), 1) for x in b.tolist()[:500]],
+                    })
+            if tb_laps:
+                out["throttle_brake"] = {"laps": tb_laps}
+    except Exception as e:
+        logger.warning("_build_plot_data throttle_brake: %s", e, exc_info=False)
+    # --- time_delta : reference (meilleur) vs comparison (2e) ---
+    try:
+        if lap_time_by_lap and len(lap_time_by_lap) >= 2 and "time" in df.columns and "cumulative_distance" in df.columns and "lap_number" in df.columns:
+            sorted_laps = sorted(lap_time_by_lap.items(), key=lambda x: x[1])
+            ref_lap_num = sorted_laps[0][0]
+            comp_lap_num = sorted_laps[1][0]
+            ref_mask = df["lap_number"].values == ref_lap_num
+            comp_mask = df["lap_number"].values == comp_lap_num
+            if ref_mask.any() and comp_mask.any():
+                dist_ref = pd.to_numeric(df.loc[ref_mask, "cumulative_distance"], errors="coerce").values
+                time_ref = pd.to_numeric(df.loc[ref_mask, "time"], errors="coerce").values
+                dist_comp = pd.to_numeric(df.loc[comp_mask, "cumulative_distance"], errors="coerce").values
+                time_comp = pd.to_numeric(df.loc[comp_mask, "time"], errors="coerce").values
+                d_min_ref, d_max_ref = np.nanmin(dist_ref), np.nanmax(dist_ref)
+                d_min_comp, d_max_comp = np.nanmin(dist_comp), np.nanmax(dist_comp)
+                track_len = min(d_max_ref - d_min_ref, d_max_comp - d_min_comp)
+                if track_len <= 0:
+                    raise ValueError("track_len <= 0")
+                dist_ref_rel = (dist_ref - d_min_ref)[~np.isnan(dist_ref) & ~np.isnan(time_ref)]
+                time_ref_clean = time_ref[~np.isnan(dist_ref) & ~np.isnan(time_ref)]
+                dist_comp_rel = (dist_comp - d_min_comp)[~np.isnan(dist_comp) & ~np.isnan(time_comp)]
+                time_comp_clean = time_comp[~np.isnan(dist_comp) & ~np.isnan(time_comp)]
+                if len(dist_ref_rel) < 2 or len(dist_comp_rel) < 2:
+                    raise ValueError("not enough points")
+                order_ref = np.argsort(dist_ref_rel)
+                order_comp = np.argsort(dist_comp_rel)
+                dist_ref_rel = dist_ref_rel[order_ref]
+                time_ref_clean = time_ref_clean[order_ref]
+                dist_comp_rel = dist_comp_rel[order_comp]
+                time_comp_clean = time_comp_clean[order_comp]
+                n_pts = min(100, len(dist_ref_rel), len(dist_comp_rel))
+                distance_m = np.linspace(0, track_len, n_pts)
+                t_ref_interp = np.interp(distance_m, dist_ref_rel, time_ref_clean)
+                t_comp_interp = np.interp(distance_m, dist_comp_rel, time_comp_clean)
+                delta_s = [round(float(t_comp_interp[i] - t_ref_interp[i]), 3) for i in range(len(distance_m))]
+                distance_m = [round(float(x), 1) for x in distance_m.tolist()]
+                out["time_delta"] = {
+                    "reference_lap": int(ref_lap_num),
+                    "comparison_lap": int(comp_lap_num),
+                    "distance_m": distance_m,
+                    "delta_s": delta_s,
+                }
+    except Exception as e:
+        logger.warning("_build_plot_data time_delta: %s", e, exc_info=False)
     return out
 
 
@@ -559,6 +694,18 @@ def _run_analysis_pipeline_sync(
 
     logger.info(f"[{analysis_id}] ✅ Completed in {processing_time:.2f}s")
 
+    # Mapping lap_number -> lap_time pour plot_data (speed_trace lap_time, is_reference, time_delta)
+    if lap_times:
+        if lap_filter and len(lap_filter) == len(lap_times):
+            _lap_time_by_lap = dict(zip(lap_filter, lap_times))
+        elif "lap_number" in df.columns:
+            _lap_nums = sorted(df["lap_number"].dropna().unique().astype(int).tolist())
+            _lap_time_by_lap = dict(zip(_lap_nums, lap_times)) if len(_lap_nums) == len(lap_times) else None
+        else:
+            _lap_time_by_lap = dict(zip(range(1, len(lap_times) + 1), lap_times))
+    else:
+        _lap_time_by_lap = None
+
     response = AnalysisResponse(
         success=True,
         analysis_id=analysis_id,
@@ -599,7 +746,7 @@ def _run_analysis_pipeline_sync(
             track_condition=track_condition,
             track_temperature=track_temperature,
         ),
-        plot_data=_build_plot_data(df, unique_corner_analysis, score_data),
+        plot_data=_build_plot_data(df, unique_corner_analysis, score_data, lap_time_by_lap=_lap_time_by_lap),
     )
     result = response.model_dump(mode="python", exclude_none=True)
     if debug:

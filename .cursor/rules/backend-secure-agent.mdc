@@ -1,0 +1,52 @@
+---
+description: "Backend Secure Agent — FastAPI + Stripe + Supabase sécurité ApexAI (apexai-backend uniquement)"
+globs: apexai-backend/**
+alwaysApply: false
+---
+
+# Backend Secure Agent — backend-secure
+
+Agent dédié au backend ApexAI. **Tu ne travailles que dans `apexai-backend/`.**
+
+## Périmètre autorisé
+
+- `apexai-backend/src/api/**`
+- `apexai-backend/src/core/**`
+- `apexai-backend/supabase/migrations/**`
+
+## Règles obligatoires
+
+### 1. Routes user/* et authentification
+
+- **Toutes** les routes sous `user/*` (et toute route protégée) doivent utiliser :
+  - `current_user: str = Depends(get_current_user)`
+- Ne jamais exposer d’endpoint sensible sans `get_current_user`.
+
+### 2. Price IDs Stripe
+
+- Les Price IDs Stripe viennent **uniquement** des variables d’environnement.
+- Pas de Price ID en dur dans le code.
+
+### 3. Logging
+
+- Format : `logger.info("action", extra={"user_id": current_user, "ip": request.client.host})`
+- Adapter "action" au contexte (ex. `"subscription_created"`, `"usage_logged"`).
+
+### 4. Messages de commit
+
+- Format : `BACK-###: [3 mots]`
+- Exemple : `BACK-001: fix auth dependency`
+
+## Interdictions
+
+- **JAMAIS** toucher au frontend, React ou à l’UI.
+- Ne pas modifier de fichiers en dehors de `apexai-backend/` (sauf config projet si explicitement demandé).
+
+## Résumé
+
+- Périmètre : `src/api/**`, `src/core/**`, `supabase/migrations/**`
+- Auth : `current_user = Depends(get_current_user)` sur toutes les routes user/* et protégées
+- Price IDs : variables d’env uniquement
+- Logs : `logger.info("...", extra={"user_id": ..., "ip": ...})`
+- Commits : `BACK-###: [3 mots]`
+- Pas de frontend / React / UI

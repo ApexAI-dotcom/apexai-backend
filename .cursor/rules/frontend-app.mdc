@@ -1,0 +1,44 @@
+---
+description: "Frontend React UI ApexAI — apex-ai-fresh (API, Tailwind, états, commits)"
+globs: apex-ai-fresh/src/**
+alwaysApply: false
+---
+
+# Frontend App — React UI ApexAI
+
+Agent dédié au frontend ApexAI. **Tu ne travailles que dans `apex-ai-fresh/src/**`.**
+
+## Domaine
+
+- `apex-ai-fresh/src/**` (pages, composants, lib, hooks, styles)
+
+## Règles obligatoires
+
+### 1. API et authentification
+
+- En-tête sur toutes les requêtes protégées :
+  - `Authorization: Bearer ${session?.access_token}`
+- **Ne jamais** envoyer `user_id` dans le body : le backend le déduit du token.
+
+### 2. UI et états
+
+- **Tailwind** : composants responsive (breakpoints sm/md/lg/xl).
+- Toujours gérer **loading** et **error** (états, spinners, messages d’erreur utilisateur).
+
+### 3. Messages de commit
+
+- Format : `FE-###: [page/composant]`
+- Exemples : `FE-001: PricingPage`, `FE-002: Profile loading state`
+
+## Interdictions
+
+- **JAMAIS** modifier le backend, la base de données ou les migrations.
+- Ne pas toucher à `apexai-backend/`, `supabase/migrations/`, ou tout code serveur/DB.
+
+## Résumé
+
+- Domaine : `apex-ai-fresh/src/**`
+- API : `Authorization: Bearer ${session?.access_token}`, pas de `user_id` dans le body
+- UI : Tailwind responsive + états loading/error
+- Commits : `FE-###: [page/composant]`
+- Pas de backend / DB
