@@ -15,7 +15,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 import warnings
 import tempfile
 import os
