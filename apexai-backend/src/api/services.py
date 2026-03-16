@@ -424,6 +424,14 @@ def _run_analysis_pipeline_sync(
     df.attrs["score_data"] = score_data
     df.attrs["overall_score"] = score_data.get("overall_score", 0.0)
     plots_urls = generate_all_plots_base64(df)
+    # Dupliquer le speed trace en variante zoomée si disponible
+    try:
+        speed_trace_url = plots_urls.get("speed_trace")
+        if speed_trace_url:
+            plots_urls.setdefault("speed_trace_zoomed", speed_trace_url)
+    except Exception:
+        # Ne jamais faire échouer l'analyse à cause d'un simple alias de graphique
+        pass
 
     processing_time = (datetime.now() - start_time).total_seconds()
 
