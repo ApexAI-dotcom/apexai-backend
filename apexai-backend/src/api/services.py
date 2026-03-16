@@ -433,6 +433,13 @@ def _run_analysis_pipeline_sync(
         # Ne jamais faire échouer l'analyse à cause d'un simple alias de graphique
         pass
 
+    # Log des graphiques réellement générés (non nuls) pour debug
+    try:
+        non_null_plots = [k for k, v in plots_urls.items() if v]
+        logger.info(f"[{analysis_id}] Plots générés (non nuls): {non_null_plots}")
+    except Exception as e:
+        logger.warning(f"[{analysis_id}] Impossible de logger les plots générés: {e}")
+
     processing_time = (datetime.now() - start_time).total_seconds()
 
     # Temps par tour : filtrés aux tours sélectionnés (lap_filter)
