@@ -102,18 +102,48 @@ def calculate_optimal_apex_speed_from_laps(
     corner_indices: List[int],
 ) -> float:
     """
-    Vitesse optimale à l'apex = maximum observé sur tous les tours.
-    
-    Physiquement cohérent : le pilote ne peut pas dépasser son propre record.
-    Évite les erreurs de la formule physique (rayon GPS bruité).
+    Vitesse optimale à l'apex calculée physiquement avec V_opt = sqrt(R_opt * g * mu)
     
     Returns:
         Vitesse max en km/h, ou 0.0 si pas de données
     """
-    apex_speeds = _apex_speeds_per_lap(df, corner_indices)
-    if not apex_speeds:
+    from src.analysis.scoring import KARTING_CONSTANTS
+    
+    try:
+        if not corner_indices or 'curvature' not in df.columns:
+            return 0.0
+            
+        valid_indices = [i for i in corner_indices if i in df.index]
+        if not valid_indices:
+            return 0.0
+            
+        curvature_vals = pd.to_numeric(df.loc[valid_indices, 'curvature'], errors='coerce').abs()
+        curvature_valid = curvature_vals[~curvature_vals.isna()]
+        
+        if len(curvature_valid) == 0:
+            return 0.0
+            
+        # Rayon moyen sur le virage
+        curvature_mean = float(curvature_valid.mean())
+        if curvature_mean <= 0.0001:
+            return 0.0 # Ligne droite
+            
+        radius = 1.0 / curvature_mean
+        
+        # V_opt = sqrt(R * g * mu)
+        mu = 1.1 # Grip coefficient for slicks
+        v_opt_ms = np.sqrt(radius * KARTING_CONSTANTS['g'] * mu)
+        
+        v_opt_kmh = v_opt_ms * 3.6
+        
+        # Clamp pour éviter des valeurs folles sur de faux rayons (ex: très grands rayons GPS)
+        v_opt_kmh = max(30.0, min(140.0, v_opt_kmh))
+        
+        return round(float(v_opt_kmh), 1)
+        
+    except Exception as e:
+        warnings.warn(f"Erreur calculate_optimal_apex_speed_from_laps: {e}")
         return 0.0
-    return round(max(apex_speeds), 1)
 
 
 def calculate_braking_point(

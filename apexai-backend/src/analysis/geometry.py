@@ -790,373 +790,250 @@ def _resample_adaptive(
 
 def detect_corners(
     df: pd.DataFrame,
-    min_lateral_g: float = 0.15,
-    min_distance_between_corners: float = 6.0,
+    min_lateral_g: float = 0.5,
+    min_distance_between_corners: float = 8.0,
     expected_corners: Optional[int] = None,
     laps_analyzed: Optional[int] = None,
     curvature_threshold_override: Optional[float] = None,
 ) -> pd.DataFrame:
     """
-    Détection multi-critères : resampling adaptatif, 3 critères (courbure, lateral_g, vitesse locale),
-    validation croisée multi-tours, corner_detail avec per_lap_data.
-
-    curvature_threshold_override: si fourni, utilise ce seuil au lieu de le recalculer sur le subset
-    (pour stabilité entre sélections de tours).
+    Détection de virages mathématique via scipy.signal.find_peaks sur la courbure et le G latéral.
+    Remplace l'ancienne logique complexe par une approche de traitement du signal propre.
     """
-    required_cols = ['lateral_g', 'speed', 'cumulative_distance']
-    missing_cols = [col for col in required_cols if col not in df.columns]
-    if missing_cols:
-        raise ValueError(f"❌ Colonnes manquantes : {', '.join(missing_cols)}. Appelez d'abord calculate_trajectory_geometry()")
+    from scipy.signal import find_peaks
+    import logging
+    
+    log = logging.getLogger(__name__)
 
-    if 'lap_number' in df.columns:
-        df_circuit = df[df['lap_number'] >= 1].copy()
-        if len(df_circuit) < 50:
-            df_circuit = df.copy()
-    else:
-        df_circuit = df.copy()
+    # Vérifications de base
+    required_cols = ['lateral_g', 'speed', 'cumulative_distance']
+    if not all(col in df.columns for col in required_cols):
+        raise ValueError(f"❌ Colonnes manquantes dans le DataFrame. Requis: {required_cols}")
 
     df_result = df.copy()
-    n_points = len(df_circuit)
+    n_points = len(df_result)
+    
+    # Init des colonnes de sortie
     df_result['is_corner'] = False
     df_result['corner_id'] = 0
     df_result['is_apex'] = False
     df_result['corner_type'] = 'straight'
 
+    if n_points < 10:
+        df_result.attrs['corners'] = {'total_corners': 0, 'corner_details': []}
+        return df_result
+
     try:
-        lateral_g = np.nan_to_num(pd.to_numeric(df_circuit['lateral_g'], errors='coerce').values, nan=0.0)
-        speed = np.nan_to_num(pd.to_numeric(df_circuit['speed'], errors='coerce').values, nan=0.0)
-        cumulative_dist = np.nan_to_num(pd.to_numeric(df_circuit['cumulative_distance'], errors='coerce').values, nan=0.0)
-        time = pd.to_numeric(df_circuit['time'], errors='coerce').values if 'time' in df_circuit.columns else None
-        curvature_arr = pd.to_numeric(df_circuit['curvature'], errors='coerce').values if 'curvature' in df_circuit.columns else None
-        if curvature_arr is not None:
-            curvature_arr = np.nan_to_num(curvature_arr, nan=0.0)
-        has_laps = 'lap_number' in df_circuit.columns
-        lap_numbers = df_circuit['lap_number'].values if has_laps else np.ones(n_points, dtype=int)
-        if laps_analyzed is None and has_laps:
-            laps_analyzed = int(max(1, len(np.unique(lap_numbers))))
-        elif laps_analyzed is None:
-            laps_analyzed = 1
-
-        # Jonctions de tours (indices où lap_number change)
-        if has_laps:
-            lap_arr = lap_numbers
-            lap_boundaries = set(
-                i for i in range(1, len(lap_arr))
-                if lap_arr[i] != lap_arr[i - 1]
-            )
+        cumulative_dist = np.nan_to_num(pd.to_numeric(df_result['cumulative_distance'], errors='coerce').values, nan=0.0)
+        lateral_g = np.nan_to_num(pd.to_numeric(df_result['lateral_g'], errors='coerce').values, nan=0.0)
+        speed = np.nan_to_num(pd.to_numeric(df_result['speed'], errors='coerce').values, nan=0.0)
+        
+        has_laps = 'lap_number' in df_result.columns
+        lap_numbers = df_result['lap_number'].values if has_laps else np.ones(n_points, dtype=int)
+        
+        # Le signal principal est la valeur absolue du G latéral (lissé dans calculate_trajectory_geometry)
+        signal = np.abs(lateral_g)
+        
+        # Trouver les pics de G latéral (Apex potentiels)
+        # distance_samples : conversion de min_distance_between_corners en nombre de points
+        avg_spacing = _avg_spacing_m(cumulative_dist)
+        if avg_spacing > 0:
+            distance_samples = max(2, int(min_distance_between_corners / avg_spacing))
         else:
-            lap_boundaries = set()
-
-        # Reset du signal aux jonctions (fenêtre 8 points de part et d'autre)
-        lateral_g = lateral_g.copy()
-        n = len(lateral_g)
-        for idx in lap_boundaries:
-            for offset in range(-8, 9):
-                j = idx + offset
-                if 0 <= j < n:
-                    lateral_g[j] = 0.0
-        if curvature_arr is not None:
-            curvature_arr = curvature_arr.copy()
-            for idx in lap_boundaries:
-                for offset in range(-8, 9):
-                    j = idx + offset
-                    if 0 <= j < n:
-                        curvature_arr[j] = 0.0
-
-        import logging
-        log = logging.getLogger(__name__)
-        log.info("[DIAG] detect_corners appelé avec %s rows, %s tours (laps_analyzed=%s)", len(df), int(max(1, len(np.unique(lap_numbers)))) if has_laps else 1, laps_analyzed)
-        log.info("[detect_corners] Jonctions de tours détectées : %s à indices %s", len(lap_boundaries), sorted(lap_boundaries)[:20] if len(lap_boundaries) > 20 else sorted(lap_boundaries))
-
-        avg_spacing_m = _avg_spacing_m(cumulative_dist)
-        cum_rs, lateral_g_rs, speed_rs, time_rs, curvature_rs, orig_iloc_rs, resample_strategy, n_after = _resample_adaptive(
-            cumulative_dist, lateral_g, speed, time, curvature_arr
+            distance_samples = 10
+            
+        # Trouver les pics (Apexes)
+        peaks, properties = find_peaks(
+            signal,
+            height=min_lateral_g,       # Minimum G latéral pour être un virage
+            distance=distance_samples,  # Distance minimale entre deux apexes
+            prominence=0.1              # Le pic doit ressortir d'au moins 0.1g du bruit ambiant
         )
-        log.info("detect_corners: avg_spacing_m=%.3f strategy=%s n_points_after_resampling=%s", avg_spacing_m, resample_strategy, n_after)
+        
+        log.info(f"detect_corners (find_peaks): {len(peaks)} apex potentiels trouvés (seuil {min_lateral_g}g)")
+        
+        # Création des zones de virages autour des peaks trouvés
+        is_corner_zone = np.zeros(n_points, dtype=bool)
+        
+        # Définir l'étendue d'un virage (ex: G > seuil autour de l'apex)
+        threshold_entry_exit = max(0.2, min_lateral_g * 0.4) # zone où G > 40% de l'apex ou > 0.2
+        
+        valid_apexes = []
+        for p in peaks:
+            lap_num = lap_numbers[p]
+            if lap_num == 0 and has_laps:
+                continue # Ignore les virages du tour de chauffe/sortie des stands
+                
+            # Chercher le début (reculer jusqu'à ce que le G passe sous le seuil)
+            start_idx = p
+            while start_idx > 0 and signal[start_idx] > threshold_entry_exit and lap_numbers[start_idx] == lap_num:
+                start_idx -= 1
+                
+            # Chercher la fin (avancer)
+            end_idx = p
+            while end_idx < n_points - 1 and signal[end_idx] > threshold_entry_exit and lap_numbers[end_idx] == lap_num:
+                end_idx += 1
+                
+            # Vérifier la validité de la zone
+            dist_zone = cumulative_dist[end_idx] - cumulative_dist[start_idx]
+            if dist_zone >= 1.0: # Au moins 1 mètre de long
+                is_corner_zone[start_idx:end_idx+1] = True
+                valid_apexes.append({
+                    'peak_idx': p,
+                    'start_idx': start_idx,
+                    'end_idx': end_idx,
+                    'lap': lap_num
+                })
 
-        # Multi-critères
-        c1 = np.zeros(len(cum_rs), dtype=bool)
-        if curvature_rs is not None:
-            curv_abs = np.abs(curvature_rs)
-            nonzero = curv_abs[curv_abs > 1e-6]
-            if curvature_threshold_override is not None:
-                thresh = float(curvature_threshold_override)
-                log.info("[DIAG] Using GLOBAL curvature threshold: %.6f (override)", thresh)
-            elif len(nonzero) > 0:
-                thresh = float(np.percentile(nonzero, 25))
-                log.info("[DIAG] Curvature threshold (p25 nonzero - LOCAL): %.6f | min/max/mean (nonzero): %.6f / %.6f / %.6f", thresh, float(nonzero.min()), float(nonzero.max()), float(nonzero.mean()))
-            else:
-                thresh = 0.0
-            if thresh > 0:
-                c1 = curv_abs > thresh
-        c2 = np.abs(lateral_g_rs) > min_lateral_g
-        c3 = np.zeros(len(cum_rs), dtype=bool)
-        W = 30
-        for i in range(W, len(cum_rs) - W):
-            before = np.nanmean(speed_rs[i - W:i])
-            after = np.nanmean(speed_rs[i + 1:i + W + 1])
-            inside = speed_rs[i]
-            if before > 1 and after > 1 and inside < 0.97 * min(before, after):
-                c3[i] = True
-        vote = (c1.astype(int) + c2.astype(int) + c3.astype(int)) >= 2
-        vote = _merge_close_runs(vote, cum_rs, max_gap_m=8.0)
-        labeled_vote, num_runs = label(vote)
-        is_corner_zone = np.zeros(len(vote), dtype=bool)
-        for rid in range(1, num_runs + 1):
-            run_mask = labeled_vote == rid
-            if np.sum(run_mask) >= 4:
-                is_corner_zone[run_mask] = True
-
-        if not is_corner_zone.any():
-            df_result.attrs['corners'] = {'total_corners': 0, 'total_distance_m': float(cumulative_dist[-1]) if len(cumulative_dist) > 0 else 0.0, 'avg_speed_kmh': 0.0, 'max_lateral_g': 0.0, 'corner_details': []}
+        # Regrouper par numéro de virage physique (Cluster by physical location on track)
+        # On projete tous les apex sur le premier tour chronométré complet pour trouver leur numéro
+        
+        corner_details = []
+        
+        if not valid_apexes:
+            df_result.attrs['corners'] = {'total_corners': 0, 'corner_details': []}
             return df_result
-
-        labeled_array, num_features = label(is_corner_zone)
-        valid_corners = []
-        for cid in range(1, num_features + 1):
-            corner_mask = labeled_array == cid
-            idx_rs = np.where(corner_mask)[0]
-            if len(idx_rs) < 2:
-                continue
-            start_rs, end_rs = int(idx_rs[0]), int(idx_rs[-1])
-            if end_rs >= len(cum_rs) or cum_rs[end_rs] - cum_rs[start_rs] < MIN_CORNER_DISTANCE_M:
-                continue
-            if time_rs is not None and end_rs < len(time_rs) and start_rs < len(time_rs) and (time_rs[end_rs] - time_rs[start_rs]) < MIN_CORNER_DURATION_S:
-                continue
-            indices_orig = np.array([int(orig_iloc_rs[i]) for i in idx_rs], dtype=int)
-            start_orig = int(orig_iloc_rs[start_rs])
-            end_orig = int(orig_iloc_rs[end_rs])
-            g_vals = np.abs([lateral_g[i] for i in indices_orig if i < len(lateral_g)])
-            if len(g_vals) > 0 and np.max(g_vals) < min_lateral_g:
-                continue
-            apex_local = np.argmax(np.abs([lateral_g[i] for i in indices_orig if i < len(lateral_g)]))
-            apex_orig = int(indices_orig[apex_local])
-            valid_corners.append({'id': cid, 'indices': indices_orig, 'start': start_orig, 'end': end_orig, 'apex': apex_orig})
-
-        log.info("[DIAG] Corner candidates (valid_corners avant merge): %s", len(valid_corners))
-
-        def _merge_by_min_dist(corners: List[Dict], cum_dist: np.ndarray, min_d: float, lap_boundaries_set: Optional[set] = None) -> tuple:
-            """Retourne (liste fusionnée, nombre de fusions bloquées par jonction)."""
-            if not corners or min_d <= 0:
-                return corners, 0
-            lap_boundaries_set = lap_boundaries_set or set()
-            out = []
-            n_blocked = 0
-            i = 0
-            while i < len(corners):
-                cur = dict(corners[i])
-                cur['indices'] = list(cur['indices'])
-                cur.setdefault('apex', cur['end'])
-                j = i + 1
-                while j < len(corners):
-                    e1, s2 = cur['end'], corners[j]['start']
-                    gap = set(range(e1 + 1, s2)) if e1 + 1 < s2 else set()
-                    if lap_boundaries_set and gap & lap_boundaries_set:
-                        n_blocked += 1
-                        break
-                    if e1 < len(cum_dist) and s2 < len(cum_dist) and (cum_dist[s2] - cum_dist[e1]) < min_d:
-                        cur['end'] = corners[j]['end']
-                        cur['indices'] = sorted(set(cur['indices']) | set(corners[j]['indices']))
-                        j += 1
-                        continue
-                    break
-                cur['indices'] = np.array(cur['indices'])
-                out.append(cur)
-                i = j
-            return out, n_blocked
-
-        n_merge_blocked = 0
-        if expected_corners is not None and expected_corners >= 1:
-            lo, hi = 3.0, 40.0
-            for _ in range(15):
-                mid = (lo + hi) * 0.5
-                m, nb = _merge_by_min_dist(valid_corners, cumulative_dist, mid, lap_boundaries)
-                if len(m) == expected_corners:
-                    min_distance_between_corners = round(mid, 1)
-                    valid_corners = m
-                    n_merge_blocked = nb
-                    break
-                if len(m) > expected_corners:
-                    hi = mid
-                else:
-                    lo = mid
-            else:
-                valid_corners, n_merge_blocked = _merge_by_min_dist(valid_corners, cumulative_dist, min_distance_between_corners, lap_boundaries)
-        else:
-            valid_corners, n_merge_blocked = _merge_by_min_dist(valid_corners, cumulative_dist, min_distance_between_corners, lap_boundaries)
-        log.info("[DIAG] Corners après merge (valid_corners): %s", len(valid_corners))
-        log.info("[detect_corners] Fusions bloquées par jonction : %s", n_merge_blocked)
-
-        coherence_radius_m = 30.0
-        min_laps_confirm = max(1, laps_analyzed // 2)
-        segments_with_lap_and_apex = []
-        for c in valid_corners:
-            indices = c['indices']
-            lap_nums = [int(lap_numbers[i]) for i in indices if i < len(lap_numbers)]
-            lap_num = int(np.bincount(lap_nums).argmax()) if lap_nums else 1
-            start_idx = c['start']
-            end_idx = c['end']
-            apex_local = np.argmax(np.abs([lateral_g[i] for i in indices]))
-            apex_index = int(indices[apex_local])
-            apex_lat, apex_lon = _get_apex_gps(df_circuit, list(indices))
-            segments_with_lap_and_apex.append({
-                'lap': lap_num, 'indices': indices, 'start': start_idx, 'end': end_idx,
-                'apex_index': apex_index, 'apex_lat': apex_lat, 'apex_lon': apex_lon,
-                'lateral_g': lateral_g, 'speed': speed, 'cumulative_dist': cumulative_dist, 'time': time,
-            })
-
+            
+        # --- Numérotation physique des virages ---
+        # 1. Regrouper les apex réels proches spatialement
+        coherence_radius_m = min_distance_between_corners * 1.5
         clusters = []
-        used = [False] * len(segments_with_lap_and_apex)
-        for i, s in enumerate(segments_with_lap_and_apex):
+        used = [False] * len(valid_apexes)
+        
+        for i, a1 in enumerate(valid_apexes):
             if used[i]:
                 continue
-            lat1, lon1 = s['apex_lat'], s['apex_lon']
-            if lat1 is None or lon1 is None:
+            
+            lat1, lon1 = _get_apex_gps(df_result, [a1['peak_idx']])
+            if lat1 is None:
                 continue
-            cluster = [s]
+                
+            cluster = [a1]
             used[i] = True
-            for j in range(i + 1, len(segments_with_lap_and_apex)):
+            
+            for j in range(i + 1, len(valid_apexes)):
                 if used[j]:
                     continue
-                s2 = segments_with_lap_and_apex[j]
-                lat2, lon2 = s2['apex_lat'], s2['apex_lon']
-                if lat2 is None or lon2 is None:
-                    continue
-                if _haversine_distance(lat1, lon1, lat2, lon2) < coherence_radius_m:
-                    cluster.append(s2)
+                a2 = valid_apexes[j]
+                lat2, lon2 = _get_apex_gps(df_result, [a2['peak_idx']])
+                
+                if lat2 is not None and _haversine_distance(lat1, lon1, lat2, lon2) < coherence_radius_m:
+                    cluster.append(a2)
                     used[j] = True
-            laps_in_cluster = len(set(seg['lap'] for seg in cluster))
-            if laps_in_cluster >= min_laps_confirm:
-                clusters.append(cluster)
-
-        log.info("[DIAG] Clusters (après coherence_radius min_laps_confirm=%s): %s", min_laps_confirm, len(clusters))
-
-        corner_details = []
-        physical_id = 0
-        for cluster in clusters:
-            physical_id += 1
+                    
+            clusters.append(cluster)
+            
+        # 2. Filtrer les faux positifs (virage présent que sur 1 tour sur N)
+        min_laps_to_confirm = max(1, (laps_analyzed or 1) // 3)
+        valid_clusters = [c for c in clusters if len(set(a['lap'] for a in c)) >= min_laps_to_confirm]
+        
+        if not valid_clusters:
+            # Fallback si on a tout filtré
+            valid_clusters = clusters
+            
+        log.info(f"detect_corners: {len(valid_clusters)} virages physiques confirmés")
+        
+        # 3. Construire le corner_details = JSON attendu par le front
+        
+        for physical_id, cluster in enumerate(valid_clusters, start=1):
             per_lap_data = []
-            apex_lats = []
-            apex_lons = []
+            
+            # Calculs moyens
             entry_speeds = []
             apex_speeds = []
             exit_speeds = []
             max_gs = []
-            time_losts = []
-            entry_indices = []
-            apex_indices = []
-            exit_indices = []
-            corner_type = "left"
-            for seg in cluster:
-                lap_num = seg['lap']
-                idx = seg['indices']
-                start_idx, end_idx = seg['start'], seg['end']
-                apex_idx = seg['apex_index']
-                lat, lon = seg['apex_lat'], seg['apex_lon']
-                if lat is not None:
-                    apex_lats.append(lat)
-                if lon is not None:
-                    apex_lons.append(lon)
-                spd = seg['speed']
-                entry_speeds.append(float(spd[start_idx]) if start_idx < len(spd) else 0.0)
-                apex_speeds.append(float(spd[apex_idx]) if apex_idx < len(spd) else 0.0)
-                exit_speeds.append(float(spd[end_idx]) if end_idx < len(spd) else 0.0)
-                g_vals = np.abs([seg['lateral_g'][k] for k in idx if k < len(seg['lateral_g'])])
-                max_gs.append(float(np.max(g_vals)) if len(g_vals) > 0 else 0.0)
-                time_losts.append(0.0)
-                entry_indices.append(int(df_circuit.index[start_idx]))
-                apex_indices.append(int(df_circuit.index[apex_idx]))
-                exit_indices.append(int(df_circuit.index[end_idx]))
-                if curvature_arr is not None and len(idx) > 0:
-                    curv_in = curvature_arr[idx]
-                    corner_type = "left" if np.nanmean(curv_in) > 0 else "right"
+            apex_lats = []
+            apex_lons = []
+            corner_type = "straight"
+            
+            for a in cluster:
+                # Type basé sur la courbure du peak
+                if 'curvature' in df_result.columns:
+                    curv = df_result['curvature'].iloc[a['peak_idx']]
+                    # + = gauche, - = droite
+                    local_type = "left" if curv > 0 else "right"
+                    if corner_type == "straight":
+                        corner_type = local_type
+                
+                lat, lon = _get_apex_gps(df_result, [a['peak_idx']])
+                if lat: apex_lats.append(lat)
+                if lon: apex_lons.append(lon)
+                
+                entry_speeds.append(speed[a['start_idx']])
+                apex_speeds.append(speed[a['peak_idx']])
+                exit_speeds.append(speed[a['end_idx']])
+                max_gs.append(signal[a['peak_idx']])
+                
+                # Update df_result
+                df_result.loc[a['start_idx']:a['end_idx'], 'is_corner'] = True
+                df_result.loc[a['start_idx']:a['end_idx'], 'corner_id'] = physical_id
+                df_result.loc[a['start_idx']:a['end_idx'], 'corner_type'] = local_type if 'curvature' in df_result.columns else "unknown"
+                df_result.at[df_result.index[a['peak_idx']], 'is_apex'] = True
+                
                 per_lap_data.append({
-                    'lap': lap_num, 'apex_lat': lat, 'apex_lon': lon,
-                    'entry_index': entry_indices[-1], 'apex_index': apex_indices[-1], 'exit_index': exit_indices[-1],
-                    'entry_speed_kmh': entry_speeds[-1], 'apex_speed_kmh': apex_speeds[-1], 'exit_speed_kmh': exit_speeds[-1],
-                    'max_lateral_g': max_gs[-1], 'time_lost': time_losts[-1],
+                    'lap': a['lap'],
+                    'apex_lat': lat,
+                    'apex_lon': lon,
+                    'entry_index': int(df_result.index[a['start_idx']]),
+                    'apex_index': int(df_result.index[a['peak_idx']]),
+                    'exit_index': int(df_result.index[a['end_idx']]),
+                    'entry_speed_kmh': float(speed[a['start_idx']]),
+                    'apex_speed_kmh': float(speed[a['peak_idx']]),
+                    'exit_speed_kmh': float(speed[a['end_idx']]),
+                    'max_lateral_g': float(signal[a['peak_idx']]),
+                    'time_lost': 0.0 # Rempli par performance_metrics
                 })
-            n_laps = len(cluster)
-            apex_lat_avg = float(np.mean(apex_lats)) if apex_lats else None
-            apex_lon_avg = float(np.mean(apex_lons)) if apex_lons else None
-            if apex_lat_avg is not None and apex_lon_avg is not None and len(apex_lats) > 1:
-                mean_dist = np.mean([_haversine_distance(apex_lat_avg, apex_lon_avg, la, lo) for la, lo in zip(apex_lats, apex_lons)])
-                consistency_score = max(0.0, min(1.0, 1.0 - mean_dist / coherence_radius_m))
-            else:
-                consistency_score = 1.0
-            apex_dists = [cumulative_dist[seg['apex_index']] for seg in cluster if seg['apex_index'] < len(cumulative_dist)]
-            avg_cum_dist = float(np.mean(apex_dists)) if apex_dists else 0.0
-            min_cum_dist = float(min(apex_dists)) if apex_dists else 0.0
-            first_lap_in_cluster = min(seg['lap'] for seg in cluster)
-            entry_on_first_lap = [p['entry_index'] for p in per_lap_data if p.get('lap') == first_lap_in_cluster]
-            entry_index_first_lap = min(entry_on_first_lap) if entry_on_first_lap else float('inf')
-            ref = cluster[0]
+            
+            # Représentant global du virage (moyenne sur tous les tours)
+            ref_idx = cluster[0]['peak_idx']
+            first_entry_index = int(df_result.index[cluster[0]['start_idx']])
+            
             corner_details.append({
                 'id': physical_id,
-                'avg_cumulative_distance': avg_cum_dist,
-                'min_cumulative_distance': min_cum_dist,
-                '_entry_index_first_lap': entry_index_first_lap,
-                'lap': ref['lap'],
+                'corner_id': physical_id,
+                'corner_number': physical_id,
                 'label': f"V{physical_id}",
                 'type': corner_type,
-                'entry_index': entry_indices[0],
-                'apex_index': apex_indices[0],
-                'exit_index': exit_indices[0],
-                'apex_lat': apex_lat_avg,
-                'apex_lon': apex_lon_avg,
+                '_sort_index': cluster[0]['start_idx'], # Pour le tri physique ensuite
+                
+                'entry_index': first_entry_index,
+                'apex_index': int(df_result.index[ref_idx]),
+                'exit_index': int(df_result.index[cluster[0]['end_idx']]),
+                
+                'apex_lat': float(np.mean(apex_lats)) if apex_lats else None,
+                'apex_lon': float(np.mean(apex_lons)) if apex_lons else None,
+                
                 'entry_speed_kmh': float(np.mean(entry_speeds)) if entry_speeds else 0.0,
                 'apex_speed_kmh': float(np.mean(apex_speeds)) if apex_speeds else 0.0,
                 'exit_speed_kmh': float(np.mean(exit_speeds)) if exit_speeds else 0.0,
                 'max_lateral_g': float(np.mean(max_gs)) if max_gs else 0.0,
-                'distance_m': float(ref['cumulative_dist'][ref['end']] - ref['cumulative_dist'][ref['start']]) if ref['end'] < len(ref['cumulative_dist']) else 0.0,
-                'duration_s': 0.0,
-                'confirmed_in_laps': n_laps,
-                'consistency_score': round(consistency_score, 3),
-                'per_lap_data': per_lap_data,
+                
+                'confirmed_in_laps': len(cluster),
+                'per_lap_data': per_lap_data
             })
 
-            for seg in cluster:
-                for idx in seg['indices']:
-                    if idx < len(df_circuit):
-                        oi = df_circuit.index[idx]
-                        df_result.at[oi, 'is_corner'] = True
-                        df_result.at[oi, 'corner_id'] = physical_id
-                        df_result.at[oi, 'corner_type'] = corner_type
-                        df_result.at[oi, 'lap_number'] = seg['lap']
-                apex_idx = seg['apex_index']
-                if apex_idx < len(df_circuit):
-                    df_result.at[df_circuit.index[apex_idx], 'is_apex'] = True
-
-        # Ordre de passage : tri par entry_index RELATIF au début de chaque tour (median)
-        old_to_new = _renumber_corners_by_entry_index(corner_details, df_circuit)
-        log.info(
-            "[detect_corners] Ordre par entry_index relatif (median) : %s",
-            [f"V{c['id']} sort_idx={c.get('_sort_index', '?')}" for c in corner_details],
-        )
+        # 4. Trier physiquement (Re-numbering)
+        # On va utiliser le _renumber_corners_by_entry_index (qui existe déjà et est propre)
+        old_to_new = _renumber_corners_by_entry_index(corner_details, df_result)
+        
+        # Mettre à jour df_result avec les nouveaux IDs triés
         for idx in df_result.index:
             if df_result.at[idx, 'is_corner']:
-                old = df_result.at[idx, 'corner_id']
-                df_result.at[idx, 'corner_id'] = old_to_new.get(old, old)
-        log.info("[DIAG] Corners finaux (corner_details): %s → %s", len(corner_details), [c.get("label", "?") for c in corner_details])
-        log.info(
-            "[detect_corners] Virages finaux : %s → %s",
-            len(corner_details),
-            [f"V{c['id']} d={c.get('avg_cumulative_distance', 0):.0f}m" for c in corner_details],
-        )
+                old_id = df_result.at[idx, 'corner_id']
+                df_result.at[idx, 'corner_id'] = old_to_new.get(old_id, old_id)
 
-        total_distance = float(cumulative_dist[-1]) if len(cumulative_dist) > 0 else 0.0
-        avg_speed = float(np.mean(speed[speed > 0])) if np.any(speed > 0) else 0.0
-        max_lateral_g_global = float(np.max(np.abs(lateral_g))) if len(lateral_g) > 0 else 0.0
+        # 5. Metadata attachées
         df_result.attrs['corners'] = {
             'total_corners': len(corner_details),
-            'total_distance_m': total_distance,
-            'avg_speed_kmh': avg_speed,
-            'max_lateral_g': max_lateral_g_global,
             'corner_details': corner_details
         }
+        
     except Exception as e:
-        warnings.warn(f"⚠️ Erreur détection virages : {str(e)}")
-        df_result.attrs['corners'] = {'total_corners': 0, 'total_distance_m': 0.0, 'avg_speed_kmh': 0.0, 'max_lateral_g': 0.0, 'corner_details': []}
+        import traceback
+        warnings.warn(f"⚠️ Erreur critique dans detect_corners (fallback return empty): {str(e)}\n{traceback.format_exc()}")
+        df_result.attrs['corners'] = {'total_corners': 0, 'corner_details': []}
+
     return df_result
 
 

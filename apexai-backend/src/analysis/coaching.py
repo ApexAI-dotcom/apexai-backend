@@ -432,7 +432,7 @@ def _build_differentiated_corner_advice(
             f"{virage_label} {dir_fr} — Late apex à corriger",
             f"{virage_label} {dir_fr} — Apex décalé de {apex_error:.0f}m, relance retardée",
         ]
-        msg, expl = messages[variant], templates[variant]
+        msg, expl = messages[variant % 3], templates[variant % 3]
         return {"message": msg, "explanation": expl, "difficulty": "moyen", "impact_seconds": impact_seconds}
 
     if 60 <= apex_speed <= 90 and score < 65:
@@ -446,7 +446,7 @@ def _build_differentiated_corner_advice(
             f"{virage_label} {dir_fr} — {delta_speed:.1f} km/h à l'apex à récupérer",
             f"{virage_label} {dir_fr} — Braquage trop tardif",
         ]
-        msg, expl = messages[variant], templates[variant]
+        msg, expl = messages[variant % 3], templates[variant % 3]
         return {"message": msg, "explanation": expl, "difficulty": "moyen", "impact_seconds": impact_seconds}
 
     if apex_speed > 90 and score < 65:
@@ -460,7 +460,7 @@ def _build_differentiated_corner_advice(
             f"{virage_label} {dir_fr} — Engage plus tôt, stabilité de sortie",
             f"{virage_label} {dir_fr} — Ligne trop conservatrice",
         ]
-        msg, expl = messages[variant], templates[variant]
+        msg, expl = messages[variant % 3], templates[variant % 3]
         return {"message": msg, "explanation": expl, "difficulty": "moyen", "impact_seconds": impact_seconds}
 
     return None

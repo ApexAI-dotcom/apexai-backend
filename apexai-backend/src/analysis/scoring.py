@@ -29,37 +29,34 @@ def calculate_optimal_apex_position(
     corner_indices: List[int]
 ) -> Optional[Dict[str, float]]:
     """
-    Calcule la position de l'apex idéal pour un virage.
-    
-    Args:
-        df: DataFrame avec colonnes GPS et géométrie
-        corner_indices: Liste des indices des points du virage
-    
-    Returns:
-        Dictionnaire avec lat/lon de l'apex idéal, ou None si erreur
+    Calcule la position de l'apex idéal (point de courbure maximale) pour un virage.
     """
     try:
         if not corner_indices or len(corner_indices) < 3:
             return None
         
-        # Extraire données du virage
-        corner_data = df.iloc[corner_indices].copy()
+        valid_indices = [idx for idx in corner_indices if idx in df.index]
+        if not valid_indices:
+            return None
+            
+        corner_data = df.loc[valid_indices]
         
+        # Le meilleur apex mathématique est là où on tourne le plus fort 
+        # (ie: abs(curvature) au max)
         if 'curvature' not in corner_data.columns:
+            # Fallback sur le G latéral si pss de courbure
+            if 'lateral_g' in corner_data.columns:
+                signal = pd.to_numeric(corner_data['lateral_g'], errors='coerce').abs()
+            else:
+                return None
+        else:
+            signal = pd.to_numeric(corner_data['curvature'], errors='coerce').abs()
+            
+        if np.all(np.isnan(signal)):
             return None
         
-        curvature = pd.to_numeric(corner_data['curvature'], errors='coerce').values
-        curvature_abs = np.abs(curvature)
-        
-        # Apex idéal = point où courbure maximale (rayon minimal)
-        if np.all(np.isnan(curvature_abs)):
-            return None
-        
-        max_curvature_idx = np.nanargmax(curvature_abs)
-        ideal_idx = corner_indices[max_curvature_idx]
-        
-        if ideal_idx >= len(df):
-            return None
+        max_idx_loc = np.nanargmax(signal.values)
+        ideal_idx = valid_indices[max_idx_loc]
         
         apex_lat = df.iloc[ideal_idx]['latitude_smooth']
         apex_lon = df.iloc[ideal_idx]['longitude_smooth']
