@@ -17,7 +17,7 @@ apexai-backend/
 └── runtime.txt
 ```
 
-## Démarrage local
+## Démarrage local (développement)
 
 ```bash
 cd apexai-backend
@@ -26,6 +26,8 @@ python run_api.py
 ```
 
 API disponible sur http://localhost:8000
+
+En production, le backend est déployé sur Railway à partir de la branche `master` de ce dépôt.
 
 ## Endpoints principaux
 
