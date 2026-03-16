@@ -6,7 +6,7 @@ Modèles Pydantic pour l'API REST
 """
 
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from datetime import datetime
 
 
