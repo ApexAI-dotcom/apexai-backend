@@ -12,6 +12,7 @@ import os
 import uuid
 from pathlib import Path
 from typing import Optional
+import numpy as np
 
 from fastapi import APIRouter, File, Form, Header, Request, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
@@ -232,6 +233,12 @@ async def analyze_telemetry(
         def json_serializer(obj):
             if isinstance(obj, (datetime, date)):
                 return obj.isoformat()
+            elif isinstance(obj, np.integer):
+                return int(obj)
+            elif isinstance(obj, np.floating):
+                return float(obj)
+            elif isinstance(obj, np.ndarray):
+                return obj.tolist()
             raise TypeError(f"Type {type(obj)} not serializable")
 
         resp = AnalysisResponse(**result)
