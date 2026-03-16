@@ -27,7 +27,7 @@ from src.analysis.geometry import (
 from src.analysis.scoring import calculate_performance_score, validate_score_consistency
 from src.analysis.coaching import generate_coaching_advice
 from src.analysis.performance_metrics import analyze_corner_performance
-from src.visualization.visualization import generate_all_plots_base64
+from src.visualization.visualization import generate_all_plots_base64, generate_plot_data
 
 from .config import settings
 from .models import (
@@ -132,11 +132,16 @@ def _parse_laps_sync(temp_path: str, beacon_markers: list) -> List[Dict[str, Any
     times_for_median = [x["lap_time_seconds"] for x in laps_out if x["lap_time_seconds"] > 0 and x["lap_number"] >= 1]
     if times_for_median:
         median_time = float(np.median(times_for_median))
+        points_for_median = [x["points_count"] for x in laps_out if x["lap_number"] >= 1]
+        median_points = float(np.median(points_for_median)) if points_for_median else float("inf")
         threshold = 1.5 * median_time
+        
         for lap in laps_out:
             if lap["lap_number"] == 0:
                 lap["is_outlier"] = True
             elif lap["lap_time_seconds"] > threshold:
+                lap["is_outlier"] = True
+            elif lap["lap_number"] == laps_out[-1]["lap_number"] and lap["points_count"] < 0.8 * median_points:
                 lap["is_outlier"] = True
     else:
         for lap in laps_out:
@@ -247,7 +252,8 @@ def _run_analysis_pipeline_sync(
         for idx in df.index:
             if df.at[idx, "is_corner"]:
                 old_cid = df.at[idx, "corner_id"]
-                df.at[idx, "corner_id"] = refilter_id_to_new.get(old_cid, old_cid)
+                if pd.notna(old_cid):
+                    df.at[idx, "corner_id"] = refilter_id_to_new.get(int(old_cid), old_cid)
         old_to_new = {old: i for i, old in enumerate(df_perf.index)}
         for c in corner_details:
             c["entry_index"] = old_to_new.get(c["entry_index"], c["entry_index"])
@@ -391,7 +397,8 @@ def _run_analysis_pipeline_sync(
     for idx in df.index:
         if df.at[idx, "is_corner"]:
             old_cid = df.at[idx, "corner_id"]
-            df.at[idx, "corner_id"] = final_id_to_new.get(old_cid, old_cid)
+            if pd.notna(old_cid):
+                df.at[idx, "corner_id"] = final_id_to_new.get(int(old_cid), old_cid)
     for c in unique_corner_analysis:
         c["avg_note"] = "Valeurs sur ce tour" if laps_analyzed == 1 else f"Valeurs moyennées sur {laps_analyzed} tours"
     # Remplir apex_lat/apex_lon depuis le df si manquants (pour que trajectoire + heatmap affichent tous les virages)
@@ -424,6 +431,10 @@ def _run_analysis_pipeline_sync(
     df.attrs["score_data"] = score_data
     df.attrs["overall_score"] = score_data.get("overall_score", 0.0)
     plots_urls = generate_all_plots_base64(df)
+    
+    # Génération des données JSON pour Recharts
+    plot_data = generate_plot_data(df)
+    
     # Dupliquer le speed trace en variante zoomée si disponible
     try:
         speed_trace_url = plots_urls.get("speed_trace")
@@ -505,6 +516,7 @@ def _run_analysis_pipeline_sync(
             if a and isinstance(a, dict)
         ],
         plots=PlotUrls(**plots_urls),
+        plot_data=plot_data,
         statistics=Statistics(
             processing_time_seconds=processing_time,
             data_points=int(len(df)),

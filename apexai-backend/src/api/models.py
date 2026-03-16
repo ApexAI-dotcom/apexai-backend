@@ -117,6 +117,7 @@ class AnalysisResponse(BaseModel):
     coaching_advice: List[CoachingAdvice] = Field(description="Top 5 conseils")
     
     plots: PlotUrls
+    plot_data: Optional[Dict[str, Any]] = Field(default=None, description="Raw data for interactive frontend plotting (Recharts)")
     statistics: Statistics
     session_conditions: Optional[SessionConditions] = Field(default=None, description="Conditions de piste (sec/humide/mouillé/pluie, température)")
 

@@ -273,81 +273,22 @@ def calculate_sector_times_score(
 ) -> float:
     """
     Calcule le score des temps secteurs (0-20 points).
-    
-    Args:
-        df: DataFrame avec colonnes cumulative_distance et time
-        corner_details: Liste des détails de chaque virage
-    
-    Returns:
-        Score entre 0 et 20
+    Sans multiples tours de référence, utilise l'efficacité vitesse
+    des virages à l'intérieur des secteurs pour estimer le potentiel.
     """
     try:
         if 'cumulative_distance' not in df.columns or 'time' not in df.columns:
-            return 10.0  # Score moyen par défaut (20/2)
-        
-        dist = pd.to_numeric(df['cumulative_distance'], errors='coerce').values
-        time = pd.to_numeric(df['time'], errors='coerce').values
-        
-        if len(dist) == 0 or len(time) == 0:
             return 10.0
-        
-        total_dist = dist[-1] if not pd.isna(dist[-1]) else 0
-        total_time = time[-1] - time[0] if len(time) > 1 and not pd.isna(time[-1]) and not pd.isna(time[0]) else 0
-        
-        if total_dist == 0 or total_time == 0:
-            return 10.0
-        
-        # Diviser en 3 secteurs
-        s1_end = total_dist / 3
-        s2_end = 2 * total_dist / 3
-        
-        s1_idx = np.argmin(np.abs(dist - s1_end))
-        s2_idx = np.argmin(np.abs(dist - s2_end))
-        
-        # Calculer temps secteurs
-        s1_time = time[s1_idx] - time[0] if s1_idx < len(time) else 0
-        s2_time = time[s2_idx] - time[s1_idx] if s2_idx < len(time) and s1_idx < len(time) else 0
-        s3_time = time[-1] - time[s2_idx] if s2_idx < len(time) else 0
-        
-        # Calculer temps théorique optimal (approximation basée sur vitesse moyenne théorique)
-        # Vitesse théorique = 70% de vitesse max si tout était optimal
-        max_speed = df['speed'].max() if 'speed' in df.columns else 100.0
-        theoretical_speed = max_speed * 0.7  # 70% de la vitesse max théorique
-        
-        theoretical_s1 = (s1_end / theoretical_speed) * 3.6  # Conversion m/s -> s
-        theoretical_s2 = ((s2_end - s1_end) / theoretical_speed) * 3.6
-        theoretical_s3 = ((total_dist - s2_end) / theoretical_speed) * 3.6
-        
-        # Ratio temps réel / temps théorique
-        if theoretical_s1 > 0:
-            ratio_s1 = min(1.0, theoretical_s1 / s1_time) if s1_time > 0 else 0.8
-        else:
-            ratio_s1 = 0.8
-        
-        if theoretical_s2 > 0:
-            ratio_s2 = min(1.0, theoretical_s2 / s2_time) if s2_time > 0 else 0.8
-        else:
-            ratio_s2 = 0.8
-        
-        if theoretical_s3 > 0:
-            ratio_s3 = min(1.0, theoretical_s3 / s3_time) if s3_time > 0 else 0.8
-        else:
-            ratio_s3 = 0.8
-        
-        avg_ratio = (ratio_s1 + ratio_s2 + ratio_s3) / 3.0
-        
-        # Score basé sur ratio (max 20 pts)
-        if avg_ratio >= 1.0:
-            score = 20.0
-        elif avg_ratio >= 0.95:
-            score = 17.5
-        elif avg_ratio >= 0.90:
-            score = 14.0
-        elif avg_ratio >= 0.85:
-            score = 10.0
-        else:
-            score = max(5.0, 4.0 * (avg_ratio / 0.85))
-        
+            
+        score = 14.0 # Base 14/20
+        if corner_details:
+            efficiencies = [c.get('speed_efficiency_pct', 80.0) for c in corner_details if 'speed_efficiency_pct' in c]
+            if efficiencies:
+                eff_ratio = np.clip(np.mean(efficiencies) / 100.0, 0.4, 1.0)
+                score = eff_ratio * 20.0
+            else:
+                score = 15.0
+                
         return min(20.0, score)
     
     except Exception as e:

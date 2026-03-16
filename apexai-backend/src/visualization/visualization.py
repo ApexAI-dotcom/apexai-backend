@@ -981,3 +981,158 @@ def generate_all_plots_base64(df: pd.DataFrame) -> Dict[str, Optional[str]]:
                 plots[name] = None
 
     return plots
+
+
+def generate_plot_data(df: pd.DataFrame) -> Dict[str, Any]:
+    """
+    Génère les données brutes JSON/Dict pour les graphiques interactifs (Recharts) du frontend.
+    """
+    from typing import Dict, Any, List
+    import pandas as pd
+    import numpy as np
+    
+    plot_data: Dict[str, Any] = {}
+    
+    try:
+        # --- 1. Speed Trace ---
+        if 'cumulative_distance' in df.columns and 'speed' in df.columns:
+            laps_data = []
+            if 'lap_number' in df.columns:
+                for lap, lap_df in df.groupby('lap_number'):
+                    if pd.notna(lap) and lap >= 0:
+                        laps_data.append({
+                            "lap_number": int(lap),
+                            "lap_time": float(lap_df['time'].iloc[-1] - lap_df['time'].iloc[0]) if 'time' in lap_df.columns else 0.0,
+                            "distance_m": [round(float(d), 1) for d in lap_df['cumulative_distance'].values],
+                            "speed_kmh": [round(float(s), 1) for s in lap_df['speed'].values],
+                            "is_reference": False
+                        })
+            else:
+                laps_data.append({
+                    "lap_number": 1,
+                    "lap_time": float(df['time'].iloc[-1] - df['time'].iloc[0]) if 'time' in df.columns else 0.0,
+                    "distance_m": [round(float(d), 1) for d in df['cumulative_distance'].values],
+                    "speed_kmh": [round(float(s), 1) for s in df['speed'].values],
+                })
+            
+            # Sectors (simple divide by 3 for missing track map boundaries)
+            max_dist = float(df['cumulative_distance'].max()) if 'cumulative_distance' in df.columns else 0.0
+            sectors = [
+                {"name": "S1", "start_m": 0.0, "end_m": round(max_dist / 3, 1)},
+                {"name": "S2", "start_m": round(max_dist / 3, 1), "end_m": round(max_dist * 2 / 3, 1)},
+                {"name": "S3", "start_m": round(max_dist * 2 / 3, 1), "end_m": round(max_dist, 1)}
+            ] if max_dist > 0 else []
+            
+            avg_speed = float(df['speed'].mean()) if 'speed' in df.columns else 0.0
+            
+            plot_data["speed_trace"] = {
+                "laps": laps_data,
+                "sectors": sectors,
+                "avg_speed_kmh": round(avg_speed, 1)
+            }
+
+        # --- 2. Throttle / Brake ---
+        if 'cumulative_distance' in df.columns and 'throttle' in df.columns and 'brake' in df.columns:
+            tb_laps = []
+            if 'lap_number' in df.columns:
+                # Top 1 lap for simplicity
+                for lap, lap_df in df.groupby('lap_number'):
+                    if pd.notna(lap) and lap >= 0:
+                        tb_laps.append({
+                            "lap_number": int(lap),
+                            "distance_m": [round(float(d), 1) for d in lap_df['cumulative_distance'].values],
+                            "throttle_pct": [round(float(t), 1) for t in lap_df['throttle'].values],
+                            "brake_pct": [round(float(b), 1) for b in lap_df['brake'].values],
+                        })
+                        break
+            else:
+                 tb_laps.append({
+                    "lap_number": 1,
+                    "distance_m": [round(float(d), 1) for d in df['cumulative_distance'].values],
+                    "throttle_pct": [round(float(t), 1) for t in df['throttle'].values],
+                    "brake_pct": [round(float(b), 1) for b in df['brake'].values],
+                })
+            plot_data["throttle_brake"] = {"laps": tb_laps}
+
+        # --- 3. Performance Radar ---
+        if 'score_data' in df.attrs:
+            breakdown = df.attrs['score_data'].get('breakdown', {})
+            plot_data["performance_radar"] = {
+                "axes": ["Précision Apex", "Régularité", "Vitesse Apex", "Secteurs"],
+                "values": [
+                    round(breakdown.get('apex_precision', 0), 1),
+                    round(breakdown.get('trajectory_consistency', 0), 1),
+                    round(breakdown.get('apex_speed', 0), 1),
+                    round(breakdown.get('sector_times', 0), 1)
+                ],
+                "max_values": [30, 25, 25, 20]
+            }
+
+        # --- 4. Apex Margin ---
+        if 'corner_analysis' in df.attrs:
+            corners = df.attrs['corner_analysis']
+            margins = []
+            for c in corners:
+                opt = float(c.get('apex_speed_optimal', 0) or 0)
+                real = float(c.get('apex_speed_real', 0) or 0)
+                margin = round(opt - real, 1)
+                
+                status = "warning" if margin > 5 else ("good" if margin > 2 else "optimal")
+                if margin < 0:
+                    status = "good"
+                
+                # Fetch metrics safely
+                metrics = c.get('metrics', {}) or {}
+                
+                margins.append({
+                    "label": f"V{c.get('corner_id', 0)}",
+                    "margin_kmh": margin,
+                    "status": status,
+                    "corner_type": c.get('corner_type', 'right'),
+                    "grade": c.get('grade', 'C'),
+                    "score": round(float(c.get('score', 0) or 0), 1),
+                    "apex_speed_real": round(real, 1),
+                    "apex_speed_optimal": round(opt, 1),
+                    "time_lost": round(float(c.get('time_lost', 0) or 0), 3),
+                    "entry_speed": round(float(metrics.get('entry_speed', 0) or 0), 1),
+                    "exit_speed": round(float(metrics.get('exit_speed', 0) or 0), 1),
+                })
+            plot_data["apex_margin"] = {"corners": margins}
+
+        # --- 5. Trajectory 2D ---
+        if 'latitude_smooth' in df.columns and 'longitude_smooth' in df.columns and 'speed' in df.columns:
+            traj_laps = []
+            if 'lap_number' in df.columns:
+                for lap, lap_df in df.groupby('lap_number'):
+                    if pd.notna(lap) and lap >= 0:
+                        traj_laps.append({
+                            "lat": [float(l) for l in lap_df['latitude_smooth'].values[::5]], # Subsample for performance
+                            "lon": [float(l) for l in lap_df['longitude_smooth'].values[::5]],
+                            "speed_kmh": [round(float(s), 1) for s in lap_df['speed'].values[::5]]
+                        })
+            else:
+                 traj_laps.append({
+                    "lat": [float(l) for l in df['latitude_smooth'].values[::5]], 
+                    "lon": [float(l) for l in df['longitude_smooth'].values[::5]],
+                    "speed_kmh": [round(float(s), 1) for s in df['speed'].values[::5]]
+                })
+                 
+            traj_corners = []
+            if 'corner_analysis' in df.attrs:
+                 for c in df.attrs['corner_analysis']:
+                     if c.get('apex_lat') is not None and c.get('apex_lon') is not None:
+                         traj_corners.append({
+                             "id": c.get('corner_id', 0),
+                             "lat": float(c['apex_lat']),
+                             "lon": float(c['apex_lon']),
+                             "label": f"V{c.get('corner_id', 0)}",
+                             "grade": c.get('grade', 'C'),
+                             "corner_type": c.get('corner_type', 'right'),
+                             "apex_speed": round(float(c.get('apex_speed_real', 0) or 0), 1)
+                         })
+            plot_data["trajectory_2d"] = {"laps": traj_laps, "corners": traj_corners}
+
+    except Exception as e:
+        warnings.warn(f"⚠️ Erreur generate_plot_data: {e}")
+        
+    return plot_data
