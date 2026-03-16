@@ -835,20 +835,20 @@ def detect_corners(
         signal = np.abs(lateral_g)
         
         # Trouver les pics de G latéral (Apex potentiels)
-        # On force une distance plus grande (ex: 15-20m) pour éviter les doubles apex dans un même virage
-        effective_min_dist = max(min_distance_between_corners, 18.0)
+        # On force une distance beaucoup plus grande (ex: 25-30m) pour fusionner les doubles apex
+        effective_min_dist = max(min_distance_between_corners, 25.0)
         avg_spacing = _avg_spacing_m(cumulative_dist)
         if avg_spacing > 0:
             distance_samples = max(2, int(effective_min_dist / avg_spacing))
         else:
-            distance_samples = 15
+            distance_samples = 25
             
         # Trouver les pics (Apexes)
         peaks, properties = find_peaks(
             signal,
             height=min_lateral_g,       # Minimum G latéral pour être un virage
-            distance=distance_samples,  # Distance minimale entre deux apexes (augmentée)
-            prominence=0.15             # Le pic doit ressortir d'au moins 0.15g (filtrage du bruit)
+            distance=distance_samples,  # Distance minimale augmentée entre deux apexes
+            prominence=0.25             # Le pic doit ressortir d'au moins 0.25g pour filtrer les faux virages
         )
         
         log.info(f"detect_corners (find_peaks): {len(peaks)} apex potentiels trouvés (seuil {min_lateral_g}g, dist {effective_min_dist}m)")
@@ -897,7 +897,8 @@ def detect_corners(
             
         # --- Numérotation physique des virages ---
         # 1. Regrouper les apex réels proches spatialement
-        coherence_radius_m = min_distance_between_corners * 1.5
+        # Augmentation forte du rayon de cohérence pour grouper les pif-pafs serrés ou doubles apex sous le même V
+        coherence_radius_m = min_distance_between_corners * 2.5
         clusters = []
         used = [False] * len(valid_apexes)
         
