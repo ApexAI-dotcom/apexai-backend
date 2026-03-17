@@ -141,6 +141,9 @@ def _parse_laps_sync(temp_path: str, beacon_markers: list) -> List[Dict[str, Any
                 lap["is_outlier"] = True
             elif lap["lap_time_seconds"] > threshold:
                 lap["is_outlier"] = True
+            # In-lap / Cool-down court : si le tour est 15% plus lent que la médiane
+            elif lap["lap_time_seconds"] > 1.15 * median_time:
+                lap["is_outlier"] = True
             elif lap["lap_number"] == laps_out[-1]["lap_number"] and lap["points_count"] < 0.8 * median_points:
                 lap["is_outlier"] = True
     else:

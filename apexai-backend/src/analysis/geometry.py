@@ -943,11 +943,7 @@ def detect_corners(
                         volant_redresse = max_g_in_segment > -g_continuity_threshold
                         
                     if volant_redresse:
-                        # FALLBACK ROBUSTE : si très proches (<40m) et même direction, on fusionne pour éviter doublons
-                        if dist_gap < 40.0:
-                            pass
-                        else:
-                            break # Le pilote a redressé, ce sont deux virages distincts
+                        break # Le pilote a redressé, ce sont deux virages distincts
                         
                     # Si on arrive ici, les virages tournent dans le même sens ET le volant n'a pas été redressé.
                     # => FUSION ! On étend 'current' pour englober 'next_apex'
