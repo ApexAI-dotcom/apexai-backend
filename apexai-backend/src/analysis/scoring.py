@@ -138,21 +138,20 @@ def calculate_apex_precision_score(
     
     avg_distance = np.mean(distances)
     
-    # Score basé sur moyenne des écarts
-    # 0-0.5m = 30 pts, 0.5-1.5m = 25 pts, 1.5-3m = 20 pts, 3-5m = 15 pts, >5m = 5-10 pts
-    if avg_distance <= 0.5:
+    # Score basé sur moyenne des écarts (tolérance accrue, le GPS a une marge d'erreur)
+    if avg_distance <= 2.5:
         score = 30.0
-    elif avg_distance <= 1.5:
-        score = 25.0
-    elif avg_distance <= 3.0:
-        score = 20.0
     elif avg_distance <= 5.0:
+        score = 25.0
+    elif avg_distance <= 8.0:
+        score = 20.0
+    elif avg_distance <= 12.0:
         score = 15.0
     else:
-        score = max(5.0, 10.0 * (1 - (avg_distance - 5.0) / 10.0))
+        score = max(5.0, 10.0 * (1 - (avg_distance - 12.0) / 10.0))
     
     # Formule alternative pour continuité
-    score_continuous = 30.0 * (1 - min(avg_distance / 5.0, 1.0))
+    score_continuous = 30.0 * (1 - min(avg_distance / 12.0, 1.0))
     
     return max(score, score_continuous)
 
@@ -177,7 +176,7 @@ def calculate_trajectory_consistency_score(df: pd.DataFrame) -> float:
         curvature_std = np.std(np.abs(curvature))
         
         # Détecter vraies corrections (seuil élevé pour éviter bruit vibrations/piste à 100Hz)
-        STEERING_CORRECTION_THRESHOLD = 10.0  # degrés minimum
+        STEERING_CORRECTION_THRESHOLD = 15.0  # degrés minimum (tolérance plus large)
         SMOOTHNESS_WINDOW = 10  # points de lissage
         if 'heading' in df.columns:
             heading = pd.to_numeric(df['heading'], errors='coerce').ffill().fillna(0).values
@@ -198,8 +197,8 @@ def calculate_trajectory_consistency_score(df: pd.DataFrame) -> float:
             correction_ratio = 0
         
         # Score basé sur écart-type et corrections (max 25 pts)
-        consistency_from_std = 25.0 * (1 - min(curvature_std / 0.3, 1.0))
-        consistency_from_corrections = 25.0 * (1 - min(correction_ratio * 5, 1.0))
+        consistency_from_std = 25.0 * (1 - min(curvature_std / 0.5, 1.0))
+        consistency_from_corrections = 25.0 * (1 - min(correction_ratio * 3, 1.0))
         score = (consistency_from_std * 0.6 + consistency_from_corrections * 0.4)
         
         return max(0.0, min(25.0, score))
@@ -255,14 +254,14 @@ def calculate_apex_speed_score(corner_details: List[Dict[str, Any]]) -> float:
     avg_efficiency = np.average(efficiencies, weights=weights)
     
     # Score par efficacité
-    if avg_efficiency >= 90:
+    if avg_efficiency >= 85.0:
         score = 25.0
-    elif avg_efficiency >= 80:
+    elif avg_efficiency >= 75.0:
         score = 20.0
-    elif avg_efficiency >= 70:
+    elif avg_efficiency >= 60.0:
         score = 15.0
     else:
-        score = max(5.0, 10.0 * (avg_efficiency / 70))
+        score = max(5.0, 15.0 * (avg_efficiency / 60.0))
     
     return score
 

@@ -890,7 +890,7 @@ def detect_corners(
         # Si un pilote prend un double droite (Turn 1/2) sans redresser le volant,
         # la force G entre les deux pics ne redescend jamais à zéro. On fusionne.
         surgical_apexes = []
-        g_continuity_threshold = 0.15 # 0.15g max drop = le volant est resté tourné
+        g_continuity_threshold = 0.35 # 0.35g max drop = le volant est resté tourné (tolère les légers soulagements)
         
         # On groupe d'abord par tour pour comparer logiquement les apex successifs
         lap_groups = {}
@@ -943,7 +943,11 @@ def detect_corners(
                         volant_redresse = max_g_in_segment > -g_continuity_threshold
                         
                     if volant_redresse:
-                        break # Le pilote a redressé, ce sont deux virages distincts
+                        # FALLBACK ROBUSTE : si très proches (<40m) et même direction, on fusionne pour éviter doublons
+                        if dist_gap < 40.0:
+                            pass
+                        else:
+                            break # Le pilote a redressé, ce sont deux virages distincts
                         
                     # Si on arrive ici, les virages tournent dans le même sens ET le volant n'a pas été redressé.
                     # => FUSION ! On étend 'current' pour englober 'next_apex'
@@ -975,7 +979,7 @@ def detect_corners(
             
         # 1. Regrouper les apex réels proches spatialement
         # Rayon de base standard pour grouper les passages d'un même virage sur plusieurs tours
-        coherence_radius_m = min_distance_between_corners * 1.5
+        coherence_radius_m = min_distance_between_corners * 2.0
         clusters = []
         used = [False] * len(valid_apexes)
         
