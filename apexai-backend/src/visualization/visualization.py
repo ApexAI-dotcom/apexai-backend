@@ -67,6 +67,20 @@ def _style_ax(ax, title: str, xlabel: str = '', ylabel: str = ''):
         spine.set_edgecolor(BG_PANEL)
 
 
+def downsample_array(arr, max_points: int = 250):
+    if arr is None or len(arr) <= max_points:
+        return arr
+    indices = np.linspace(0, len(arr) - 1, max_points, dtype=int)
+    if isinstance(arr, list):
+        return [arr[i] for i in indices]
+    elif isinstance(arr, np.ndarray):
+        return arr[indices].tolist()
+    else:
+        if hasattr(arr, 'iloc'):
+            return arr.iloc[indices].tolist()
+        return list(np.array(arr)[indices])
+
+
 def _calculate_scores(df: pd.DataFrame) -> Dict[str, float]:
     """
     Calcule les 5 scores (0-100) pour le radar chart.
@@ -1003,16 +1017,16 @@ def generate_plot_data(df: pd.DataFrame) -> Dict[str, Any]:
                         laps_data.append({
                             "lap_number": int(lap),
                             "lap_time": float(lap_df['time'].iloc[-1] - lap_df['time'].iloc[0]) if 'time' in lap_df.columns else 0.0,
-                            "distance_m": [round(float(d), 1) for d in lap_df['cumulative_distance'].values],
-                            "speed_kmh": [round(float(s), 1) for s in lap_df['speed'].values],
+                            "distance_m": downsample_array([round(float(d), 1) for d in lap_df['cumulative_distance'].values]),
+                            "speed_kmh": downsample_array([round(float(s), 1) for s in lap_df['speed'].values]),
                             "is_reference": False
                         })
             else:
                 laps_data.append({
                     "lap_number": 1,
                     "lap_time": float(df['time'].iloc[-1] - df['time'].iloc[0]) if 'time' in df.columns else 0.0,
-                    "distance_m": [round(float(d), 1) for d in df['cumulative_distance'].values],
-                    "speed_kmh": [round(float(s), 1) for s in df['speed'].values],
+                    "distance_m": downsample_array([round(float(d), 1) for d in df['cumulative_distance'].values]),
+                    "speed_kmh": downsample_array([round(float(s), 1) for s in df['speed'].values]),
                 })
             
             # Sectors (simple divide by 3 for missing track map boundaries)
@@ -1040,17 +1054,17 @@ def generate_plot_data(df: pd.DataFrame) -> Dict[str, Any]:
                     if pd.notna(lap) and lap >= 0:
                         tb_laps.append({
                             "lap_number": int(lap),
-                            "distance_m": [round(float(d), 1) for d in lap_df['cumulative_distance'].values],
-                            "throttle_pct": [round(float(t), 1) for t in lap_df['throttle'].values],
-                            "brake_pct": [round(float(b), 1) for b in lap_df['brake'].values],
+                            "distance_m": downsample_array([round(float(d), 1) for d in lap_df['cumulative_distance'].values]),
+                            "throttle_pct": downsample_array([round(float(t), 1) for t in lap_df['throttle'].values]),
+                            "brake_pct": downsample_array([round(float(b), 1) for b in lap_df['brake'].values]),
                         })
                         break
             else:
                  tb_laps.append({
                     "lap_number": 1,
-                    "distance_m": [round(float(d), 1) for d in df['cumulative_distance'].values],
-                    "throttle_pct": [round(float(t), 1) for t in df['throttle'].values],
-                    "brake_pct": [round(float(b), 1) for b in df['brake'].values],
+                    "distance_m": downsample_array([round(float(d), 1) for d in df['cumulative_distance'].values]),
+                    "throttle_pct": downsample_array([round(float(t), 1) for t in df['throttle'].values]),
+                    "brake_pct": downsample_array([round(float(b), 1) for b in df['brake'].values]),
                 })
             plot_data["throttle_brake"] = {"laps": tb_laps}
 
@@ -1106,15 +1120,15 @@ def generate_plot_data(df: pd.DataFrame) -> Dict[str, Any]:
                 for lap, lap_df in df.groupby('lap_number'):
                     if pd.notna(lap) and lap >= 0:
                         traj_laps.append({
-                            "lat": [float(l) for l in lap_df['latitude_smooth'].values[::5]], # Subsample for performance
-                            "lon": [float(l) for l in lap_df['longitude_smooth'].values[::5]],
-                            "speed_kmh": [round(float(s), 1) for s in lap_df['speed'].values[::5]]
+                            "lat": downsample_array([float(l) for l in lap_df['latitude_smooth'].values]), # Subsample for performance
+                            "lon": downsample_array([float(l) for l in lap_df['longitude_smooth'].values]),
+                            "speed_kmh": downsample_array([round(float(s), 1) for s in lap_df['speed'].values])
                         })
             else:
                  traj_laps.append({
-                    "lat": [float(l) for l in df['latitude_smooth'].values[::5]], 
-                    "lon": [float(l) for l in df['longitude_smooth'].values[::5]],
-                    "speed_kmh": [round(float(s), 1) for s in df['speed'].values[::5]]
+                    "lat": downsample_array([float(l) for l in df['latitude_smooth'].values]), 
+                    "lon": downsample_array([float(l) for l in df['longitude_smooth'].values]),
+                    "speed_kmh": downsample_array([round(float(s), 1) for s in df['speed'].values])
                 })
                  
             traj_corners = []
