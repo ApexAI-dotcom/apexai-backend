@@ -886,6 +886,84 @@ def detect_corners(
                     'lap': lap_num
                 })
 
+        # --- FUSION CHIRURGICALE DES DOUBLES APEX ---
+        # Si un pilote prend un double droite (Turn 1/2) sans redresser le volant,
+        # la force G entre les deux pics ne redescend jamais à zéro. On fusionne.
+        surgical_apexes = []
+        g_continuity_threshold = 0.15 # 0.15g max drop = le volant est resté tourné
+        
+        # On groupe d'abord par tour pour comparer logiquement les apex successifs
+        lap_groups = {}
+        for a in valid_apexes:
+            lap_groups.setdefault(a['lap'], []).append(a)
+            
+        for l_num, lap_apexes in lap_groups.items():
+            # S'assurer que les apex sont dans l'ordre chronologique
+            lap_apexes = sorted(lap_apexes, key=lambda x: x['peak_idx'])
+            merged_lap_apexes = []
+            
+            i = 0
+            while i < len(lap_apexes):
+                current = lap_apexes[i]
+                
+                # Chercher combien d'apexes suivants on peut fusionner avec celui-ci
+                j = i + 1
+                while j < len(lap_apexes):
+                    next_apex = lap_apexes[j]
+                    
+                    # Vérifier la distance physique brute (pas la peine de fusionner si c'est à l'autre bout du circuit)
+                    dist_gap = cumulative_dist[next_apex['peak_idx']] - cumulative_dist[current['peak_idx']]
+                    if dist_gap > 150.0: # Plus de 150m, c'est clairement un autre virage
+                        break
+                        
+                    # Extraire le signal brut (avec signe) entre les deux pics
+                    # On utilise df_result['lateral_g'] car 'signal' est la valeur absolue
+                    p1 = current['peak_idx']
+                    p2 = next_apex['peak_idx']
+                    
+                    # Signe du G au niveau des deux pics (pour vérifier s'ils tournent dans le même sens)
+                    g1 = lateral_g[p1]
+                    g2 = lateral_g[p2]
+                    
+                    if (g1 * g2) <= 0:
+                        # Signes opposés = changement de direction (ex: chicane). On ne fusionne jamais.
+                        break
+                        
+                    # Vérifier si on a relâché le volant entre les deux.
+                    # On regarde la portion de piste entre la *fin* du premier et le *début* du deuxième
+                    # ou directement entre les deux pics.
+                    segment_g = lateral_g[p1:p2]
+                    
+                    # Est-ce que le volant a été redressé ? (G passe proche de 0 ou s'inverse)
+                    if g1 > 0: # Virage à gauche (G positif)
+                        min_g_in_segment = np.min(segment_g)
+                        volant_redresse = min_g_in_segment < g_continuity_threshold
+                    else: # Virage à droite (G négatif)
+                        max_g_in_segment = np.max(segment_g)
+                        volant_redresse = max_g_in_segment > -g_continuity_threshold
+                        
+                    if volant_redresse:
+                        break # Le pilote a redressé, ce sont deux virages distincts
+                        
+                    # Si on arrive ici, les virages tournent dans le même sens ET le volant n'a pas été redressé.
+                    # => FUSION ! On étend 'current' pour englober 'next_apex'
+                    # Le nouveau peak_idx est celui qui encaisse le plus de G
+                    if abs(g2) > abs(g1):
+                        current['peak_idx'] = p2
+                        
+                    current['end_idx'] = max(current['end_idx'], next_apex['end_idx'])
+                    j += 1
+                
+                # On ajoute le virage (potentiellement fusionné avec ceux d'après)
+                merged_lap_apexes.append(current)
+                i = j # Sauter les apexes qu'on vient de fusionner
+                
+            surgical_apexes.extend(merged_lap_apexes)
+            
+        # Remplacer valid_apexes par notre liste chirurgicale
+        valid_apexes = surgical_apexes
+        log.info(f"detect_corners: {len(valid_apexes)} apex restants après la fusion chirurgicale de continuité G.")
+
         # Regrouper par numéro de virage physique (Cluster by physical location on track)
         # On projete tous les apex sur le premier tour chronométré complet pour trouver leur numéro
         
@@ -931,42 +1009,8 @@ def detect_corners(
         if not valid_clusters:
             # Fallback si on a tout filtré
             valid_clusters = clusters
-
-        # 2bis. SMART MERGING DE VIRAGES "COMPOSITES" (ex: T1/T2 ou T9/T10 très proches)
-        # Si deux clusters validés sont physiquement très proches (ex: < 40m)
-        smart_clusters = []
-        merge_radius_m = 50.0 # Distance de fusion agressive pour les doubles apex successifs
-        
-        # Obtenir un apex représentatif pour chaque cluster
-        cluster_centroids = []
-        for cluster in valid_clusters:
-            best_apex = cluster[0]
-            lat, lon = _get_apex_gps(df_result, [best_apex['peak_idx']])
-            cluster_centroids.append((lat, lon, cluster))
             
-        used_smart = [False] * len(cluster_centroids)
-        for i, (lat1, lon1, c1) in enumerate(cluster_centroids):
-            if used_smart[i]:
-                continue
-            merged_cluster = list(c1)
-            used_smart[i] = True
-            
-            for j in range(i + 1, len(cluster_centroids)):
-                if used_smart[j]:
-                    continue
-                lat2, lon2, c2 = cluster_centroids[j]
-                if lat1 is not None and lat2 is not None:
-                    dist = _haversine_distance(lat1, lon1, lat2, lon2)
-                    if dist < merge_radius_m:
-                        # Fusionner ce cluster
-                        merged_cluster.extend(c2)
-                        used_smart[j] = True
-            
-            smart_clusters.append(merged_cluster)
-            
-        valid_clusters = smart_clusters
-            
-        log.info(f"detect_corners: {len(valid_clusters)} virages physiques confirmés après fusion intelligente (rayon={merge_radius_m}m)")
+        log.info(f"detect_corners: {len(valid_clusters)} virages physiques confirmés")
         
         # 3. Construire le corner_details = JSON attendu par le front
         
