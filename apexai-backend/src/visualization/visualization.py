@@ -1145,6 +1145,63 @@ def generate_plot_data(df: pd.DataFrame) -> Dict[str, Any]:
                          })
             plot_data["trajectory_2d"] = {"laps": traj_laps, "corners": traj_corners}
 
+        # --- 6. Time Delta (per-lap vs best lap) ---
+        if 'cumulative_distance' in df.columns and 'time' in df.columns and 'lap_number' in df.columns:
+            try:
+                lap_groups = {}
+                for lap, lap_df in df.groupby('lap_number'):
+                    if pd.notna(lap) and int(lap) > 0 and len(lap_df) > 10:
+                        lap_groups[int(lap)] = lap_df
+
+                if len(lap_groups) >= 1:
+                    # Find best lap (shortest time span)
+                    lap_durations = {}
+                    for ln, ldf in lap_groups.items():
+                        t = ldf['time'].dropna()
+                        if len(t) >= 2:
+                            lap_durations[ln] = float(t.iloc[-1] - t.iloc[0])
+
+                    if lap_durations:
+                        best_lap_num = min(lap_durations, key=lap_durations.get)
+                        best_df = lap_groups[best_lap_num]
+
+                        # Build best lap interpolation: distance -> elapsed time
+                        best_dist = best_df['cumulative_distance'].values
+                        best_time_raw = best_df['time'].values
+                        best_elapsed = best_time_raw - best_time_raw[0]
+
+                        # Normalize distances to start at 0 for each lap
+                        best_dist_norm = best_dist - best_dist[0]
+
+                        delta_laps = []
+                        for ln, ldf in lap_groups.items():
+                            comp_dist = ldf['cumulative_distance'].values
+                            comp_time_raw = ldf['time'].values
+                            comp_elapsed = comp_time_raw - comp_time_raw[0]
+                            comp_dist_norm = comp_dist - comp_dist[0]
+
+                            # Interpolate best lap elapsed time at comparison distances
+                            best_interp = np.interp(comp_dist_norm, best_dist_norm, best_elapsed)
+                            delta = comp_elapsed - best_interp  # positive = slower
+
+                            # Downsample
+                            dist_out = downsample_array([round(float(d), 1) for d in comp_dist_norm], 150)
+                            delta_out = downsample_array([round(float(d), 3) for d in delta], 150)
+
+                            delta_laps.append({
+                                "lap_number": ln,
+                                "distance_m": dist_out,
+                                "delta_s": delta_out,
+                                "is_best": ln == best_lap_num,
+                            })
+
+                        plot_data["time_delta_laps"] = {
+                            "best_lap_number": best_lap_num,
+                            "laps": delta_laps,
+                        }
+            except Exception as e:
+                warnings.warn(f"⚠️ Erreur time_delta_laps: {e}")
+
     except Exception as e:
         warnings.warn(f"⚠️ Erreur generate_plot_data: {e}")
         
