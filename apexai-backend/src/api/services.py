@@ -586,6 +586,7 @@ class AnalysisService:
         analysis_id: str,
         track_condition: str = "dry",
         track_temperature: Optional[float] = None,
+        session_name: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Traiter un fichier de télémétrie complet.
@@ -662,6 +663,7 @@ class AnalysisService:
                 lap_filter,
                 track_condition,
                 track_temperature,
+                session_name,
             )
             return result
             
