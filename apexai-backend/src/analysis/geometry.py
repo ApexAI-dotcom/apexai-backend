@@ -835,20 +835,20 @@ def detect_corners(
         signal = np.abs(lateral_g)
         
         # Trouver les pics de G latéral (Apex potentiels)
-        # On force une distance beaucoup plus grande (ex: 25-30m) pour fusionner les doubles apex
-        effective_min_dist = max(min_distance_between_corners, 25.0)
+        # On force une distance BEAUCOUP plus grande (ex: 40m) pour fusionner les doubles apex (ex: Turn 1/2)
+        effective_min_dist = max(min_distance_between_corners, 40.0)
         avg_spacing = _avg_spacing_m(cumulative_dist)
         if avg_spacing > 0:
             distance_samples = max(2, int(effective_min_dist / avg_spacing))
         else:
-            distance_samples = 25
+            distance_samples = 40
             
         # Trouver les pics (Apexes)
         peaks, properties = find_peaks(
             signal,
             height=min_lateral_g,       # Minimum G latéral pour être un virage
-            distance=distance_samples,  # Distance minimale augmentée entre deux apexes
-            prominence=0.25             # Le pic doit ressortir d'au moins 0.25g pour filtrer les faux virages
+            distance=distance_samples,  # Distance minimale VRAIMENT augmentée entre deux apexes
+            prominence=0.35             # Le pic doit ressortir de 0.35g (très strict) pour filtrer les sous-virages
         )
         
         log.info(f"detect_corners (find_peaks): {len(peaks)} apex potentiels trouvés (seuil {min_lateral_g}g, dist {effective_min_dist}m)")
@@ -895,10 +895,9 @@ def detect_corners(
             df_result.attrs['corners'] = {'total_corners': 0, 'corner_details': []}
             return df_result
             
-        # --- Numérotation physique des virages ---
         # 1. Regrouper les apex réels proches spatialement
-        # Augmentation forte du rayon de cohérence pour grouper les pif-pafs serrés ou doubles apex sous le même V
-        coherence_radius_m = min_distance_between_corners * 2.5
+        # Augmentation TRÈS forte du rayon de cohérence pour grouper les pif-pafs serrés ou doubles apex (T1/T2, T9/T10)
+        coherence_radius_m = max(45.0, min_distance_between_corners * 3.0)
         clusters = []
         used = [False] * len(valid_apexes)
         

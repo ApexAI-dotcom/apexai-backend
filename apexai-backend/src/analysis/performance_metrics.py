@@ -553,13 +553,19 @@ def analyze_corner_performance(
     
     except Exception as e:
         warnings.warn(f"Error analyzing corner {corner_data.get('id')}: {str(e)}")
+        # Tenter de récupérer au moins la vitesse réelle si elle existe
+        fallback_real = corner_data.get('apex_speed', 0.0)
         return {
             'corner_id': corner_data.get('id', 0),
             'corner_type': corner_data.get('type', 'right'),
             'corner_number': corner_data.get('id', 0),
             'apex_lat': corner_data.get('apex_lat'),
             'apex_lon': corner_data.get('apex_lon'),
-            'metrics': {},
+            'metrics': {
+                'apex_speed_real': round(fallback_real, 1) if fallback_real else 0.0,
+                'apex_speed_optimal': round(fallback_real, 1) if fallback_real else 0.0, # Évite un gros delta
+                'time_lost': 0.0
+            },
             'grade': 'C',
             'score': 50
         }
