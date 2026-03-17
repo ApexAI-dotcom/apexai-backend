@@ -453,17 +453,18 @@ def _run_analysis_pipeline_sync(
     lap_time = best_lap_time or 0.0
 
     # Calculate Max Speed & Lap
-    if "speed_kmh" in df.columns and "lap_number" in df.columns:
+    speed_col = "speed_kmh" if "speed_kmh" in df.columns else ("speed" if "speed" in df.columns else None)
+    if speed_col and "lap_number" in df.columns:
         valid_speed_df = df[df["lap_number"] > 0] if 0 in df["lap_number"].unique() else df
         if len(valid_speed_df) > 0:
-            max_row = valid_speed_df.loc[valid_speed_df["speed_kmh"].idxmax()]
-            max_speed = round(float(max_row["speed_kmh"]), 1)
+            max_row = valid_speed_df.loc[valid_speed_df[speed_col].idxmax()]
+            max_speed = round(float(max_row[speed_col]), 1)
             max_speed_lap = int(max_row["lap_number"])
         else:
-            max_speed = round(float(df["speed_kmh"].max()), 1)
-            max_speed_lap = int(df.loc[df["speed_kmh"].idxmax()]["lap_number"])
-    elif "speed_kmh" in df.columns:
-        max_speed = round(float(df["speed_kmh"].max()), 1)
+            max_speed = round(float(df[speed_col].max()), 1)
+            max_speed_lap = int(df.loc[df[speed_col].idxmax()]["lap_number"])
+    elif speed_col:
+        max_speed = round(float(df[speed_col].max()), 1)
         
     logger.info(f"[{analysis_id}] Session Stats: Best={best_lap_time}s (L{fastest_lap_number}), Max Speed={max_speed}km/h (L{max_speed_lap}), Cons={consistency_gap}s, Imp={improvement_gap}s")
 
