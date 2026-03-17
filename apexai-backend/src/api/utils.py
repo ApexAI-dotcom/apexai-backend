@@ -7,12 +7,41 @@ Utilitaires pour l'API REST
 
 import os
 import logging
-from typing import Optional
+import math
+import numpy as np
+from typing import Optional, Any, Dict, List
 from fastapi import UploadFile
 
 from .config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def sanitize_json_data(obj: Any) -> Any:
+    """
+    Recursively replaces NaN, Infinity, -Infinity with None for JSON compliance.
+    Also handles numpy types and other non-standard JSON types.
+    """
+    if isinstance(obj, dict):
+        return {k: sanitize_json_data(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [sanitize_json_data(v) for v in obj]
+    elif isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    elif isinstance(obj, (np.floating, np.float32, np.float64)):
+        if np.isnan(obj) or np.isinf(obj):
+            return None
+        return float(obj)
+    elif isinstance(obj, (np.integer, np.int32, np.int64)):
+        return int(obj)
+    elif isinstance(obj, np.ndarray):
+        return [sanitize_json_data(x) for x in obj.tolist()]
+    elif hasattr(obj, "isoformat"):  # datetime/date
+        return obj.isoformat()
+    else:
+        return obj
 
 
 async def validate_csv_file(file: UploadFile) -> Optional[str]:

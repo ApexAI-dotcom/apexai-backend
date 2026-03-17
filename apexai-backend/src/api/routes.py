@@ -20,7 +20,7 @@ from fastapi.responses import JSONResponse
 from .config import settings
 from .models import AnalysisResponse, ErrorResponse
 from .services import AnalysisService
-from .utils import validate_csv_file
+from .utils import validate_csv_file, sanitize_json_data
 from src.core.subscription_service import check_analysis_limit, increment_analysis_count
 
 # Résolution user_id depuis JWT (optionnel pour limite abonnement)
@@ -205,7 +205,9 @@ async def analyze_telemetry(
             if cached_raw:
                 logger.info(f"[{analysis_id}] Redis cache HIT")
                 data = json.loads(cached_raw)
-                return JSONResponse(content={"cached": True, "cache_key": cache_key, **data})
+                # Sanitize loaded data for JSON compliance (NaN/Inf -> None)
+                sanitized = sanitize_json_data(data)
+                return JSONResponse(content={"cached": True, "cache_key": cache_key, **sanitized})
 
         # Analyse (cache MISS)
         if redis and not lap_list:
@@ -220,34 +222,21 @@ async def analyze_telemetry(
 
         # Stocker en cache (uniquement analyse complète sans filtre de tours)
         if redis and not lap_list:
+            sanitized_for_cache = sanitize_json_data(result)
             await redis.setex(
                 f"{REDIS_KEY_PREFIX}{cache_key}",
                 REDIS_CACHE_TTL,
-                json.dumps(result, default=str)
+                json.dumps(sanitized_for_cache, default=str)
             )
 
         if user_id:
             increment_analysis_count(user_id)
 
         logger.info(f"[{analysis_id}] ✅ Analysis completed successfully")
-        from datetime import datetime, date
-
-        def json_serializer(obj):
-            if isinstance(obj, (datetime, date)):
-                return obj.isoformat()
-            elif isinstance(obj, np.integer):
-                return int(obj)
-            elif isinstance(obj, np.floating):
-                return float(obj)
-            elif isinstance(obj, np.ndarray):
-                return obj.tolist()
-            raise TypeError(f"Type {type(obj)} not serializable")
-
         resp = AnalysisResponse(**result)
         content = {"cache_key": cache_key, **resp.model_dump()}
-        return JSONResponse(
-            content=json.loads(json.dumps(content, default=json_serializer))
-        )
+        sanitized_content = sanitize_json_data(content)
+        return JSONResponse(content=sanitized_content)
         
     except HTTPException:
         raise
