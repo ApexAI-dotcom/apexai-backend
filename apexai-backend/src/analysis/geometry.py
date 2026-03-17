@@ -790,7 +790,7 @@ def _resample_adaptive(
 
 def detect_corners(
     df: pd.DataFrame,
-    min_lateral_g: float = 0.5,
+    min_lateral_g: float = 0.6,
     min_distance_between_corners: float = 8.0,
     expected_corners: Optional[int] = None,
     laps_analyzed: Optional[int] = None,
@@ -890,7 +890,7 @@ def detect_corners(
         # Si un pilote prend un double droite (Turn 1/2) sans redresser le volant,
         # la force G entre les deux pics ne redescend jamais à zéro. On fusionne.
         surgical_apexes = []
-        g_continuity_threshold = 0.35 # 0.35g max drop = le volant est resté tourné (tolère les légers soulagements)
+        g_continuity_threshold = 0.25 # 0.25g max drop = le volant est resté tourné (tolère moyennement les soulagements)
         
         # On groupe d'abord par tour pour comparer logiquement les apex successifs
         lap_groups = {}

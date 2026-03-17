@@ -80,80 +80,75 @@ def calculate_apex_precision_score(
     corner_details: List[Dict[str, Any]]
 ) -> float:
     """
-    Calcule le score de précision des apex (0-30 points).
+    Calcule le score de précision des apex (0-30 points) en mesurant le clustering 
+    spatial des apex du pilote sur plusieurs tours (sa propre constance de trajectoire).
     
     Args:
-        df: DataFrame avec colonnes GPS et is_apex
-        corner_details: Liste des détails de chaque virage
+        df: DataFrame global
+        corner_details: Liste des détails de chaque virage (avec per_lap_data)
     
     Returns:
         Score entre 0 et 30
     """
     if not corner_details:
-        return 15.0  # Score par défaut si pas de virages
+        return 20.0  # Par défaut bon score si aucun virage
     
-    distances = []
+    cluster_scores = []
     
     for corner in corner_details:
         try:
-            apex_idx = corner.get('apex_index')
-            if apex_idx is None or apex_idx >= len(df):
+            per_lap = corner.get('per_lap_data', [])
+            
+            # Si un seul tour sélectionné, on n'a pas de baseline de variance,
+            # on donne un très bon score par défaut pour ne pas pénaliser un one-shot.
+            if len(per_lap) <= 1:
+                cluster_scores.append(25.0)
                 continue
-            
-            # Apex réel
-            real_lat = df.iloc[apex_idx]['latitude_smooth']
-            real_lon = df.iloc[apex_idx]['longitude_smooth']
-            
-            if pd.isna(real_lat) or pd.isna(real_lon):
+                
+            lats = []
+            lons = []
+            for pl in per_lap:
+                a_idx = pl.get('apex_index')
+                if a_idx is not None and a_idx in df.index:
+                    lat = df.at[a_idx, 'latitude_smooth']
+                    lon = df.at[a_idx, 'longitude_smooth']
+                    if pd.notna(lat) and pd.notna(lon):
+                        lats.append(lat)
+                        lons.append(lon)
+                        
+            if len(lats) <= 1:
+                cluster_scores.append(25.0)
                 continue
+                
+            # Calcule le centre (centroid) de tous les apex de ce virage
+            mean_lat = np.mean(lats)
+            mean_lon = np.mean(lons)
             
-            # Trouver les indices du virage pour calculer l'apex idéal
-            corner_mask = df['corner_id'] == corner['id']
-            corner_indices = df[corner_mask].index.tolist()
+            # Calcule la distance moyenne à ce centre (l'éparpillement / variance)
+            dists = [_haversine_distance(lat, lon, mean_lat, mean_lon) for lat, lon in zip(lats, lons)]
+            avg_spread = np.mean(dists)
             
-            if len(corner_indices) < 3:
-                continue
+            # Barème basé sur la dispersion spatiale (GPS +/- 1.5m de bruit habituel)
+            # Très serré < 1.5m, Bon < 3.0m, Moyen < 6.0m
+            if avg_spread <= 1.5:
+                score = 30.0
+            elif avg_spread <= 3.0:
+                score = 25.0
+            elif avg_spread <= 6.0:
+                score = 20.0
+            else:
+                score = max(5.0, 30.0 * (1 - min(avg_spread / 12.0, 1.0)))
+                
+            cluster_scores.append(score)
             
-            # Apex idéal
-            optimal_apex = calculate_optimal_apex_position(df, corner_indices)
-            
-            if optimal_apex is None:
-                continue
-            
-            # Distance Haversine
-            dist = _haversine_distance(
-                float(real_lat), float(real_lon),
-                optimal_apex['latitude'], optimal_apex['longitude']
-            )
-            
-            if dist > 0:
-                distances.append(dist)
-        
         except Exception as e:
-            warnings.warn(f"Error calculating apex precision for corner {corner.get('id')}: {str(e)}")
+            warnings.warn(f"Error calculating precise apex clustering for corner {corner.get('id')}: {str(e)}")
             continue
-    
-    if not distances:
-        return 15.0  # Score moyen par défaut
-    
-    avg_distance = np.mean(distances)
-    
-    # Score basé sur moyenne des écarts (tolérance accrue, le GPS a une marge d'erreur)
-    if avg_distance <= 2.5:
-        score = 30.0
-    elif avg_distance <= 5.0:
-        score = 25.0
-    elif avg_distance <= 8.0:
-        score = 20.0
-    elif avg_distance <= 12.0:
-        score = 15.0
-    else:
-        score = max(5.0, 10.0 * (1 - (avg_distance - 12.0) / 10.0))
-    
-    # Formule alternative pour continuité
-    score_continuous = 30.0 * (1 - min(avg_distance / 12.0, 1.0))
-    
-    return max(score, score_continuous)
+            
+    if not cluster_scores:
+        return 20.0
+        
+    return float(np.mean(cluster_scores))
 
 
 def calculate_trajectory_consistency_score(df: pd.DataFrame) -> float:
