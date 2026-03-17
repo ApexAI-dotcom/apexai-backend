@@ -835,20 +835,20 @@ def detect_corners(
         signal = np.abs(lateral_g)
         
         # Trouver les pics de G latéral (Apex potentiels)
-        # On force une distance BEAUCOUP plus grande (ex: 40m) pour fusionner les doubles apex (ex: Turn 1/2)
-        effective_min_dist = max(min_distance_between_corners, 40.0)
+        # On garde une distance moyenne précise pour détecter chaque apex réel (ex: 15-20m)
+        effective_min_dist = max(min_distance_between_corners, 18.0)
         avg_spacing = _avg_spacing_m(cumulative_dist)
         if avg_spacing > 0:
             distance_samples = max(2, int(effective_min_dist / avg_spacing))
         else:
-            distance_samples = 40
+            distance_samples = 18
             
         # Trouver les pics (Apexes)
         peaks, properties = find_peaks(
             signal,
             height=min_lateral_g,       # Minimum G latéral pour être un virage
-            distance=distance_samples,  # Distance minimale VRAIMENT augmentée entre deux apexes
-            prominence=0.35             # Le pic doit ressortir de 0.35g (très strict) pour filtrer les sous-virages
+            distance=distance_samples,  # Distance minimale normale
+            prominence=0.15             # Retourne à 0.15 pour capter tous les petits apex
         )
         
         log.info(f"detect_corners (find_peaks): {len(peaks)} apex potentiels trouvés (seuil {min_lateral_g}g, dist {effective_min_dist}m)")
@@ -896,8 +896,8 @@ def detect_corners(
             return df_result
             
         # 1. Regrouper les apex réels proches spatialement
-        # Augmentation TRÈS forte du rayon de cohérence pour grouper les pif-pafs serrés ou doubles apex (T1/T2, T9/T10)
-        coherence_radius_m = max(45.0, min_distance_between_corners * 3.0)
+        # Rayon de base standard pour grouper les passages d'un même virage sur plusieurs tours
+        coherence_radius_m = min_distance_between_corners * 1.5
         clusters = []
         used = [False] * len(valid_apexes)
         
@@ -931,8 +931,42 @@ def detect_corners(
         if not valid_clusters:
             # Fallback si on a tout filtré
             valid_clusters = clusters
+
+        # 2bis. SMART MERGING DE VIRAGES "COMPOSITES" (ex: T1/T2 ou T9/T10 très proches)
+        # Si deux clusters validés sont physiquement très proches (ex: < 40m)
+        smart_clusters = []
+        merge_radius_m = 50.0 # Distance de fusion agressive pour les doubles apex successifs
+        
+        # Obtenir un apex représentatif pour chaque cluster
+        cluster_centroids = []
+        for cluster in valid_clusters:
+            best_apex = cluster[0]
+            lat, lon = _get_apex_gps(df_result, [best_apex['peak_idx']])
+            cluster_centroids.append((lat, lon, cluster))
             
-        log.info(f"detect_corners: {len(valid_clusters)} virages physiques confirmés")
+        used_smart = [False] * len(cluster_centroids)
+        for i, (lat1, lon1, c1) in enumerate(cluster_centroids):
+            if used_smart[i]:
+                continue
+            merged_cluster = list(c1)
+            used_smart[i] = True
+            
+            for j in range(i + 1, len(cluster_centroids)):
+                if used_smart[j]:
+                    continue
+                lat2, lon2, c2 = cluster_centroids[j]
+                if lat1 is not None and lat2 is not None:
+                    dist = _haversine_distance(lat1, lon1, lat2, lon2)
+                    if dist < merge_radius_m:
+                        # Fusionner ce cluster
+                        merged_cluster.extend(c2)
+                        used_smart[j] = True
+            
+            smart_clusters.append(merged_cluster)
+            
+        valid_clusters = smart_clusters
+            
+        log.info(f"detect_corners: {len(valid_clusters)} virages physiques confirmés après fusion intelligente (rayon={merge_radius_m}m)")
         
         # 3. Construire le corner_details = JSON attendu par le front
         
