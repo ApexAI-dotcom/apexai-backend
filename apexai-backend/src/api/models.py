@@ -93,10 +93,16 @@ class Statistics(BaseModel):
     avg_apex_distance: float = Field(description="Distance apex moyenne en mètres")
     avg_apex_speed_efficiency: float = Field(description="Efficacité vitesse moyenne")
     laps_analyzed: Optional[int] = Field(default=None, description="Nombre de tours sélectionnés pour l'analyse")
+    fastest_lap_number: Optional[int] = Field(default=None, description="Numéro du tour le plus rapide")
+    max_speed: Optional[float] = Field(default=None, description="Vitesse maximale atteinte (km/h)")
+    max_speed_lap: Optional[int] = Field(default=None, description="Numéro du tour où la vitesse maximale a été atteinte")
+    consistency_gap: Optional[float] = Field(default=None, description="Écart moyen entre les tours en secondes")
+    improvement_gap: Optional[float] = Field(default=None, description="Gain entre le pire et le meilleur tour en secondes")
 
 
 class SessionConditions(BaseModel):
     """Conditions de piste renseignées par l'utilisateur"""
+    session_name: Optional[str] = Field(default=None, description="Nom optionnel de la session")
     track_condition: str = Field(default="dry", description="dry | damp | wet | rain")
     track_temperature: Optional[float] = Field(default=None, description="Température piste en °C")
 

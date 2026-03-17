@@ -162,6 +162,7 @@ def _run_analysis_pipeline_sync(
     lap_filter: Optional[List[int]] = None,
     track_condition: str = "dry",
     track_temperature: Optional[float] = None,
+    session_name: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Pipeline d'analyse synchrone (exécuté dans un thread pour ne pas bloquer l'event loop)."""
     logger.info(f"[{analysis_id}] Step 1/5: Loading data...")
@@ -196,18 +197,11 @@ def _run_analysis_pipeline_sync(
     if "lap_number" in df.columns:
         laps_available = sorted(df["lap_number"].dropna().unique().astype(int).tolist())
         logger.info(f"[DIAG] Tours disponibles (lap_number): {laps_available}")
-    if lap_filter:
-        logger.info(f"[DIAG] Tours sélectionnés : {lap_filter}")
-        laps_analyzed = len(lap_filter)
-        n_before = len(df)
-        df = _filter_laps_with_buffer(df, lap_filter, analysis_id)
-        logger.info(f"[DIAG] Rows après filtrage : {len(df)} (was {n_before}, full track)")
-        logger.info(f"[{analysis_id}] Filtered to laps {lap_filter} with buffer: {len(df)} rows (was {n_before})")
-        if len(df) < 10:
-            raise ValueError("Pas assez de points après filtrage par tours (min. 10).")
-    else:
-        if "lap_number" in df.columns:
-            laps_analyzed = int(df["lap_number"].nunique())
+    
+    # We always analyze the full session now, ignoring lap_filter for the initial df reduction
+    if "lap_number" in df.columns:
+        laps_analyzed = int(df["lap_number"].nunique())
+    
     logger.info(f"[DIAG] Appel detect_corners avec {len(df)} rows, laps_analyzed={laps_analyzed}")
     logger.info(f"[{analysis_id}] Step 4/5: Detecting corners...")
     df = detect_corners(df, laps_analyzed=laps_analyzed, curvature_threshold_override=curvature_threshold_global)
@@ -217,59 +211,9 @@ def _run_analysis_pipeline_sync(
     logger.info(f"[DIAG] detect_corners retourné : {len(corner_details)} corners")
     logger.info(f"[{analysis_id}] Detected {len(corner_details)} corners")
 
-    # Refiltrer aux tours sélectionnés uniquement pour les calculs de performance (exclure buffer)
-    if lap_filter and "lap_number" in df.columns:
-        df_perf = df[df["lap_number"].isin(lap_filter)].copy()
-        valid_idx = set(df_perf.index)
-        lap_set = set(lap_filter)
-        kept_corners = []
-        for c in corner_details:
-            ei, ai, exi = c.get("entry_index"), c.get("apex_index"), c.get("exit_index")
-            per_lap = c.get("per_lap_data") or []
-            chosen = None
-            if per_lap:
-                for pl in per_lap:
-                    if pl.get("lap") in lap_set:
-                        e, a, ex = pl.get("entry_index"), pl.get("apex_index"), pl.get("exit_index")
-                        if e is not None and a is not None and ex is not None and e in valid_idx and a in valid_idx and ex in valid_idx:
-                            chosen = (e, a, ex)
-                            break
-            if chosen is None and ei in valid_idx and ai in valid_idx and exi in valid_idx:
-                chosen = (ei, ai, exi)
-            if chosen is not None:
-                c["entry_index"], c["apex_index"], c["exit_index"] = chosen
-                # Garder seulement per_lap_data des tours sélectionnés
-                c["per_lap_data"] = [pl for pl in per_lap if pl.get("lap") in lap_set]
-                kept_corners.append(c)
-        corner_details = kept_corners
-        # Renuméroter V1..Vn après suppression d’un virage (ordre conservé)
-        refilter_id_to_new = {}
-        for i, c in enumerate(corner_details, start=1):
-            old_id = c.get("id")
-            refilter_id_to_new[old_id] = i
-            c["id"] = i
-            c["corner_id"] = i
-            c["corner_number"] = i
-            c["label"] = f"V{i}"
-        df = df_perf.reset_index(drop=True)
-        for idx in df.index:
-            if df.at[idx, "is_corner"]:
-                old_cid = df.at[idx, "corner_id"]
-                if pd.notna(old_cid):
-                    df.at[idx, "corner_id"] = refilter_id_to_new.get(int(old_cid), old_cid)
-        old_to_new = {old: i for i, old in enumerate(df_perf.index)}
-        for c in corner_details:
-            c["entry_index"] = old_to_new.get(c["entry_index"], c["entry_index"])
-            c["apex_index"] = old_to_new.get(c["apex_index"], c["apex_index"])
-            c["exit_index"] = old_to_new.get(c["exit_index"], c["exit_index"])
-            for pl in c.get("per_lap_data") or []:
-                for key in ("entry_index", "apex_index", "exit_index"):
-                    if key in pl and pl[key] is not None:
-                        pl[key] = old_to_new.get(pl[key], pl[key])
-        corners_meta["corner_details"] = corner_details
-        df.attrs["corners"] = corners_meta
-        logger.info(f"[{analysis_id}] Refiltered to selected laps only: {len(df)} rows, {len(corner_details)} corners")
-        # Corner order is already correct from geometry.py GPS projection — no re-sorting needed
+    # Previously we filtered down to selected laps here. 
+    # Now we keep the FULL session in df so that the frontend can overlay whichever laps it wants.
+    pass
 
     df = calculate_optimal_trajectory(df)
     logger.info(f"[{analysis_id}] Step 5/5: Calculating score and coaching...")
@@ -456,39 +400,71 @@ def _run_analysis_pipeline_sync(
 
     processing_time = (datetime.now() - start_time).total_seconds()
 
-    # Temps par tour : filtrés aux tours sélectionnés (lap_filter)
+    # Calculate Session Statistics
     best_lap_time: Optional[float] = None
     lap_times: Optional[List[float]] = None
-    if beacon_markers and len(beacon_markers) >= 2:
-        # lap_times[k] = durée du tour k+1 (beacon_markers[k] = timestamp fin du tour k+1)
-        timed_laps = []
-        for i in range(1, len(beacon_markers)):
-            timed_laps.append(beacon_markers[i] - beacon_markers[i - 1])
-        all_lap_times = [round(t, 3) for t in timed_laps]
-        if lap_filter:
-            lap_times = [all_lap_times[i - 1] for i in lap_filter if 1 <= i <= len(all_lap_times)]
+    fastest_lap_number: Optional[int] = None
+    max_speed: Optional[float] = None
+    max_speed_lap: Optional[int] = None
+    consistency_gap: Optional[float] = None
+    improvement_gap: Optional[float] = None
+
+    # Calculate lap times (excluding lap 0 outliers if possible)
+    valid_laps_dict = {}
+    if "lap_number" in df.columns and "time" in df.columns:
+        for lap in sorted(df["lap_number"].dropna().unique().astype(int).tolist()):
+            grp = df[df["lap_number"] == lap]["time"].dropna()
+            if len(grp) >= 2:
+                valid_laps_dict[lap] = round(float(grp.max() - grp.min()), 3)
+    
+    if valid_laps_dict:
+        # Ignore lap 0 if it exists
+        if len(valid_laps_dict) > 1 and 0 in valid_laps_dict:
+            del valid_laps_dict[0]
+            
+        lap_times = list(valid_laps_dict.values())
+        best_lap_time = min(lap_times)
+        
+        # Find fastest lap number
+        for L, t in valid_laps_dict.items():
+            if t == best_lap_time:
+                fastest_lap_number = L
+                break
+                
+        # Calculate stats
+        if len(lap_times) >= 2:
+            import statistics
+            worst_lap_time = max(lap_times)
+            improvement_gap = round(worst_lap_time - best_lap_time, 3)
+            # Consistency can be standard deviation (or average gap). We map it to std dev of lap times.
+            try:
+                consistency_gap = round(statistics.stdev(lap_times), 3)
+            except Exception:
+                consistency_gap = 0.0
         else:
-            lap_times = all_lap_times
-        best_lap_time = round(min(lap_times), 3) if lap_times else None
-        lap_time = best_lap_time or 0.0
-        logger.info(f"[{analysis_id}] Meilleur tour: {best_lap_time}s sur {len(lap_times)} tour(s)")
+            improvement_gap = 0.0
+            consistency_gap = 0.0
     else:
-        if lap_filter and "time" in df.columns and "lap_number" in df.columns:
-            lap_times = []
-            for lap in sorted(lap_filter):
-                grp = df[df["lap_number"] == lap]["time"].dropna()
-                if len(grp) >= 2:
-                    lap_times.append(round(float(grp.max() - grp.min()), 3))
-            best_lap_time = round(min(lap_times), 3) if lap_times else None
-            lap_time = best_lap_time or 0.0
+        lap_time = 0.0
+        best_lap_time = 0.0
+        lap_times = []
+        
+    lap_time = best_lap_time or 0.0
+
+    # Calculate Max Speed & Lap
+    if "speed_kmh" in df.columns and "lap_number" in df.columns:
+        valid_speed_df = df[df["lap_number"] > 0] if 0 in df["lap_number"].unique() else df
+        if len(valid_speed_df) > 0:
+            max_row = valid_speed_df.loc[valid_speed_df["speed_kmh"].idxmax()]
+            max_speed = round(float(max_row["speed_kmh"]), 1)
+            max_speed_lap = int(max_row["lap_number"])
         else:
-            if "time" in df.columns and len(df) > 0:
-                time_values = df["time"].dropna()
-                lap_time = round(float(time_values.iloc[-1] - time_values.iloc[0]), 3) if len(time_values) > 0 else 0.0
-            else:
-                lap_time = 0.0
-            lap_times = [lap_time]
-            best_lap_time = lap_time
+            max_speed = round(float(df["speed_kmh"].max()), 1)
+            max_speed_lap = int(df.loc[df["speed_kmh"].idxmax()]["lap_number"])
+    elif "speed_kmh" in df.columns:
+        max_speed = round(float(df["speed_kmh"].max()), 1)
+        
+    logger.info(f"[{analysis_id}] Session Stats: Best={best_lap_time}s (L{fastest_lap_number}), Max Speed={max_speed}km/h (L{max_speed_lap}), Cons={consistency_gap}s, Imp={improvement_gap}s")
 
     logger.info(f"[{analysis_id}] ✅ Completed in {processing_time:.2f}s")
 
@@ -528,8 +504,14 @@ def _run_analysis_pipeline_sync(
             avg_apex_distance=float(score_data.get("details", {}).get("avg_apex_distance", 0.0)),
             avg_apex_speed_efficiency=float(score_data.get("details", {}).get("avg_apex_speed_efficiency", 0.0)),
             laps_analyzed=laps_analyzed,
+            fastest_lap_number=fastest_lap_number,
+            max_speed=max_speed,
+            max_speed_lap=max_speed_lap,
+            consistency_gap=consistency_gap,
+            improvement_gap=improvement_gap,
         ),
         session_conditions=SessionConditions(
+            session_name=session_name,
             track_condition=track_condition,
             track_temperature=track_temperature,
         ),

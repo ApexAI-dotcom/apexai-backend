@@ -1058,7 +1058,6 @@ def generate_plot_data(df: pd.DataFrame) -> Dict[str, Any]:
                             "throttle_pct": downsample_array([round(float(t), 1) for t in lap_df['throttle'].values]),
                             "brake_pct": downsample_array([round(float(b), 1) for b in lap_df['brake'].values]),
                         })
-                        break
             else:
                  tb_laps.append({
                     "lap_number": 1,

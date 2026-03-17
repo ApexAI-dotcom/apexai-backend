@@ -132,6 +132,7 @@ async def analyze_telemetry(
     lap_filter: Optional[str] = Form(None, description="JSON array des numéros de tours à inclure, ex: [1,2,3]"),
     track_condition: str = Form("dry", description="Condition piste: dry, damp, wet, rain"),
     track_temperature: Optional[str] = Form(None, description="Température piste en °C"),
+    session_name: Optional[str] = Form(None, description="Nom optionnel de la session"),
     authorization: Optional[str] = Header(None, description="Bearer JWT pour limite abonnement"),
 ) -> AnalysisResponse:
     """
@@ -214,6 +215,7 @@ async def analyze_telemetry(
             file, analysis_id,
             track_condition=cond,
             track_temperature=temp_c,
+            session_name=session_name,
         )
 
         # Stocker en cache (uniquement analyse complète sans filtre de tours)
