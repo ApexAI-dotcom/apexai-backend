@@ -333,21 +333,19 @@ def _run_analysis_pipeline_sync(
         analysis_id,
         [f"V{c.get('corner_id')} sort_idx={c.get('_sort_index', '?')}" for c in unique_corner_analysis],
     )
-    # Forcer renumérotation séquentielle V1..Vn (ordre liste = ordre circuit) pour affichage cohérent
-    final_id_to_new = {}
+    logger.info(f"[{analysis_id}] [renumber] Renumbering {len(unique_corner_analysis)} unique corners...")
+    final_id_to_new = {int(c.get("corner_id")): i for i, c in enumerate(unique_corner_analysis, start=1)}
     for i, c in enumerate(unique_corner_analysis, start=1):
-        old_id = c.get("corner_id")
-        final_id_to_new[old_id] = i
         c["corner_id"] = i
         c["corner_number"] = i
         c["label"] = f"V{i}"
-    for idx in df.index:
-        if df.at[idx, "is_corner"]:
-            old_cid = df.at[idx, "corner_id"]
-            if pd.notna(old_cid):
-                df.at[idx, "corner_id"] = final_id_to_new.get(int(old_cid), old_cid)
-    for c in unique_corner_analysis:
         c["avg_note"] = "Valeurs sur ce tour" if laps_analyzed == 1 else f"Valeurs moyennées sur {laps_analyzed} tours"
+
+    if "corner_id" in df.columns:
+        # Vectorized update for corner_id
+        df["corner_id"] = df["corner_id"].map(lambda x: final_id_to_new.get(int(x), x) if pd.notna(x) else x)
+    
+    logger.info(f"[{analysis_id}] [renumber] Done. Filling apex coordinates...")
     # Remplir apex_lat/apex_lon depuis le df si manquants (pour que trajectoire + heatmap affichent tous les virages)
     lat_col = "latitude_smooth" if "latitude_smooth" in df.columns else "latitude"
     lon_col = "longitude_smooth" if "longitude_smooth" in df.columns else "longitude"
@@ -362,6 +360,7 @@ def _run_analysis_pipeline_sync(
     # Une seule source de vérité : overall_score = sum(breakdown) depuis calculate_performance_score
     validate_score_consistency(score_data)
 
+    logger.info(f"[{analysis_id}] Generating coaching advice...")
     try:
         coaching_advice_list = generate_coaching_advice(
             df, corner_details, score_data, unique_corner_analysis,
@@ -373,13 +372,13 @@ def _run_analysis_pipeline_sync(
         logger.warning(f"[{analysis_id}] Failed to generate coaching advice: {e}")
         coaching_advice_list = []
 
-    logger.info(f"[{analysis_id}] Generating plots...")
+    logger.info(f"[{analysis_id}] Generating plots (PNG)...")
     df.attrs["corner_analysis"] = unique_corner_analysis
     df.attrs["score_data"] = score_data
     df.attrs["overall_score"] = score_data.get("overall_score", 0.0)
     plots_urls = generate_all_plots_base64(df)
     
-    # Génération des données JSON pour Recharts
+    logger.info(f"[{analysis_id}] Generating plot data (JSON)...")
     plot_data = generate_plot_data(df)
     
     # Dupliquer le speed trace en variante zoomée si disponible
@@ -388,8 +387,10 @@ def _run_analysis_pipeline_sync(
         if speed_trace_url:
             plots_urls.setdefault("speed_trace_zoomed", speed_trace_url)
     except Exception:
-        # Ne jamais faire échouer l'analyse à cause d'un simple alias de graphique
         pass
+
+    logger.info(f"[{analysis_id}] Finalizing response...")
+    processing_time = (datetime.now() - start_time).total_seconds()
 
     # Log des graphiques réellement générés (non nuls) pour debug
     try:
