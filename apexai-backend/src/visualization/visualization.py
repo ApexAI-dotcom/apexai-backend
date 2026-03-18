@@ -1116,10 +1116,15 @@ def generate_plot_data(df: pd.DataFrame) -> Dict[str, Any]:
         if 'latitude_smooth' in df.columns and 'longitude_smooth' in df.columns and 'speed' in df.columns:
             traj_laps = []
             if 'lap_number' in df.columns:
+                best_lap_num = df.attrs.get('best_lap_number')
                 for lap, lap_df in df.groupby('lap_number'):
                     if pd.notna(lap) and lap >= 0:
+                        if len(lap_df) < 10:
+                            continue
                         traj_laps.append({
-                            "lat": downsample_array([float(l) for l in lap_df['latitude_smooth'].values]), # Subsample for performance
+                            "lap_number": int(lap),
+                            "is_best": int(lap) == best_lap_num,
+                            "lat": downsample_array([float(l) for l in lap_df['latitude_smooth'].values]),
                             "lon": downsample_array([float(l) for l in lap_df['longitude_smooth'].values]),
                             "speed_kmh": downsample_array([round(float(s), 1) for s in lap_df['speed'].values])
                         })
