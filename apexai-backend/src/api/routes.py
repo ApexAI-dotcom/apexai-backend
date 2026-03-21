@@ -25,7 +25,7 @@ from src.core.subscription_service import check_analysis_limit, increment_analys
 
 # Résolution user_id depuis JWT (optionnel pour limite abonnement)
 _SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-_SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+_SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_SERVICE_KEY", "")
 _supabase = None
 if _SUPABASE_URL and _SUPABASE_SERVICE_KEY and _SUPABASE_SERVICE_KEY != "ton_service_role_key":
     try:
