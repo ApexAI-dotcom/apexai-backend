@@ -9,6 +9,7 @@ Auth : JWT Bearer obligatoire via get_current_user (SEC-001).
 import json
 import logging
 import os
+from datetime import datetime, timezone
 from typing import Optional
 
 import jwt
@@ -150,8 +151,29 @@ async def get_user_subscription(
             tier = "rookie"
 
         limits = {**TIER_LIMITS[tier]}
-        if data.get("analyses_count_current_month") is not None:
-            limits["analyses_used"] = int(data["analyses_count_current_month"])
+        # Vérifier si on a changé de mois (RAZ automatique du compteur mensuel)
+        last_reset_raw = data.get("last_analysis_reset_date")
+        now = datetime.now(timezone.utc)
+        analyses_used = int(data.get("analyses_count_current_month") or 0)
+        
+        if last_reset_raw:
+            try:
+                # Supabase Python SDK can return datetime or string
+                if hasattr(last_reset_raw, "year"):
+                    last_reset = last_reset_raw
+                else:
+                    last_reset = datetime.fromisoformat(str(last_reset_raw).replace("Z", "+00:00"))
+                
+                if last_reset.tzinfo is None:
+                    last_reset = last_reset.replace(tzinfo=timezone.utc)
+                
+                # Si le mois ou l'année diffère, on affiche 0 (la base sera MAJ au premier upload)
+                if last_reset.month != now.month or last_reset.year != now.year:
+                    analyses_used = 0
+            except Exception as e:
+                logger.debug("Failed to parse reset date: %s", e)
+        
+        limits["analyses_used"] = analyses_used
 
         sub_start = data.get("subscription_start_date")
         subscription_start_date = (
