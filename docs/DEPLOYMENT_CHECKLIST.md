@@ -6,11 +6,15 @@
 
 ## Pré-déploiement
 
-- [ ] **Variables d’environnement configurées en production (ex. Railway)**  
+- [ ] **Variables d’environnement configurées en production (ex. Railway / Vercel)**  
   - `STRIPE_SECRET_KEY` (clé live `sk_live_*`, pas de clé test en prod)
   - `STRIPE_WEBHOOK_SECRET` (secret du webhook **de production**)
-  - `SUPABASE_URL` et `SUPABASE_SERVICE_KEY` (projet Supabase de prod)
+  - `SUPABASE_URL` et `SUPABASE_SERVICE_ROLE_KEY` (projet Supabase de prod)
+  - `SUPABASE_JWT_SECRET` : **Obligatoire (ou fortement recommandé)** pour une vérification des tokens fiable sans surcharger les appels auth (trouvé dans Supabase: Project Settings → API).
   - `FRONTEND_URL` (URL du frontend de prod pour success/cancel_url)
+  - `CORS_ORIGINS` : Éviter les wildcards `*`. **Note Vercel Previews** : Les previews ne sont pas dedans par défaut ; à ajouter manuellement ou utiliser une API Staging.
+  - `DOCS_ENABLED=false` : Expliciter à false en production pour cacher `/docs`.
+  - `REDIS_URL` : Optionnel, mais **sans Redis**, le rate limiting sera local au processus et se réinitialisera à chaque redémarrage de l'instance.
 
 - [ ] **Migration Supabase exécutée en production**  
   - Fichier : `apexai-backend/supabase/migrations/20260102000000_add_profiles_subscription_and_usage_logs.sql`
