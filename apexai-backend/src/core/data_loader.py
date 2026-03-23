@@ -263,7 +263,7 @@ def _normalize_columns(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
         max_t = df_normalized['time'].max()
         if pd.notna(max_t) and (time_ms_present or max_t > 50000):
             df_normalized['time'] = df_normalized['time'] / 1000.0
-            conversion_warnings.append("ℹ️ Temps converti de ms à s")
+            conversion_warnings.append("Info: Temps converti de ms à s")
 
     # CONVERSION m/s → km/h si nécessaire
     if 'speed' in df_normalized.columns:
@@ -274,7 +274,7 @@ def _normalize_columns(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
         max_speed = df_normalized['speed'].max()
         if pd.notna(max_speed) and max_speed < 50:
             df_normalized['speed'] = df_normalized['speed'] * 3.6
-            conversion_warnings.append("ℹ️  Vitesse convertie de m/s à km/h")
+            conversion_warnings.append("Info: Vitesse convertie de m/s à km/h")
     
     return df_normalized, conversion_warnings
 
@@ -297,7 +297,7 @@ def _validate_data(df: pd.DataFrame) -> Tuple[bool, pd.DataFrame, List[str]]:
         n_raw = len(df_clean)
         cols = list(df_clean.columns[:8]) if len(df_clean.columns) > 0 else []
         return False, df_clean, [
-            f"❌ Fichier non reconnu ou incompatible. "
+            f"Error: Fichier non reconnu ou incompatible. "
             f"Lignes : {n_raw}, colonnes détectées : {cols}. "
             f"Format supporté : AiM/MoTeC CSV avec colonnes GPS (latitude, longitude, speed)."
         ]
@@ -308,7 +308,7 @@ def _validate_data(df: pd.DataFrame) -> Tuple[bool, pd.DataFrame, List[str]]:
     
     if missing_columns:
         logger.warning(f"csv_missing_required_columns: {missing_columns}")
-        return False, df_clean, [f"❌ Colonnes manquantes : {', '.join(missing_columns)}"]
+        return False, df_clean, [f"Error: Colonnes manquantes : {', '.join(missing_columns)}"]
     
     # Convertir en numérique
     for col in required_columns:
@@ -324,11 +324,11 @@ def _validate_data(df: pd.DataFrame) -> Tuple[bool, pd.DataFrame, List[str]]:
     invalid_lon = ((df_clean['longitude'] < -180) | (df_clean['longitude'] > 180)).sum()
     
     if invalid_lat > 0:
-        warnings_list.append(f"⚠️ {invalid_lat} point(s) avec latitude invalide")
+        warnings_list.append(f"Warning: {invalid_lat} point(s) avec latitude invalide")
         df_clean = df_clean[(df_clean['latitude'] >= -90) & (df_clean['latitude'] <= 90)]
     
     if invalid_lon > 0:
-        warnings_list.append(f"⚠️ {invalid_lon} point(s) avec longitude invalide")
+        warnings_list.append(f"Warning: {invalid_lon} point(s) avec longitude invalide")
         df_clean = df_clean[(df_clean['longitude'] >= -180) & (df_clean['longitude'] <= 180)]
     
     # Vérifier time croissant (si colonne time existe)
@@ -336,18 +336,18 @@ def _validate_data(df: pd.DataFrame) -> Tuple[bool, pd.DataFrame, List[str]]:
         time_series = df_clean['time']
         if isinstance(time_series, pd.DataFrame):
             time_series = time_series.iloc[:, 0]
-            warnings_list.append("⚠️ Colonnes time dupliquées détectées, première colonne utilisée")
+            warnings_list.append("Warning: Colonnes time dupliquées détectées, première colonne utilisée")
             logger.info("csv_duplicated_time_columns detected")
             df_clean = df_clean.loc[:, ~df_clean.columns.duplicated()]
         df_clean['time'] = pd.to_numeric(time_series, errors='coerce')
         if not df_clean['time'].is_monotonic_increasing:
-            warnings_list.append("⚠️ La colonne time n'est pas strictement croissante")
+            warnings_list.append("Warning: La colonne time n'est pas strictement croissante")
     
     # Vérifier qu'il reste assez de données après nettoyage
     if len(df_clean) < 10:
         logger.warning(f"csv_too_few_valid_rows: {len(df_clean)}")
         return False, df_clean, [
-            f"❌ Pas assez de données après nettoyage : {len(df_clean)} lignes valides (min. 10). "
+            f"Error: Pas assez de données après nettoyage : {len(df_clean)} lignes valides (min. 10). "
             f"Colonnes : {list(df_clean.columns[:8])}. Vérifiez latitude/longitude/speed."
         ]
     
@@ -430,7 +430,7 @@ def robust_load_telemetry(file_path: str) -> Dict[str, Any]:
     
     # Vérifier que le fichier existe
     if not Path(file_path).exists():
-        result['error'] = f"❌ Fichier introuvable : {file_path}"
+        result['error'] = f"Error: Fichier introuvable : {file_path}"
         return result
     
     # Détection du format (skiprows)
@@ -446,27 +446,27 @@ def robust_load_telemetry(file_path: str) -> Dict[str, Any]:
     try:
         df = _parse_with_pandas(file_path, skiprows, encoding='utf-8')
         if df is not None and len(df) > 0:
-            result['warnings'].append("✓ Fichier chargé avec pandas (UTF-8)")
+            result['warnings'].append("OK: Fichier chargé avec pandas (UTF-8)")
     except Exception as e:
-        result['warnings'].append(f"⚠️ Échec pandas UTF-8 : {str(e)[:100]}")
+        result['warnings'].append(f"Warning: Échec pandas UTF-8 : {str(e)[:100]}")
     
     # PARSING CASCADE - Essai 2 : pandas Latin-1
     if df is None or len(df) == 0:
         try:
             df = _parse_with_pandas(file_path, skiprows, encoding='latin-1')
             if df is not None and len(df) > 0:
-                result['warnings'].append("✓ Fichier chargé avec pandas (Latin-1)")
+                result['warnings'].append("OK: Fichier chargé avec pandas (Latin-1)")
         except Exception as e:
-            result['warnings'].append(f"⚠️ Échec pandas Latin-1 : {str(e)[:100]}")
+            result['warnings'].append(f"Warning: Échec pandas Latin-1 : {str(e)[:100]}")
     
     # PARSING CASCADE - Essai 3 : pandas UTF-16
     if df is None or len(df) == 0:
         try:
             df = _parse_with_pandas(file_path, skiprows, encoding='utf-16')
             if df is not None and len(df) > 0:
-                result['warnings'].append("✓ Fichier chargé avec pandas (UTF-16)")
+                result['warnings'].append("OK: Fichier chargé avec pandas (UTF-16)")
         except Exception as e:
-            result['warnings'].append(f"⚠️ Échec pandas UTF-16 : {str(e)[:100]}")
+            result['warnings'].append(f"Warning: Échec pandas UTF-16 : {str(e)[:100]}")
     
     # PARSING CASCADE - Essai 4 : DuckDB (si disponible)
     if (df is None or len(df) == 0) and DUCKDB_AVAILABLE:
@@ -476,13 +476,13 @@ def robust_load_telemetry(file_path: str) -> Dict[str, Any]:
             df = conn.execute(query).df()
             conn.close()
             if df is not None and len(df) > 0:
-                result['warnings'].append("✓ Fichier chargé avec DuckDB")
+                result['warnings'].append("OK: Fichier chargé avec DuckDB")
         except Exception as e:
-            result['warnings'].append(f"⚠️ Échec DuckDB : {str(e)[:100]}")
+            result['warnings'].append(f"Warning: Échec DuckDB : {str(e)[:100]}")
     
     # Si toujours pas de données
     if df is None or len(df) == 0:
-        result['error'] = "❌ Impossible de parser le fichier avec toutes les méthodes essayées"
+        result['error'] = "Error: Impossible de parser le fichier avec toutes les méthodes essayées"
         return result
     
     # === DOWNSAMPLING : max 6000 points pour performance (évite timeout 30s) ===
@@ -492,7 +492,7 @@ def robust_load_telemetry(file_path: str) -> Dict[str, Any]:
         step = max(1, n_orig // MAX_POINTS)
         df = df.iloc[::step].reset_index(drop=True)
         msg = (
-            f"✓ Downsampling : {n_orig} → {len(df)} points (step={step})"
+            f"OK: Downsampling : {n_orig} → {len(df)} points (step={step})"
         )
         warnings.warn(msg)
         result['warnings'].append(msg)
@@ -503,7 +503,7 @@ def robust_load_telemetry(file_path: str) -> Dict[str, Any]:
         result['warnings'].extend(norm_warnings)
 
     except Exception as e:
-        result['error'] = f"❌ Erreur lors de la normalisation : {str(e)}"
+        result['error'] = f"Error: Erreur lors de la normalisation : {str(e)}"
         return result
     
     # Validation des données
@@ -511,7 +511,7 @@ def robust_load_telemetry(file_path: str) -> Dict[str, Any]:
     result['warnings'].extend(validation_warnings)
     
     if not is_valid:
-        result['error'] = "❌ Validation des données échouée"
+        result['error'] = "Error: Validation des données échouée"
         if validation_warnings:
             result['error'] = validation_warnings[0]  # Premier message d'erreur
         return result
@@ -526,7 +526,7 @@ def robust_load_telemetry(file_path: str) -> Dict[str, Any]:
     try:
         result['metadata'] = _calculate_metadata(df)
     except Exception as e:
-        result['warnings'].append(f"⚠️ Erreur calcul métadonnées : {str(e)[:100]}")
+        result['warnings'].append(f"Warning: Erreur calcul métadonnées : {str(e)[:100]}")
         result['metadata'] = {
             'rows': len(df),
             'columns': list(df.columns),

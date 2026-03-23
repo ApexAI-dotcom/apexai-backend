@@ -165,13 +165,13 @@ def calculate_trajectory_geometry(df: pd.DataFrame) -> pd.DataFrame:
     missing_cols = [col for col in required_cols if col not in df.columns]
     
     if missing_cols:
-        raise ValueError(f"❌ Colonnes manquantes : {', '.join(missing_cols)}")
+        raise ValueError(f"Error: Colonnes manquantes : {', '.join(missing_cols)}")
     
     df_result = df.copy()
     n_points = len(df_result)
     
     if n_points < 3:
-        raise ValueError(f"❌ DataFrame trop petit : {n_points} lignes (minimum 3 requis)")
+        raise ValueError(f"Error: DataFrame trop petit : {n_points} lignes (minimum 3 requis)")
     
     # Convertir en numérique
     try:
@@ -180,12 +180,12 @@ def calculate_trajectory_geometry(df: pd.DataFrame) -> pd.DataFrame:
         speed = pd.to_numeric(df_result['speed'], errors='coerce').values
         time = pd.to_numeric(df_result['time'], errors='coerce').values
     except Exception as e:
-        raise ValueError(f"❌ Erreur conversion numérique : {str(e)}")
+        raise ValueError(f"Error: Erreur conversion numérique : {str(e)}")
     
     # Vérifier NaN
     nan_ratio = np.sum(np.isnan(lat) | np.isnan(lon) | np.isnan(speed)) / n_points
     if nan_ratio > 0.1:
-        warnings.warn(f"⚠️ Ratio NaN élevé : {nan_ratio*100:.1f}%")
+        warnings.warn(f"Warning: Ratio NaN élevé : {nan_ratio*100:.1f}%")
     
     # Forward fill NaN (max 3 points)
     lat = pd.Series(lat).ffill(limit=3).bfill(limit=3).fillna(0).values
@@ -407,7 +407,7 @@ def detect_laps(df: pd.DataFrame, min_lap_distance_m: float = 100.0) -> pd.DataF
         beacon_markers = df_result.attrs.get('beacon_markers', [])
         
         if beacon_markers and len(beacon_markers) >= 1:
-            warnings.warn(f"✓ Utilisation Beacon Markers : {len(beacon_markers)} passages")
+            warnings.warn(f"OK: Utilisation Beacon Markers : {len(beacon_markers)} passages")
             
             # Assigner lap_number basé sur les beacons
             # lap=0 avant le 1er beacon, lap=k entre beacon[k-1] et beacon[k]
@@ -428,14 +428,14 @@ def detect_laps(df: pd.DataFrame, min_lap_distance_m: float = 100.0) -> pd.DataF
             # Log stats
             lap_0_count = int((lap_number == 0).sum())
             warnings.warn(
-                f"✓ Résultat : {len(beacon_markers)} tours, "
+                f"OK: Résultat : {len(beacon_markers)} tours, "
                 f"{lap_0_count} points en stands/chauffe (lap=0), "
                 f"1er tour commence à t={beacon_markers[0]:.3f}s"
             )
             return df_result
         
         # === MÉTHODE 2 : Fallback GPS (si pas de beacons) ===
-        warnings.warn("⚠️ Pas de Beacon Markers, utilisation détection GPS")
+        warnings.warn("Warning: Pas de Beacon Markers, utilisation détection GPS")
         
         lat = (df_result['latitude_smooth'].values 
                if 'latitude_smooth' in df_result.columns 
@@ -521,11 +521,11 @@ def detect_laps(df: pd.DataFrame, min_lap_distance_m: float = 100.0) -> pd.DataF
         df_result['lap_number'] = lap_number
         df_result.attrs['n_laps_detected'] = int(current_lap)
         df_result.attrs['method'] = 'gps_clustering'
-        warnings.warn(f"✓ GPS fallback : {current_lap} tours détectés")
+        warnings.warn(f"OK: GPS fallback : {current_lap} tours détectés")
 
     except Exception as e:
         import traceback
-        warnings.warn(f"⚠️ Erreur detect_laps : {str(e)}\n{traceback.format_exc()}")
+        warnings.warn(f"Warning: Erreur detect_laps : {str(e)}\n{traceback.format_exc()}")
         df_result['lap_number'] = 1
     
     return df_result
@@ -808,7 +808,7 @@ def detect_corners(
     # Vérifications de base
     required_cols = ['lateral_g', 'speed', 'cumulative_distance']
     if not all(col in df.columns for col in required_cols):
-        raise ValueError(f"❌ Colonnes manquantes dans le DataFrame. Requis: {required_cols}")
+        raise ValueError(f"Error: Colonnes manquantes dans le DataFrame. Requis: {required_cols}")
 
     df_result = df.copy()
     n_points = len(df_result)
@@ -1110,7 +1110,7 @@ def detect_corners(
         
     except Exception as e:
         import traceback
-        warnings.warn(f"⚠️ Erreur critique dans detect_corners (fallback return empty): {str(e)}\n{traceback.format_exc()}")
+        warnings.warn(f"Warning: Erreur critique dans detect_corners (fallback return empty): {str(e)}\n{traceback.format_exc()}")
         df_result.attrs['corners'] = {'total_corners': 0, 'corner_details': []}
 
     return df_result
@@ -1141,7 +1141,7 @@ def calculate_optimal_trajectory(df: pd.DataFrame) -> pd.DataFrame:
         ValueError: Si colonnes requises manquantes
     """
     if 'corner_id' not in df.columns or 'curvature' not in df.columns:
-        raise ValueError("❌ Colonnes manquantes. Appelez d'abord detect_corners()")
+        raise ValueError("Error: Colonnes manquantes. Appelez d'abord detect_corners()")
     
     df_result = df.copy()
     n_points = len(df_result)
@@ -1202,6 +1202,6 @@ def calculate_optimal_trajectory(df: pd.DataFrame) -> pd.DataFrame:
             df_result.attrs['corners']['corner_details'] = corner_details
     
     except Exception as e:
-        warnings.warn(f"⚠️ Erreur calcul trajectoire optimale : {str(e)}")
+        warnings.warn(f"Warning: Erreur calcul trajectoire optimale : {str(e)}")
     
     return df_result

@@ -139,7 +139,7 @@ def _calculate_scores(df: pd.DataFrame) -> Dict[str, float]:
             scores['racing_line'] = float(max(50, 100 - curvature_variance * 10000))
     
     except Exception as e:
-        warnings.warn(f"⚠️ Erreur calcul scores : {str(e)}")
+        warnings.warn(f"Warning: Erreur calcul scores : {str(e)}")
     
     return scores
 
@@ -225,7 +225,7 @@ def plot_trajectory_2d(df: pd.DataFrame, save_path: str) -> bool:
         plt.setp(cbar.ax.yaxis.get_ticklabels(), color=COLOR_MUTED)
         cbar.outline.set_edgecolor(BG_PANEL)
         
-        _style_ax(ax, '🏎  Trajectoire GPS — Circuit Complet', 'Longitude', 'Latitude')
+        _style_ax(ax, 'Kart Trajectoire GPS — Circuit Complet', 'Longitude', 'Latitude')
         ax.set_aspect('equal')
         ax.legend(facecolor=BG_PANEL, edgecolor=BG_PANEL, labelcolor=COLOR_TEXT, fontsize=9)
         
@@ -234,7 +234,7 @@ def plot_trajectory_2d(df: pd.DataFrame, save_path: str) -> bool:
         plt.close(fig)
         return True
     except Exception as e:
-        warnings.warn(f"⚠️ plot_trajectory_2d : {e}")
+        warnings.warn(f"Warning: plot_trajectory_2d : {e}")
         return False
 
 
@@ -270,7 +270,7 @@ def plot_lap_comparison(df: pd.DataFrame, save_path: str) -> bool:
             ax.set_xticks(sorted(set(x_corner)))
             ax.set_xticklabels([f'V{x}' for x in sorted(set(x_corner))], color=COLOR_TEXT)
             ax.legend(fontsize=9)
-            _style_ax(ax, '📊 Comparaison tours — Vitesse apex par virage', 'Virage', 'Vitesse apex (km/h)')
+            _style_ax(ax, 'Stats Comparaison tours — Vitesse apex par virage', 'Virage', 'Vitesse apex (km/h)')
             fig.tight_layout()
             plt.savefig(save_path, dpi=DPI, bbox_inches='tight', facecolor=BG_DARK)
             plt.close(fig)
@@ -289,14 +289,14 @@ def plot_lap_comparison(df: pd.DataFrame, save_path: str) -> bool:
                         d = dist[mask]
                         if len(d) > 0:
                             ax.axvspan(d.min(), d.max(), alpha=0.2, color=COLOR_GREEN if score >= 70 else COLOR_ORANGE if score >= 50 else COLOR_RED)
-            _style_ax(ax, '📊 Vitesse cumulée — Zones virages colorées par score', 'Distance (m)', 'Vitesse (km/h)')
+            _style_ax(ax, 'Stats Vitesse cumulée — Zones virages colorées par score', 'Distance (m)', 'Vitesse (km/h)')
             fig.tight_layout()
             plt.savefig(save_path, dpi=DPI, bbox_inches='tight', facecolor=BG_DARK)
             plt.close(fig)
             return True
         return False
     except Exception as e:
-        warnings.warn(f"⚠️ plot_lap_comparison : {e}")
+        warnings.warn(f"Warning: plot_lap_comparison : {e}")
         return False
 
 
@@ -306,7 +306,7 @@ def plot_lateral_g_chart(df: pd.DataFrame, save_path: str) -> bool:
         if 'corner_id' not in df.columns or 'lateral_g' not in df.columns:
             # Fallback : essayer lateral_g depuis colonnes disponibles
             if 'lateral_g' not in df.columns:
-                warnings.warn("⚠️ lateral_g manquant pour lateral_g_chart")
+                warnings.warn("Warning: lateral_g manquant pour lateral_g_chart")
                 return False
         
         # Agréger G max par virage
@@ -340,7 +340,7 @@ def plot_lateral_g_chart(df: pd.DataFrame, save_path: str) -> bool:
             ax.text(cid, g + 0.03, f'{g:.1f}g', ha='center', 
                    va='bottom', fontsize=8, color=COLOR_MUTED)
         
-        _style_ax(ax, '⚡ G Latéral — Par Virage', 'Virage', 'G latéral (g)')
+        _style_ax(ax, 'G-Force G Latéral — Par Virage', 'Virage', 'G latéral (g)')
         ax.legend(fontsize=9)
         
         fig.tight_layout()
@@ -348,7 +348,7 @@ def plot_lateral_g_chart(df: pd.DataFrame, save_path: str) -> bool:
         plt.close(fig)
         return True
     except Exception as e:
-        warnings.warn(f"⚠️ plot_lateral_g_chart : {e}")
+        warnings.warn(f"Warning: plot_lateral_g_chart : {e}")
         return False
 
 
@@ -412,7 +412,7 @@ def plot_speed_trace(df: pd.DataFrame, save_path: str) -> bool:
                                 facecolor=BG_PANEL, alpha=0.8,
                                 edgecolor='none'))
         
-        _style_ax(ax, '📈 Trace de Vitesse — Tour Complet', 
+        _style_ax(ax, 'Trace Trace de Vitesse — Tour Complet', 
                  'Distance (m)', 'Vitesse (km/h)')
         ax.legend(fontsize=9)
         
@@ -421,7 +421,7 @@ def plot_speed_trace(df: pd.DataFrame, save_path: str) -> bool:
         plt.close(fig)
         return True
     except Exception as e:
-        warnings.warn(f"⚠️ plot_speed_trace : {e}")
+        warnings.warn(f"Warning: plot_speed_trace : {e}")
         return False
 
 
@@ -450,13 +450,13 @@ def plot_throttle_brake(df: pd.DataFrame, save_path: str) -> bool:
         # Throttle
         ax1.fill_between(dist, 0, throttle, color=COLOR_GREEN, alpha=0.7)
         ax1.plot(dist, throttle, color=COLOR_GREEN, linewidth=1.2)
-        _style_ax(ax1, '🟢 Accélérateur', ylabel='% Gaz')
+        _style_ax(ax1, 'Throttle Accelerateur', ylabel='% Gaz')
         ax1.set_ylim(0, 110)
         
         # Brake
         ax2.fill_between(dist, 0, brake, color=COLOR_RED, alpha=0.7)
         ax2.plot(dist, brake, color=COLOR_RED, linewidth=1.2)
-        _style_ax(ax2, '🔴 Freinage', 'Distance (m)', '% Frein')
+        _style_ax(ax2, 'Brake Freinage', 'Distance (m)', '% Frein')
         ax2.set_ylim(0, 110)
         
         # Apex markers sur les deux
@@ -470,14 +470,14 @@ def plot_throttle_brake(df: pd.DataFrame, save_path: str) -> bool:
                     ax2.axvline(x=ad, color=COLOR_ORANGE, 
                                linestyle=':', alpha=0.4, linewidth=1)
         
-        fig.suptitle('🎮 Throttle & Brake — Application', 
+        fig.suptitle('Inputs Throttle & Brake — Application', 
                     color=COLOR_TEXT, fontsize=15, fontweight='bold')
         fig.tight_layout()
         plt.savefig(save_path, dpi=DPI, bbox_inches='tight', facecolor=BG_DARK)
         plt.close(fig)
         return True
     except Exception as e:
-        warnings.warn(f"⚠️ plot_throttle_brake : {e}")
+        warnings.warn(f"Warning: plot_throttle_brake : {e}")
         return False
 
 
@@ -522,7 +522,7 @@ def plot_sector_times(df: pd.DataFrame, save_path: str) -> bool:
                    va='bottom', fontsize=10, 
                    color=COLOR_ORANGE, fontweight='bold')
         
-        _style_ax(ax, '⏱  Analyse Secteurs — Temps Comparés', 
+        _style_ax(ax, 'Time Analyse Secteurs — Temps Comparés', 
                  'Secteur', 'Temps (s)')
         ax.set_xticks(x)
         ax.set_xticklabels(['S1', 'S2', 'S3'], color=COLOR_TEXT, fontsize=12)
@@ -533,7 +533,7 @@ def plot_sector_times(df: pd.DataFrame, save_path: str) -> bool:
         plt.close(fig)
         return True
     except Exception as e:
-        warnings.warn(f"⚠️ plot_sector_times : {e}")
+        warnings.warn(f"Warning: plot_sector_times : {e}")
         return False
 
 
@@ -591,7 +591,7 @@ def plot_apex_precision(df: pd.DataFrame, save_path: str) -> bool:
             ax.text(dev + 0.05, pos, f'{dev:.1f}m', 
                    va='center', fontsize=8, color=COLOR_MUTED)
         
-        _style_ax(ax, '🎯 Précision Apex — Écart par Virage', 
+        _style_ax(ax, 'Apex Précision Apex — Écart par Virage', 
                  'Écart (m)', '')
         ax.legend(fontsize=9)
         
@@ -600,7 +600,7 @@ def plot_apex_precision(df: pd.DataFrame, save_path: str) -> bool:
         plt.close(fig)
         return True
     except Exception as e:
-        warnings.warn(f"⚠️ plot_apex_precision : {e}")
+        warnings.warn(f"Warning: plot_apex_precision : {e}")
         return False
 
 
@@ -631,13 +631,13 @@ def plot_time_loss_by_corner(df: pd.DataFrame, save_path: str) -> bool:
         for i, t in enumerate(times):
             if t > 0:
                 ax.text(t + 0.005, i, f'{t:.3f}s', va='center', fontsize=8, color=COLOR_MUTED)
-        _style_ax(ax, '⏱ Temps perdu par virage — Priorités', 'Temps perdu (s)', '')
+        _style_ax(ax, 'Time Temps perdu par virage — Priorités', 'Temps perdu (s)', '')
         fig.tight_layout()
         plt.savefig(save_path, dpi=DPI, bbox_inches='tight', facecolor=BG_DARK)
         plt.close(fig)
         return True
     except Exception as e:
-        warnings.warn(f"⚠️ plot_time_loss_by_corner : {e}")
+        warnings.warn(f"Warning: plot_time_loss_by_corner : {e}")
         return False
 
 
@@ -664,13 +664,13 @@ def plot_speed_delta_by_corner(df: pd.DataFrame, save_path: str) -> bool:
         for i, d in enumerate(deltas):
             if abs(d) >= 0.5:
                 ax.text(i, d + (0.5 if d >= 0 else -0.5), f'{d:+.1f}', ha='center', va='bottom' if d >= 0 else 'top', fontsize=8, color=COLOR_MUTED)
-        _style_ax(ax, '📈 Vitesse apex — Marge par virage (optimal − réel)', '', 'km/h')
+        _style_ax(ax, 'Trace Vitesse apex — Marge par virage (optimal − réel)', '', 'km/h')
         fig.tight_layout()
         plt.savefig(save_path, dpi=DPI, bbox_inches='tight', facecolor=BG_DARK)
         plt.close(fig)
         return True
     except Exception as e:
-        warnings.warn(f"⚠️ plot_speed_delta_by_corner : {e}")
+        warnings.warn(f"Warning: plot_speed_delta_by_corner : {e}")
         return False
 
 
@@ -701,13 +701,13 @@ def plot_corner_performance_matrix(df: pd.DataFrame, save_path: str) -> bool:
         ax.set_yticks(range(len(row_labels)))
         ax.set_yticklabels(row_labels, color=COLOR_TEXT, fontsize=10)
         plt.colorbar(im, ax=ax, label='Score 0-100')
-        _style_ax(ax, '📋 Matrice performance par virage', '', '')
+        _style_ax(ax, 'Matrix Matrice performance par virage', '', '')
         fig.tight_layout()
         plt.savefig(save_path, dpi=DPI, bbox_inches='tight', facecolor=BG_DARK)
         plt.close(fig)
         return True
     except Exception as e:
-        warnings.warn(f"⚠️ plot_corner_performance_matrix : {e}")
+        warnings.warn(f"Warning: plot_corner_performance_matrix : {e}")
         return False
 
 
@@ -762,7 +762,7 @@ def plot_performance_radar(df: pd.DataFrame, save_path: str) -> bool:
                fontsize=14, color=COLOR_MUTED,
                transform=ax.transData)
         
-        ax.set_title('🏆 Performance Radar', color=COLOR_TEXT, 
+        ax.set_title('Performance Performance Radar', color=COLOR_TEXT, 
                     fontsize=15, fontweight='bold', pad=20)
         
         fig.tight_layout()
@@ -770,7 +770,7 @@ def plot_performance_radar(df: pd.DataFrame, save_path: str) -> bool:
         plt.close(fig)
         return True
     except Exception as e:
-        warnings.warn(f"⚠️ plot_performance_radar : {e}")
+        warnings.warn(f"Warning: plot_performance_radar : {e}")
         return False
 
 
@@ -828,7 +828,7 @@ def plot_performance_score_breakdown(df: pd.DataFrame, save_path: str) -> bool:
                ha='right', va='top')
         ax.text(0.98, 0.82, f'Grade {grade}', transform=ax.transAxes,
                fontsize=14, color=COLOR_MUTED, ha='right', va='top')
-        _style_ax(ax, '📊 Score de Performance — Breakdown', 
+        _style_ax(ax, 'Stats Score de Performance — Breakdown', 
                  'Points', '')
         ax.set_xlim(0, max(max_scores) * 1.3)
         
@@ -837,7 +837,7 @@ def plot_performance_score_breakdown(df: pd.DataFrame, save_path: str) -> bool:
         plt.close(fig)
         return True
     except Exception as e:
-        warnings.warn(f"⚠️ plot_performance_score_breakdown : {e}")
+        warnings.warn(f"Warning: plot_performance_score_breakdown : {e}")
         return False
 
 
@@ -905,14 +905,14 @@ def plot_corner_heatmap(df: pd.DataFrame, save_path: str) -> bool:
         ]
         ax.legend(handles=legend_elements, facecolor=BG_PANEL,
                  edgecolor=BG_PANEL, labelcolor=COLOR_TEXT, fontsize=9)
-        _style_ax(ax, '🗺  Carte Performance — Heatmap Virages', 'Longitude', 'Latitude')
+        _style_ax(ax, 'Map Carte Performance — Heatmap Virages', 'Longitude', 'Latitude')
         ax.set_aspect('equal')
         fig.tight_layout()
         plt.savefig(save_path, dpi=DPI, bbox_inches='tight', facecolor=BG_DARK)
         plt.close(fig)
         return True
     except Exception as e:
-        warnings.warn(f"⚠️ plot_corner_heatmap : {e}")
+        warnings.warn(f"Warning: plot_corner_heatmap : {e}")
         return False
 
 
@@ -951,9 +951,9 @@ def generate_all_plots(df: pd.DataFrame, output_dir: str = "./plots") -> Dict[st
             if success:
                 results[plot_name] = save_path
             else:
-                warnings.warn(f"⚠️ Échec génération {plot_name}")
+                warnings.warn(f"Warning: Échec génération {plot_name}")
         except Exception as e:
-            warnings.warn(f"⚠️ Exception {plot_name} : {str(e)}")
+            warnings.warn(f"Warning: Exception {plot_name} : {str(e)}")
     
     return results
 
@@ -1205,9 +1205,9 @@ def generate_plot_data(df: pd.DataFrame) -> Dict[str, Any]:
                             "laps": delta_laps,
                         }
             except Exception as e:
-                warnings.warn(f"⚠️ Erreur time_delta_laps: {e}")
+                warnings.warn(f"Warning: Erreur time_delta_laps: {e}")
 
     except Exception as e:
-        warnings.warn(f"⚠️ Erreur generate_plot_data: {e}")
+        warnings.warn(f"Warning: Erreur generate_plot_data: {e}")
         
     return plot_data
