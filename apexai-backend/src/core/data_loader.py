@@ -304,7 +304,12 @@ def _validate_data(df: pd.DataFrame) -> Tuple[bool, pd.DataFrame, List[str]]:
     
     # Vérifier time croissant (si colonne time existe)
     if 'time' in df_clean.columns:
-        df_clean['time'] = pd.to_numeric(df_clean['time'], errors='coerce')
+        time_series = df_clean['time']
+        if isinstance(time_series, pd.DataFrame):
+            time_series = time_series.iloc[:, 0]
+            warnings_list.append("⚠️ Colonnes time dupliquées détectées, première colonne utilisée")
+            df_clean = df_clean.loc[:, ~df_clean.columns.duplicated()]
+        df_clean['time'] = pd.to_numeric(time_series, errors='coerce')
         if not df_clean['time'].is_monotonic_increasing:
             warnings_list.append("⚠️ La colonne time n'est pas strictement croissante")
     
