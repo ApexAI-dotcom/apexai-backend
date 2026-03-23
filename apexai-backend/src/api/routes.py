@@ -22,6 +22,7 @@ from .models import AnalysisResponse, ErrorResponse
 from .services import AnalysisService
 from .utils import validate_csv_file, sanitize_json_data
 from src.core.subscription_service import check_analysis_limit, increment_analysis_count
+from .rate_limiter import limiter, get_user_token_or_ip
 
 # Résolution user_id depuis JWT (optionnel pour limite abonnement)
 _SUPABASE_URL = os.getenv("SUPABASE_URL", "")
@@ -65,7 +66,9 @@ REDIS_KEY_PREFIX = "analysis:v2:"
     summary="Détecter les tours d'un fichier CSV",
     description="Reçoit un CSV en FormData, retourne la liste des tours avec lap_number, lap_time_seconds, points_count, is_outlier (tours stand/prépa si temps > 1.5× médiane).",
 )
+@limiter.limit("15/minute")  # Rate limit par IP
 async def parse_laps(
+    request: Request,
     file: UploadFile = File(..., description="Fichier CSV de télémétrie"),
 ):
     """Parse le CSV et retourne les tours détectés (réutilise la logique detect_laps)."""
@@ -102,30 +105,16 @@ async def parse_laps(
         400: {"model": ErrorResponse, "description": "Erreur de validation"},
         403: {"model": ErrorResponse, "description": "Limite d'analyses atteinte (abonnement)"},
         413: {"model": ErrorResponse, "description": "Fichier trop volumineux"},
+        429: {"model": ErrorResponse, "description": "Trop de requêtes analysées simultanément (Rate Limit)"},
         500: {"model": ErrorResponse, "description": "Erreur serveur"}
     },
     summary="Analyser un fichier de télémétrie",
     description="""
     Analyser un fichier CSV de télémétrie karting.
-    
-    **Formats supportés :**
-    - MyChron (AIM)
-    - RaceBox
-    - CSV générique avec colonnes GPS
-    
-    **Retourne :**
-    - Score de performance /100 avec breakdown
-    - Analyse détaillée de chaque virage (top 10)
-    - Top 5 conseils de coaching personnalisés
-    - URLs des 10 graphiques générés
-    - Statistiques de l'analyse
-    
-    **Limites :**
-    - Taille max : 50 MB (configurable via MAX_UPLOAD_SIZE)
-    - Format : CSV uniquement
-    - Colonnes requises : Latitude, Longitude, Speed
+    ...
     """
 )
+@limiter.limit("10/minute", key_func=get_user_token_or_ip)  # Rate limit par User (fallback IP)
 async def analyze_telemetry(
     request: Request,
     file: UploadFile = File(..., description="Fichier CSV de télémétrie"),

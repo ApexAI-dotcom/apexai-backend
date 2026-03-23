@@ -30,6 +30,11 @@ redis_client = None
 from .routes import router
 from .config import settings
 
+# Rate Limiting avec SlowAPI
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from .rate_limiter import limiter
+
 # Import du router Stripe
 try:
     from .stripe_routes import router as stripe_router
@@ -71,6 +76,10 @@ app = FastAPI(
     redoc_url="/redoc" if (settings.ENVIRONMENT == "development" or settings.DOCS_ENABLED) else None
 )
 
+# Enregistrement du Rate Limiter global (mais appliqué sélectivement sur les routes)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # CORS - lire depuis CORS_ORIGINS (env var). "*" = toutes origines (preview Vercel)
 cors_origins_str = os.environ.get("CORS_ORIGINS", "http://localhost:8080")
 if cors_origins_str.strip() == "*":
@@ -89,6 +98,20 @@ app.add_middleware(
 
 # Compression GZip
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# Security Headers Middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Ajoute des headers de sécurité HTTPS/HTTP de base sans casser le CORS ou les uploads."""
+    response = await call_next(request)
+    # Protection contre le MIME sniffing
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    # Prévention du clickjacking (désactivé si le front a besoin d'iframer, mais ici on interdit)
+    response.headers["X-Frame-Options"] = "DENY"
+    # HSTS (Hardening transport HTTPS) - 1 an
+    if settings.ENVIRONMENT == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
 # Limite taille upload (50MB par défaut, MAX_UPLOAD_SIZE en bytes)
 MAX_UPLOAD_SIZE = int(os.environ.get("MAX_UPLOAD_SIZE", 52428800))  # 50MB
