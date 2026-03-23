@@ -443,10 +443,6 @@ def _run_analysis_pipeline_sync(
         lap_times = list(valid_laps_dict.values())
         best_lap_time = min(lap_times)
         
-        # POST-GATE: Lap time plausible
-        if best_lap_time < 5.0 or best_lap_time > 3600.0:
-            raise ValueError(f"Analyse rejetée: le meilleur temps calculé ({best_lap_time:.2f}s) est incohérent. Trace GPS erronée.")
-        
         # Find fastest lap number
         for L, t in valid_laps_dict.items():
             if t == best_lap_time:
@@ -486,6 +482,21 @@ def _run_analysis_pipeline_sync(
             max_speed_lap = int(df.loc[df[speed_col].idxmax()]["lap_number"])
     elif speed_col:
         max_speed = round(float(df[speed_col].max()), 1)
+
+    # FINAL QUALITY GATE: Incoherent Lap Detection
+    session_duration = 0
+    if "time" in df.columns:
+        session_duration = df["time"].max() - df["time"].min()
+        
+    if best_lap_time is not None:
+        if best_lap_time > 300.0:
+            raise ValueError(f"Analyse rejetée: le meilleur temps calculé ({best_lap_time:.2f}s) est incohérent. Trace GPS erronée.")
+        
+        if len(valid_laps_dict) <= 1 and session_duration > 300.0 and (max_speed or 0) > 40.0:
+            raise ValueError("Analyse rejetée: détection des tours incohérente (session interprétée comme un seul tour). Vérifiez le CSV/export.")
+        
+        if best_lap_time < 5.0:
+            raise ValueError(f"Analyse rejetée: le meilleur temps calculé ({best_lap_time:.2f}s) est anormalement court (< 5s).")
         
     logger.info(f"[{analysis_id}] Session Stats: Best={best_lap_time}s (L{fastest_lap_number}), Max Speed={max_speed}km/h (L{max_speed_lap}), Cons={consistency_gap}s, Imp={improvement_gap}s")
 

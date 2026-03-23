@@ -61,6 +61,36 @@ def test_cache_key_determinism():
     assert key1 == key1_bis
     assert key1 != key2
 
+def test_quality_gate_incoherent_laps(tmp_path):
+    # Simulation d'une session longue avec un virage pour passer le gate des corners
+    # mais un seul tour détecté (lap_number=1 partout)
+    n = 200
+    df = pd.DataFrame({
+        'latitude': [45.0 + np.sin(i/20.0)*0.005 for i in range(n)],
+        'longitude': [5.0 + i*0.0001 for i in range(n)],
+        'speed': [80.0]*n,
+        'time': [i*4.0 for i in range(n)], # 800s total
+        'lap_number': [1]*n
+    })
+    csv_path = tmp_path / "incoherent_laps.csv"
+    df.to_csv(csv_path, index=False)
+    
+    with pytest.raises(ValueError) as excinfo:
+        _run_analysis_pipeline_sync(str(csv_path), [], "test_id", datetime.now())
+    
+    assert "Analyse rejetée" in str(excinfo.value)
+    assert "détection des tours incohérente" in str(excinfo.value) or "temps calculé" in str(excinfo.value)
+
+def test_non_regression_reference_file():
+    # Path corrigé après recherche
+    ref_path = r"C:\Users\Administrateur\Documents\Apex\csv1\4adria_ftest.csv"
+    if not os.path.exists(ref_path):
+        pytest.skip(f"Fichier de référence introuvable à {ref_path}")
+    
+    # Ne doit pas lever de ValueError (best_lap < 300s, plusieurs tours)
+    result = _run_analysis_pipeline_sync(ref_path, [], "ref_test", datetime.now())
+    assert result["success"] is True
+
 if __name__ == "__main__":
     # Simple manual run if needed
     pass

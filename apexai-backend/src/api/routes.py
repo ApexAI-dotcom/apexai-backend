@@ -238,13 +238,17 @@ async def analyze_telemetry(
     except HTTPException:
         raise
     except ValueError as e:
-        logger.warning(f"[{analysis_id}] csv_quality_gate_failed: {str(e)}")
+        err_msg = str(e)
+        if "détection des tours incohérente" in err_msg:
+            logger.warning(f"[{analysis_id}] csv_lap_detection_incoherent: {err_msg}")
+        else:
+            logger.warning(f"[{analysis_id}] csv_quality_gate_failed: {err_msg}")
         raise HTTPException(
             status_code=400,
             detail={
                 "success": False,
                 "error": "Processing error",
-                "message": str(e)
+                "message": err_msg
             }
         )
     except Exception as e:
