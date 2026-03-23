@@ -199,6 +199,14 @@ try:
 except ImportError as e:
     logger.warning("⚠ Analyses routes not loaded: %s", e)
 
+# Routes Home (tips, insights, reset)
+try:
+    from .home_routes import router as home_router
+    app.include_router(home_router)
+    logger.info("✓ Home routes loaded (/api/home/tips, /api/home/insights)")
+except ImportError as e:
+    logger.warning("⚠ Home routes not loaded: %s", e)
+
 # Routes Auth (debug temporaire)
 try:
     from .auth import auth_router
