@@ -10,6 +10,9 @@ import numpy as np
 from typing import Dict, Any, List, Optional, Tuple
 from pathlib import Path
 import warnings
+import logging
+
+logger = logging.getLogger(__name__)
 
 try:
     import duckdb
@@ -123,8 +126,24 @@ def _parse_with_pandas(file_path: str, skiprows: int, encoding: str = 'utf-8') -
             dtype=str,
             on_bad_lines='skip'
         )
+        if df is not None and len(df.columns) <= 1:
+            try:
+                df_semi = pd.read_csv(
+                    file_path,
+                    skiprows=skiprows,
+                    encoding=encoding,
+                    sep=';',
+                    low_memory=False,
+                    dtype=str,
+                    on_bad_lines='skip'
+                )
+                if df_semi is not None and len(df_semi.columns) > len(df.columns):
+                    return df_semi
+            except Exception:
+                pass
         return df
-    except Exception:
+    except Exception as e:
+        logger.error(f"csv_invalid_delimiter_or_encoding: {file_path} - {str(e)}")
         return None
 
 
@@ -144,6 +163,8 @@ def _normalize_columns(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
     
     # Convertir en minuscules et nettoyer
     df_normalized.columns = [col.lower().strip() for col in df_normalized.columns]
+    
+    time_ms_present = 'time_ms' in df_normalized.columns or 'time ms' in df_normalized.columns
     
     # Mapping exhaustif des variantes de colonnes
     column_mapping = {
@@ -237,6 +258,13 @@ def _normalize_columns(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
             col_map[col] = 'time'
     df_normalized.rename(columns=col_map, inplace=True)
 
+    if 'time' in df_normalized.columns:
+        df_normalized['time'] = pd.to_numeric(df_normalized['time'], errors='coerce')
+        max_t = df_normalized['time'].max()
+        if pd.notna(max_t) and (time_ms_present or max_t > 50000):
+            df_normalized['time'] = df_normalized['time'] / 1000.0
+            conversion_warnings.append("ℹ️ Temps converti de ms à s")
+
     # CONVERSION m/s → km/h si nécessaire
     if 'speed' in df_normalized.columns:
         # Convertir en numérique pour analyse
@@ -279,6 +307,7 @@ def _validate_data(df: pd.DataFrame) -> Tuple[bool, pd.DataFrame, List[str]]:
     missing_columns = [col for col in required_columns if col not in df_clean.columns]
     
     if missing_columns:
+        logger.warning(f"csv_missing_required_columns: {missing_columns}")
         return False, df_clean, [f"❌ Colonnes manquantes : {', '.join(missing_columns)}"]
     
     # Convertir en numérique
@@ -308,6 +337,7 @@ def _validate_data(df: pd.DataFrame) -> Tuple[bool, pd.DataFrame, List[str]]:
         if isinstance(time_series, pd.DataFrame):
             time_series = time_series.iloc[:, 0]
             warnings_list.append("⚠️ Colonnes time dupliquées détectées, première colonne utilisée")
+            logger.info("csv_duplicated_time_columns detected")
             df_clean = df_clean.loc[:, ~df_clean.columns.duplicated()]
         df_clean['time'] = pd.to_numeric(time_series, errors='coerce')
         if not df_clean['time'].is_monotonic_increasing:
@@ -315,6 +345,7 @@ def _validate_data(df: pd.DataFrame) -> Tuple[bool, pd.DataFrame, List[str]]:
     
     # Vérifier qu'il reste assez de données après nettoyage
     if len(df_clean) < 10:
+        logger.warning(f"csv_too_few_valid_rows: {len(df_clean)}")
         return False, df_clean, [
             f"❌ Pas assez de données après nettoyage : {len(df_clean)} lignes valides (min. 10). "
             f"Colonnes : {list(df_clean.columns[:8])}. Vérifiez latitude/longitude/speed."

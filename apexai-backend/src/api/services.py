@@ -173,6 +173,19 @@ def _run_analysis_pipeline_sync(
     df = result["data"]
     logger.info(f"[{analysis_id}] Loaded {len(df)} rows")
 
+    # PRE-GATES
+    if len(df) < 50:
+        raise ValueError(f"CSV invalide: pas assez de données exploitables ({len(df)} lignes, min 50).")
+    
+    if "time" in df.columns:
+        times = df["time"].dropna()
+        if len(times) >= 2:
+            total_duration = times.max() - times.min()
+            if total_duration < 2.0:
+                raise ValueError(f"CSV invalide: la durée totale ({total_duration:.1f}s) est anormalement courte (< 2s).")
+            elif total_duration > 86400:
+                logger.warning(f"[{analysis_id}] Durée totale anormalement longue ({total_duration:.1f}s).")
+
     if beacon_markers:
         df.attrs["beacon_markers"] = beacon_markers
 
@@ -210,6 +223,10 @@ def _run_analysis_pipeline_sync(
     corner_details = corners_meta.get("corner_details", [])
     logger.info(f"[DIAG] detect_corners retourné : {len(corner_details)} corners")
     logger.info(f"[{analysis_id}] Detected {len(corner_details)} corners")
+
+    # POST-GATE: Corners
+    if len(corner_details) == 0:
+        raise ValueError("Données inexploitables: aucun virage détecté. La trace GPS est peut-être tronquée ou a une résolution insuffisante.")
 
     # Previously we filtered down to selected laps here. 
     # Now we keep the FULL session in df so that the frontend can overlay whichever laps it wants.
@@ -425,6 +442,10 @@ def _run_analysis_pipeline_sync(
             
         lap_times = list(valid_laps_dict.values())
         best_lap_time = min(lap_times)
+        
+        # POST-GATE: Lap time plausible
+        if best_lap_time < 5.0 or best_lap_time > 3600.0:
+            raise ValueError(f"Analyse rejetée: le meilleur temps calculé ({best_lap_time:.2f}s) est incohérent. Trace GPS erronée.")
         
         # Find fastest lap number
         for L, t in valid_laps_dict.items():

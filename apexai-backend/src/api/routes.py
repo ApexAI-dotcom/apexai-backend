@@ -170,10 +170,18 @@ async def analyze_telemetry(
         except ValueError:
             pass
 
-    cache_key = hashlib.md5((file.filename or "unknown").encode()).hexdigest()
-    redis = getattr(request.app.state, "redis", None)
-
     try:
+        content_bytes = await file.read()
+        await file.seek(0)
+        
+        file_hash = hashlib.sha256(content_bytes).hexdigest()
+        norm_laps = str(sorted(lap_list)) if lap_list else "All"
+        norm_temp = str(float(temp_c)) if temp_c is not None else "none"
+        
+        cache_str = f"{file_hash}_{norm_laps}_{cond}_{norm_temp}"
+        cache_key = hashlib.sha256(cache_str.encode("utf-8")).hexdigest()
+        
+        redis = getattr(request.app.state, "redis", None)
         # Validation
         validation_error = await validate_csv_file(file)
         if validation_error:
@@ -187,20 +195,20 @@ async def analyze_telemetry(
                 }
             )
 
-        # Cache HIT (on ne met pas en cache si lap_filter différent selon les cas; clé = filename seulement)
+        # Cache HIT
         # Pas d'incrément du compteur sur cache hit (analyse déjà comptée précédemment).
-        if redis and not lap_list:
+        if redis:
             cached_raw = await redis.get(f"{REDIS_KEY_PREFIX}{cache_key}")
             if cached_raw:
-                logger.info(f"[{analysis_id}] Redis cache HIT")
+                logger.info(f"[{analysis_id}] Redis cache HIT (key: {cache_key})")
                 data = json.loads(cached_raw)
                 # Sanitize loaded data for JSON compliance (NaN/Inf -> None)
                 sanitized = sanitize_json_data(data)
                 return JSONResponse(content={"cached": True, "cache_key": cache_key, **sanitized})
 
         # Analyse (cache MISS)
-        if redis and not lap_list:
-            logger.info(f"[{analysis_id}] Redis cache MISS")
+        if redis:
+            logger.info(f"[{analysis_id}] Redis cache MISS (key: {cache_key})")
         service = AnalysisService(lap_filter=lap_list if lap_list else None)
         result = await service.process_telemetry(
             file, analysis_id,
@@ -209,8 +217,8 @@ async def analyze_telemetry(
             session_name=session_name,
         )
 
-        # Stocker en cache (uniquement analyse complète sans filtre de tours)
-        if redis and not lap_list:
+        # Stocker en cache
+        if redis:
             sanitized_for_cache = sanitize_json_data(result)
             await redis.setex(
                 f"{REDIS_KEY_PREFIX}{cache_key}",
@@ -230,7 +238,7 @@ async def analyze_telemetry(
     except HTTPException:
         raise
     except ValueError as e:
-        logger.error(f"[{analysis_id}] ❌ ValueError: {str(e)}")
+        logger.warning(f"[{analysis_id}] csv_quality_gate_failed: {str(e)}")
         raise HTTPException(
             status_code=400,
             detail={
@@ -254,7 +262,7 @@ async def analyze_telemetry(
 @router.get(
     "/analyse/{cache_key}",
     summary="Récupérer une analyse depuis le cache",
-    description="Retourne le résultat d'une analyse par cache_key (md5 du filename)"
+    description="Retourne le résultat d'une analyse par cache_key (hash du contenu fichier + paramètres d'analyse)"
 )
 async def get_analyse_by_id(request: Request, cache_key: str):
     """Récupérer une analyse depuis le cache Redis."""
