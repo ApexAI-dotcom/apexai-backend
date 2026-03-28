@@ -207,6 +207,14 @@ try:
 except ImportError as e:
     logger.warning("⚠ Home routes not loaded: %s", e)
 
+# Routes Mon Kart (MVP)
+try:
+    from .kart_routes import router as kart_router
+    app.include_router(kart_router)
+    logger.info("✓ Kart routes loaded (/api/kart)")
+except ImportError as e:
+    logger.warning("⚠ Kart routes not loaded: %s", e)
+
 # Routes Auth (debug temporaire)
 try:
     from .auth import auth_router

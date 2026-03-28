@@ -215,6 +215,7 @@ async def analyze_telemetry(
             track_condition=cond,
             track_temperature=temp_c,
             session_name=session_name,
+            user_id=user_id,
         )
 
         # Stocker en cache

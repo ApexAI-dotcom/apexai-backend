@@ -621,6 +621,7 @@ class AnalysisService:
         track_condition: str = "dry",
         track_temperature: Optional[float] = None,
         session_name: Optional[str] = None,
+        user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Traiter un fichier de télémétrie complet.
@@ -699,6 +700,28 @@ class AnalysisService:
                 track_temperature,
                 session_name,
             )
+            
+            # --- Mon Kart Hook ---
+            if user_id:
+                try:
+                    from src.api.kart_routes import is_mon_kart_enabled
+                    from src.core.kart_mechanical import parse_kart_mechanical
+                    from src.api.kart_service import KartService
+                    
+                    if is_mon_kart_enabled() and KartService.is_racer_or_team(user_id):
+                        k_res = parse_kart_mechanical(temp_path)
+                        if k_res.get("success"):
+                            KartService.upsert_session(
+                                user_id=user_id,
+                                signature=k_res["signature"],
+                                imported_via="analyze",
+                                metrics=k_res["aggregates"],
+                                analysis_id=analysis_id
+                            )
+                except Exception as k_err:
+                    logger.warning(f"[{analysis_id}] Mon Kart best-effort hook failed: {k_err}")
+            # ---------------------
+
             return result
             
         except Exception as e:
