@@ -20,6 +20,11 @@ class ResetComponentRequest(BaseModel):
     component_type: str
     notes: Optional[str] = None
 
+class AddHistoryRequest(BaseModel):
+    component_type: str
+    notes: str
+    date: Optional[str] = None
+
 @router.get("/api/kart/profile")
 async def get_kart_profile(current_user: str = Depends(get_current_user)):
     if not is_mon_kart_enabled():
@@ -110,6 +115,20 @@ async def reset_component(req: ResetComponentRequest, current_user: str = Depend
     try:
         updated = KartService.reset_component(current_user, req.component_type, req.notes)
         return {"profile": updated}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/api/kart/history/add")
+async def add_history_entry(req: AddHistoryRequest, current_user: str = Depends(get_current_user)):
+    if not is_mon_kart_enabled():
+        raise HTTPException(status_code=404, detail="Mon Kart is currently disabled.")
+        
+    if not KartService.is_racer_or_team(current_user):
+        raise HTTPException(status_code=403, detail="Mon Kart is only available for Racer and Team plans.")
+        
+    try:
+        updated = KartService.add_maintenance_log(current_user, req.component_type, req.notes, req.date)
+        return {"entry": updated}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

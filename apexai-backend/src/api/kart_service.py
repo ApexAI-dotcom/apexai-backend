@@ -186,7 +186,8 @@ class KartService:
                 "component_type": component_type,
                 "previous_hours": prev_hours,
                 "previous_sessions": prev_sessions,
-                "notes": notes
+                "notes": notes,
+                "entry_type": "reset"
             }
             supabase.table("kart_component_history").insert(history_entry).execute()
             
@@ -196,6 +197,27 @@ class KartService:
         except Exception as e:
             logger.error(f"Error reset_component: {e}")
             raise Exception("Could not reset component")
+
+    @staticmethod
+    def add_maintenance_log(user_id: str, component_type: str, notes: str, date: Optional[str] = None) -> Dict[str, Any]:
+        """Add a manual maintenance log entry without resetting counters."""
+        if not supabase:
+            raise Exception("Supabase client not initialized")
+        try:
+            history_entry = {
+                "user_id": user_id,
+                "component_type": component_type,
+                "notes": notes,
+                "entry_type": "manual"
+            }
+            if date:
+                history_entry["created_at"] = date
+                
+            res = supabase.table("kart_component_history").insert(history_entry).execute()
+            return res.data[0] if res.data else {}
+        except Exception as e:
+            logger.error(f"Error add_maintenance_log: {e}")
+            raise Exception("Could not add maintenance log")
 
     @staticmethod
     def delete_session_and_recalculate(user_id: str, session_id: str) -> Dict[str, Any]:
