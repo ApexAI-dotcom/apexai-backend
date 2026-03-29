@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS public.kart_session_logs (
     
     -- Where it came from
     imported_via TEXT NOT NULL CHECK (imported_via IN ('analyze', 'bulk_import')),
-    analysis_id UUID REFERENCES public.analyses(id) ON DELETE SET NULL,
+    analysis_id TEXT REFERENCES public.analyses(id) ON DELETE SET NULL,
     
     -- Session metadata
     session_date TIMESTAMP WITH TIME ZONE,

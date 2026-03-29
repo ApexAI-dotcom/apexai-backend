@@ -28,7 +28,8 @@ async def get_kart_profile(current_user: str = Depends(get_current_user)):
     try:
         profile = KartService.get_or_create_kart_profile(current_user)
         sessions = KartService.get_sessions(current_user, limit=50)
-        return {"profile": profile, "recent_sessions": sessions}
+        history = KartService.get_component_history(current_user, limit=20)
+        return {"profile": profile, "recent_sessions": sessions, "history": history}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

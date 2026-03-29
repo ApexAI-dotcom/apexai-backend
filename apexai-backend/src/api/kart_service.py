@@ -89,6 +89,17 @@ class KartService:
             return []
 
     @staticmethod
+    def get_component_history(user_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        if not supabase:
+            return []
+        try:
+            res = supabase.table("kart_component_history").select("*").eq("user_id", user_id).order("created_at", desc=True).limit(limit).execute()
+            return res.data or []
+        except Exception as e:
+            logger.error(f"Error get_component_history: {e}")
+            return []
+
+    @staticmethod
     def upsert_session(user_id: str, signature: str, imported_via: str, metrics: Dict[str, Any], analysis_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Upsert a session in kart_session_logs.
