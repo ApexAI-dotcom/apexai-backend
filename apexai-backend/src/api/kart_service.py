@@ -1,6 +1,7 @@
 import os
 import logging
 from typing import Dict, Any, Optional, List
+from datetime import datetime, timedelta
 from supabase import Client, create_client
 from .config import settings
 
@@ -297,25 +298,22 @@ class KartService:
         if not supabase:
             raise Exception("Supabase client not initialized")
         try:
-            # More robust date comparison using ISO strings and wildcard or range
-            # Some session_date might be stored as "2024-03-30 05:18:59+00" or ISO
-            start = f"{date_str}T00:00:00+00:00"
-            end = f"{date_str}T23:59:59+00:00"
+            # More robust date comparison using strictly gte/lt (next day)
+            # This avoids issues with DB stored formats and timezones.
+            dt_current = datetime.strptime(date_str, "%Y-%m-%d")
+            dt_next = dt_current + timedelta(days=1)
             
-            logger.info(f"Deleting sessions for user {user_id} on day {date_str} (Range: {start} to {end})")
+            start = dt_current.strftime("%Y-%m-%dT00:00:00+00:00")
+            end_strict = dt_next.strftime("%Y-%m-%dT00:00:00+00:00")
             
-            # Use gte/lte on the range
-            res = supabase.table("kart_session_logs").select("*").eq("user_id", user_id).gte("session_date", start).lte("session_date", end).execute()
+            logger.info(f"Deleting sessions for user {user_id} on day {date_str} (Range: {start} to {end_strict})")
+            
+            # Use gte and lt on the range (strictly less than next day at midnight)
+            res = supabase.table("kart_session_logs").select("*").eq("user_id", user_id).gte("session_date", start).lt("session_date", end_strict).execute()
             sessions = res.data or []
             
             if len(sessions) == 0:
-                # Try fallback: match by string prefix if the above failed
-                # (Some DB stores session_date differently)
-                res_fallback = supabase.table("kart_session_logs").select("*").eq("user_id", user_id).like("session_date", f"{date_str}%").execute()
-                sessions = res_fallback.data or []
-                
-            if len(sessions) == 0:
-                logger.warning(f"No sessions found for user {user_id} on day {date_str}")
+                logger.warning(f"No sessions found for user {user_id} on day {date_str} after range search.")
                 raise ValueError(f"No sessions found for day {date_str}")
             
             # Delete all sessions found
