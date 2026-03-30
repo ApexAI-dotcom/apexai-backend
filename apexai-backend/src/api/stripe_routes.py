@@ -539,6 +539,84 @@ async def stripe_webhook(request: Request) -> JSONResponse:
         return JSONResponse(content={"received": True})
 
 
+@router.get("/sync")
+async def sync_subscription(
+    current_user: str = Depends(get_current_user),
+) -> JSONResponse:
+    """
+    Force une synchronisation avec Stripe pour l'utilisateur actuel.
+    Pratique si le webhook a échoué ou est lent.
+    """
+    try:
+        # On s'assure d'avoir stripe key
+        if not stripe.api_key:
+            logger.error("sync_subscription: stripe.api_key is None")
+            return JSONResponse(status_code=500, content={"error": "Stripe non configuré"})
+        if not supabase_client:
+            logger.error("sync_subscription: supabase_client is None")
+            return JSONResponse(status_code=503, content={"error": "Supabase non configuré"})
+
+        # 1. Trouver l'utilisateur dans DB
+        r = (
+            supabase_client.table("profiles")
+            .select("stripe_customer_id, stripe_subscription_id")
+            .eq("id", current_user)
+            .limit(1)
+            .execute()
+        )
+        if not r.data:
+            return JSONResponse(status_code=404, content={"error": "Profil non trouvé"})
+        
+        row = r.data[0]
+        customer_id = row.get("stripe_customer_id")
+        
+        # 2. Chercher les abonnements actifs chez Stripe
+        subs_list = []
+        if customer_id:
+            logger.info("sync_subscription: retrieving active subs for customer_id=%s", customer_id)
+            stripe_subs = stripe.Subscription.list(customer=customer_id, status="active", limit=1)
+            subs_list = stripe_subs.get("data", [])
+        
+        if not subs_list:
+            logger.info("sync_subscription: no active subscription found for customer_id=%s", customer_id)
+            return JSONResponse(content={"status": "no_active_subscription", "tier": "rookie"})
+
+        sub = subs_list[0]
+        sub_id = sub.get("id")
+        status = sub.get("status")
+        
+        # 3. Extraire le tier
+        items = sub.get("items", {}).get("data", [])
+        tier, billing_period = "racer", "monthly"
+        if items:
+            price_id = items[0].get("price", {}).get("id", "")
+            tier, billing_period = _price_id_to_tier_and_period(price_id)
+
+        start_ts = sub.get("current_period_start")
+        end_ts = sub.get("current_period_end")
+        start_dt = datetime.fromtimestamp(start_ts, tz=timezone.utc) if start_ts else None
+        end_dt = datetime.fromtimestamp(end_ts, tz=timezone.utc) if end_ts else None
+
+        # 4. Update DB
+        _update_profile_subscription(
+            current_user,
+            stripe_customer_id=customer_id,
+            stripe_subscription_id=sub_id,
+            subscription_tier=tier,
+            billing_period=billing_period,
+            subscription_status=status,
+            subscription_start_date=start_dt,
+            subscription_end_date=end_dt,
+        )
+
+        logger.info("sync_subscription success for user_id=%s tier=%s", current_user, tier)
+        return JSONResponse(content={"status": "synchronized", "tier": tier, "subscription_status": status})
+
+    except Exception as e:
+        logger.exception("sync_subscription failed: %s", e)
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
 @router.get("/set-pro")
 async def set_pro(user_id: str) -> JSONResponse:
     """Dev/test only: force PRO in local cache. Ne pas utiliser en production."""
