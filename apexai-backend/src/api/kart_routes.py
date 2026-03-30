@@ -147,3 +147,36 @@ async def delete_kart_session(session_id: str, current_user: str = Depends(get_c
         raise HTTPException(status_code=404, detail=str(ve))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/api/kart/history/{entry_id}")
+async def delete_history_entry(entry_id: str, current_user: str = Depends(get_current_user)):
+    if not is_mon_kart_enabled():
+        raise HTTPException(status_code=404, detail="Mon Kart is currently disabled.")
+        
+    if not KartService.is_racer_or_team(current_user):
+        raise HTTPException(status_code=403, detail="Mon Kart is only available for Racer and Team plans.")
+        
+    try:
+        res = KartService.delete_history_entry(current_user, entry_id)
+        return res
+    except ValueError as ve:
+        raise HTTPException(status_code=404, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/api/kart/day/{date}")
+async def delete_sessions_by_day(date: str, current_user: str = Depends(get_current_user)):
+    """Delete all sessions for a given day (yyyy-MM-dd) and recalculate profile."""
+    if not is_mon_kart_enabled():
+        raise HTTPException(status_code=404, detail="Mon Kart is currently disabled.")
+        
+    if not KartService.is_racer_or_team(current_user):
+        raise HTTPException(status_code=403, detail="Mon Kart is only available for Racer and Team plans.")
+        
+    try:
+        res = KartService.delete_sessions_by_day(current_user, date)
+        return res
+    except ValueError as ve:
+        raise HTTPException(status_code=404, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

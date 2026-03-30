@@ -158,7 +158,11 @@ class KartService:
     def reset_component(user_id: str, component_type: str, notes: Optional[str] = None) -> Dict[str, Any]:
         """Reset a component counter and log to history."""
         if not supabase:
+            logger.error(f"Supabase not initialized in reset_component for {user_id}")
             raise Exception("Supabase client not initialized")
+        
+        # Ensure lowercase for consistent DB storage and logic
+        comp_type = component_type.lower()
         
         try:
             profile = KartService.get_or_create_kart_profile(user_id)
@@ -166,47 +170,56 @@ class KartService:
             prev_sessions = None
             updates = {}
             
-            if component_type == "engine":
+            if comp_type == "engine":
                 prev_hours = float(profile.get("engine_hours_current", 0))
-                prev_sessions = float(profile.get("engine_sessions", 0))
+                # Cast to int for history table compatibility (INTEGER)
+                prev_sessions = int(float(profile.get("engine_sessions", 0)))
                 updates["engine_hours_current"] = 0.0
                 updates["engine_sessions"] = 0.0
-            elif component_type == "tires":
+            elif comp_type == "tires":
                 prev_sessions = int(profile.get("tires_sessions_current", 0))
                 updates["tires_sessions_current"] = 0
-            elif component_type == "brakes":
+            elif comp_type == "brakes":
                 prev_sessions = int(profile.get("brakes_sessions_current", 0))
                 updates["brakes_sessions_current"] = 0
             else:
-                raise ValueError("Invalid component type")
+                logger.warning(f"Invalid component type received: {comp_type}")
+                raise ValueError(f"Invalid component type: {comp_type}")
                 
             # Log history
             history_entry = {
                 "user_id": user_id,
-                "component_type": component_type,
+                "component_type": comp_type,
                 "previous_hours": prev_hours,
                 "previous_sessions": prev_sessions,
                 "notes": notes,
                 "entry_type": "reset"
             }
-            supabase.table("kart_component_history").insert(history_entry).execute()
+            logger.info(f"Inserting history entry for reset: {history_entry}")
+            hist_res = supabase.table("kart_component_history").insert(history_entry).execute()
+            if not hist_res.data:
+                logger.error(f"Failed to insert history entry for reset. Response: {hist_res}")
             
             # Apply profile update
             updated_profile = KartService.update_kart_profile(user_id, updates)
             return updated_profile
         except Exception as e:
-            logger.error(f"Error reset_component: {e}")
-            raise Exception("Could not reset component")
+            logger.exception(f"Error in reset_component for user {user_id}: {e}")
+            raise Exception(f"Could not reset component: {str(e)}")
 
     @staticmethod
     def add_maintenance_log(user_id: str, component_type: str, notes: str, date: Optional[str] = None) -> Dict[str, Any]:
         """Add a manual maintenance log entry without resetting counters."""
         if not supabase:
             raise Exception("Supabase client not initialized")
+        
+        # Ensure lowercase
+        comp_type = component_type.lower()
+        
         try:
             history_entry = {
                 "user_id": user_id,
-                "component_type": component_type,
+                "component_type": comp_type,
                 "notes": notes,
                 "entry_type": "manual"
             }
@@ -216,7 +229,7 @@ class KartService:
             res = supabase.table("kart_component_history").insert(history_entry).execute()
             return res.data[0] if res.data else {}
         except Exception as e:
-            logger.error(f"Error add_maintenance_log: {e}")
+            logger.exception(f"Error add_maintenance_log for {user_id}: {e}")
             raise Exception("Could not add maintenance log")
 
     @staticmethod
@@ -255,3 +268,81 @@ class KartService:
         except Exception as e:
             logger.error(f"Error delete_session_and_recalculate: {e}")
             raise Exception(f"Could not delete session: {e}")
+
+    @staticmethod
+    def delete_history_entry(user_id: str, entry_id: str) -> Dict[str, Any]:
+        """Delete a maintenance history entry owned by this user."""
+        if not supabase:
+            raise Exception("Supabase client not initialized")
+        try:
+            logger.info(f"Attempting to delete history entry {entry_id} for user {user_id}")
+            # Verify ownership
+            res = supabase.table("kart_component_history").select("id").eq("id", entry_id).eq("user_id", user_id).limit(1).execute()
+            if not res.data or len(res.data) == 0:
+                logger.warning(f"History entry {entry_id} not found for user {user_id}")
+                raise ValueError(f"History entry {entry_id} not found")
+            
+            supabase.table("kart_component_history").delete().eq("id", entry_id).eq("user_id", user_id).execute()
+            logger.info(f"Successfully deleted history entry {entry_id}")
+            return {"success": True, "deleted_id": entry_id}
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.exception(f"Error delete_history_entry for {user_id}: {e}")
+            raise Exception(f"Could not delete history entry: {str(e)}")
+
+    @staticmethod
+    def delete_sessions_by_day(user_id: str, date_str: str) -> Dict[str, Any]:
+        """Delete all sessions for a given day (yyyy-MM-dd) and recalculate profile."""
+        if not supabase:
+            raise Exception("Supabase client not initialized")
+        try:
+            # More robust date comparison using ISO strings and wildcard or range
+            # Some session_date might be stored as "2024-03-30 05:18:59+00" or ISO
+            start = f"{date_str}T00:00:00+00:00"
+            end = f"{date_str}T23:59:59+00:00"
+            
+            logger.info(f"Deleting sessions for user {user_id} on day {date_str} (Range: {start} to {end})")
+            
+            # Use gte/lte on the range
+            res = supabase.table("kart_session_logs").select("*").eq("user_id", user_id).gte("session_date", start).lte("session_date", end).execute()
+            sessions = res.data or []
+            
+            if len(sessions) == 0:
+                # Try fallback: match by string prefix if the above failed
+                # (Some DB stores session_date differently)
+                res_fallback = supabase.table("kart_session_logs").select("*").eq("user_id", user_id).like("session_date", f"{date_str}%").execute()
+                sessions = res_fallback.data or []
+                
+            if len(sessions) == 0:
+                logger.warning(f"No sessions found for user {user_id} on day {date_str}")
+                raise ValueError(f"No sessions found for day {date_str}")
+            
+            # Delete all sessions found
+            count = 0
+            total_dur = 0.0
+            for sess in sessions:
+                del_res = supabase.table("kart_session_logs").delete().eq("id", sess["id"]).eq("user_id", user_id).execute()
+                if del_res.data:
+                    count += 1
+                    total_dur += float(sess.get("duration_hours", 0))
+                else:
+                    logger.error(f"Failed to delete session {sess['id']}")
+            
+            # Recalculate profile
+            profile = KartService.get_or_create_kart_profile(user_id)
+            
+            updates = {}
+            if total_dur > 0 or count > 0:
+                updates["engine_hours_current"] = max(0.0, float(profile.get("engine_hours_current", 0)) - total_dur)
+                updates["engine_sessions"] = max(0.0, float(profile.get("engine_sessions", 0)) - count)
+                updates["tires_sessions_current"] = max(0, int(profile.get("tires_sessions_current", 0)) - count)
+                updates["brakes_sessions_current"] = max(0, int(profile.get("brakes_sessions_current", 0)) - count)
+            
+            updated_profile = KartService.update_kart_profile(user_id, updates)
+            return {"success": True, "deleted_count": count, "profile": updated_profile}
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.exception(f"Error delete_sessions_by_day for {user_id}: {e}")
+            raise Exception(f"Could not delete sessions: {str(e)}")
