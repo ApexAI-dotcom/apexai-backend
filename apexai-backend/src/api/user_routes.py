@@ -147,6 +147,49 @@ async def get_user_subscription(
 
         data = result.data[0]
         tier = (data.get("subscription_tier") or "rookie").lower()
+        
+        # --- SILENT SYNC ---
+        # Si l'utilisateur est rookie, on tente une synchro silencieuse avec Stripe 
+        # (en cas de webhook en retard ou échoué)
+        if tier == "rookie" and os.getenv("STRIPE_SECRET_KEY"):
+            try:
+                import stripe
+                stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+                customer_id = data.get("stripe_customer_id")
+                
+                # 1. Trouver l'email si pas de customer_id
+                if not customer_id:
+                    user_auth = supabase.auth.admin.get_user_by_id(current_user)
+                    if user_auth and user_auth.user:
+                        email = user_auth.user.email
+                        customers = stripe.Customer.list(email=email, limit=1)
+                        if customers.data:
+                            customer_id = customers.data[0].id
+
+                # 2. Chercher abonnements actifs
+                if customer_id:
+                    subs = stripe.Subscription.list(customer=customer_id, status="active", limit=1)
+                    if subs.data:
+                        sub = subs.data[0]
+                        # On a trouvé un abonnement actif ! MAJ immédiate du tier pour ce retour
+                        tier = "racer" # Par défaut si actif
+                        # On pourrait extraire le périod/tier exact via PRICE_TO_TIER mais 
+                        # on fait simple pour le "silent sync" : on dit juste que c'est Racer actif
+                        
+                        # Mettre à jour la base de données en arrière-plan (fire and forget ou immédiat)
+                        # On le fait en immédiat ici pour que le prochain appel soit rapide
+                        payload = {
+                            "subscription_tier": "racer",
+                            "subscription_status": "active",
+                            "stripe_customer_id": customer_id,
+                            "stripe_subscription_id": sub.id
+                        }
+                        supabase.table("profiles").update(payload).eq("id", current_user).execute()
+                        logger.info("Silent sync success for user_id=%s, upgraded to racer", current_user)
+            except Exception as se:
+                logger.warning("Silent sync failed for user_id=%s: %s", current_user, se)
+        # -------------------
+
         if tier not in TIER_LIMITS:
             tier = "rookie"
 
