@@ -299,7 +299,6 @@ class KartService:
             raise Exception("Supabase client not initialized")
         try:
             # More robust date comparison using strictly gte/lt (next day)
-            # This avoids issues with DB stored formats and timezones.
             dt_current = datetime.strptime(date_str, "%Y-%m-%d")
             dt_next = dt_current + timedelta(days=1)
             
@@ -308,18 +307,26 @@ class KartService:
             
             logger.info(f"Deleting sessions for user {user_id} on day {date_str} (Range: {start} to {end_strict})")
             
-            # Use gte and lt on the range (strictly less than next day at midnight)
-            res = supabase.table("kart_session_logs").select("*").eq("user_id", user_id).gte("session_date", start).lt("session_date", end_strict).execute()
+            # Fetch sessions where EITHER session_date OR created_at (if session_date is null) matches the day.
+            # Postgrest 'or' filter for complex conditions.
+            # Format: .or(cond1, cond2)
+            # cond1: session_date is in range
+            # cond2: session_date is null AND created_at is in range
+            q1 = f"and(session_date.gte.{start},session_date.lt.{end_strict})"
+            q2 = f"and(session_date.is.null,created_at.gte.{start},created_at.lt.{end_strict})"
+            
+            res = supabase.table("kart_session_logs").select("*").eq("user_id", user_id).or_(f"{q1},{q2}").execute()
             sessions = res.data or []
             
             if len(sessions) == 0:
-                logger.warning(f"No sessions found for user {user_id} on day {date_str} after range search.")
+                logger.warning(f"No sessions found for user {user_id} on day {date_str} (tried session_date and created_at fallback)")
                 raise ValueError(f"No sessions found for day {date_str}")
             
             # Delete all sessions found
             count = 0
             total_dur = 0.0
             for sess in sessions:
+                # We delete by specific ID to be safe
                 del_res = supabase.table("kart_session_logs").delete().eq("id", sess["id"]).eq("user_id", user_id).execute()
                 if del_res.data:
                     count += 1
