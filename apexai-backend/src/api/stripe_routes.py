@@ -548,15 +548,16 @@ async def sync_subscription(
     Pratique si le webhook a échoué ou est lent.
     """
     try:
+        logger.info("sync_subscription: starting for user_id=%s", current_user)
         # On s'assure d'avoir stripe key
         if not stripe.api_key:
-            logger.error("sync_subscription: stripe.api_key is None")
+            logger.error("sync_subscription: stripe.api_key is None - check STRIPE_SECRET_KEY")
             return JSONResponse(status_code=500, content={"error": "Stripe non configuré"})
         if not supabase_client:
-            logger.error("sync_subscription: supabase_client is None")
+            logger.error("sync_subscription: supabase_client is None - check SUPABASE_URL/SERVICE_KEY")
             return JSONResponse(status_code=503, content={"error": "Supabase non configuré"})
 
-        # 1. Trouver l'utilisateur dans DB
+        # 1. Trouver l'utilisateur et son email dans DB
         r = (
             supabase_client.table("profiles")
             .select("stripe_customer_id, stripe_subscription_id")
@@ -565,31 +566,60 @@ async def sync_subscription(
             .execute()
         )
         if not r.data:
+            logger.warning("sync_subscription: profile not found for user_id=%s", current_user)
             return JSONResponse(status_code=404, content={"error": "Profil non trouvé"})
         
         row = r.data[0]
         customer_id = row.get("stripe_customer_id")
         
+        # 1b. Si pas de customer_id, on essaie de le trouver par email chez Stripe
+        if not customer_id:
+            logger.info("sync_subscription: customer_id missing in DB for %s, searching by email on Stripe", current_user)
+            # On récupère l'email depuis Auth Supabase (nécessite service role)
+            try:
+                user_auth = supabase_client.auth.admin.get_user_by_id(current_user)
+                if user_auth and user_auth.user:
+                    email = user_auth.user.email
+                    logger.info("sync_subscription: found email=%s on Supabase Auth", email)
+                    # Recherche Stripe
+                    customers = stripe.Customer.list(email=email, limit=1)
+                    if customers.data:
+                        customer_id = customers.data[0].id
+                        logger.info("sync_subscription: found customer_id=%s on Stripe for email=%s", customer_id, email)
+                    else:
+                        logger.info("sync_subscription: no customer found on Stripe for email=%s", email)
+                else:
+                    logger.warning("sync_subscription: could not find email for user_id=%s in Supabase Auth", current_user)
+            except Exception as e:
+                logger.warning("sync_subscription: auth search failed: %s", e)
+
         # 2. Chercher les abonnements actifs chez Stripe
         subs_list = []
         if customer_id:
-            logger.info("sync_subscription: retrieving active subs for customer_id=%s", customer_id)
-            stripe_subs = stripe.Subscription.list(customer=customer_id, status="active", limit=1)
-            subs_list = stripe_subs.get("data", [])
+            logger.info("sync_subscription: retrieving subs for customer_id=%s", customer_id)
+            # On regarde active OU trialing
+            stripe_subs = stripe.Subscription.list(customer=customer_id, status="all", limit=10)
+            # On filtre ceux qui sont 'active' ou 'trialing'
+            subs_list = [s for s in stripe_subs.get("data", []) if s.status in ("active", "trialing")]
         
         if not subs_list:
-            logger.info("sync_subscription: no active subscription found for customer_id=%s", customer_id)
-            return JSONResponse(content={"status": "no_active_subscription", "tier": "rookie"})
+            logger.info("sync_subscription: no active/trialing subscription found for customer_id=%s", customer_id)
+            # On vérifie si y'a un profil "racer" on ne le remet pas rookie ici de force pour éviter les bugs
+            return JSONResponse(content={"status": "no_active_subscription", "tier": "rookie", "reason": "No active/trialing subscription found on Stripe"})
 
+        # On prend le plus récent
         sub = subs_list[0]
         sub_id = sub.get("id")
         status = sub.get("status")
         
+        logger.info("sync_subscription: found sub_id=%s status=%s", sub_id, status)
+
         # 3. Extraire le tier
         items = sub.get("items", {}).get("data", [])
         tier, billing_period = "racer", "monthly"
         if items:
             price_id = items[0].get("price", {}).get("id", "")
+            logger.info("sync_subscription: analyzing price_id=%s", price_id)
             tier, billing_period = _price_id_to_tier_and_period(price_id)
 
         start_ts = sub.get("current_period_start")
@@ -609,8 +639,13 @@ async def sync_subscription(
             subscription_end_date=end_dt,
         )
 
-        logger.info("sync_subscription success for user_id=%s tier=%s", current_user, tier)
-        return JSONResponse(content={"status": "synchronized", "tier": tier, "subscription_status": status})
+        logger.info("sync_subscription success for user_id=%s new_tier=%s status=%s", current_user, tier, status)
+        return JSONResponse(content={
+            "status": "synchronized", 
+            "tier": tier, 
+            "subscription_status": status,
+            "stripe_customer_id": customer_id
+        })
 
     except Exception as e:
         logger.exception("sync_subscription failed: %s", e)
