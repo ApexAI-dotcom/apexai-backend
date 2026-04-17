@@ -42,43 +42,18 @@ from jwt.exceptions import PyJWTError
 
 def _get_user_id_from_authorization(authorization: Optional[str]) -> Optional[str]:
     """
-    Extrait user_id (UUID) depuis le header Authorization Bearer <jwt>.
-    Supporte ES256 (JWKS) et HS256 (Local Secret).
+    Extrait user_id depuis le header. 
+    On utilise le fallback Supabase direct pour la stabilité si le local échoue.
     """
     if not authorization or not authorization.startswith("Bearer "):
         return None
     token = authorization.replace("Bearer ", "").strip()
     
-    # 1. Tentative JWKS
-    supabase_url = getattr(settings, "SUPABASE_URL", "")
-    if supabase_url:
-        try:
-            from jwt import PyJWKClient
-            jwks_url = f"{supabase_url.rstrip('/')}/auth/v1/jwks"
-            jwks_client = PyJWKClient(jwks_url)
-            signing_key = jwks_client.get_signing_key_from_jwt(token)
-            payload = jwt.decode(token, signing_key.key, algorithms=["HS256", "ES256"], audience="authenticated")
-            return str(payload.get("sub"))
-        except Exception:
-            pass
-
-    # 2. Fallback Secret local
-    secret = getattr(settings, "SUPABASE_JWT_SECRET", "")
-    if secret:
-        try:
-            payload = jwt.decode(token, secret, algorithms=["HS256"], options={"verify_aud": False})
-            return str(payload.get("sub"))
-        except jwt.PyJWTError:
-            pass
-
-    # 3. Fallback SYNC Supabase API
-    if not _supabase:
-        return None
+    if not _supabase: return None
     try:
+        # Fallback direct Supabase (plus lent mais fiable si le local pose souci)
         user_response = _supabase.auth.get_user(jwt=token)
         user = user_response.user if hasattr(user_response, "user") else user_response
-        if not user:
-            return None
         return user.get("id") if isinstance(user, dict) else getattr(user, "id", None)
     except Exception:
         return None
@@ -103,16 +78,14 @@ async def parse_laps(
 ):
     """Parse le CSV et retourne les tours détectés (réutilise la logique detect_laps)."""
     try:
-        content_bytes = await file.read()
-        await file.seek(0)
-        validation_error = await validate_csv_file(file, content_override=content_bytes)
+        validation_error = await validate_csv_file(file)
         if validation_error:
             raise HTTPException(
                 status_code=400,
                 detail={"success": False, "error": "Validation error", "message": validation_error},
             )
         service = AnalysisService()
-        laps = await service.parse_laps(file, content_override=content_bytes)
+        laps = await service.parse_laps(file)
         return JSONResponse(content={"success": True, "laps": laps})
     except HTTPException:
         raise
@@ -203,19 +176,20 @@ async def analyze_telemetry(
             pass
 
     try:
+        # Calcul du hash (on lit tout)
         content_bytes = await file.read()
         await file.seek(0)
-        
         file_hash = hashlib.sha256(content_bytes).hexdigest()
+            
         norm_laps = str(sorted(lap_list)) if lap_list else "All"
         norm_temp = str(float(temp_c)) if temp_c is not None else "none"
-        
+            
         cache_str = f"{file_hash}_{norm_laps}_{cond}_{norm_temp}"
         cache_key = hashlib.sha256(cache_str.encode("utf-8")).hexdigest()
-        
+            
         redis = getattr(request.app.state, "redis", None)
-        # Validation performante (on passe le contenu déjà lu)
-        validation_error = await validate_csv_file(file, content_override=content_bytes)
+        # Validation
+        validation_error = await validate_csv_file(file)
         if validation_error:
             logger.warning(f"[{analysis_id}] Validation failed: {validation_error}")
             raise HTTPException(
@@ -248,7 +222,6 @@ async def analyze_telemetry(
             track_temperature=temp_c,
             session_name=session_name,
             user_id=user_id,
-            content_override=content_bytes,
         )
 
         # Stocker en cache

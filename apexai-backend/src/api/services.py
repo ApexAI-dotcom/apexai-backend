@@ -562,24 +562,20 @@ class AnalysisService:
         os.makedirs(settings.OUTPUT_DIR, exist_ok=True)
         self._lap_filter = lap_filter if lap_filter else None
     
-    async def parse_laps(self, file: UploadFile, content_override: Optional[bytes] = None) -> List[Dict[str, Any]]:
+    async def parse_laps(self, file: UploadFile) -> List[Dict[str, Any]]:
         """
-        Parse le fichier CSV et retourne la liste des tours détectés.
+        Parse le fichier CSV et retourne la liste des tours détectés
+        (lap_number, lap_time_seconds, points_count, is_outlier).
         """
         temp_path = None
         try:
             temp_path = os.path.join(settings.TEMP_DIR, f"parse_laps_{uuid.uuid4().hex[:8]}_{file.filename}")
-            if content_override is not None:
-                content = content_override
-            else:
-                content = await file.read()
-                await file.seek(0)
-            
+            content = await file.read()
             if len(content) > 50 * 1024 * 1024:
                 raise ValueError("Fichier trop volumineux (max 50 MB).")
-            
             with open(temp_path, "wb") as f:
                 f.write(content)
+            await file.seek(0)
 
             beacon_markers = []
             try:
@@ -625,7 +621,6 @@ class AnalysisService:
         track_temperature: Optional[float] = None,
         session_name: Optional[str] = None,
         user_id: Optional[str] = None,
-        content_override: Optional[bytes] = None,
     ) -> Dict[str, Any]:
         """
         Traiter un fichier de télémétrie complet.
@@ -643,16 +638,13 @@ class AnalysisService:
         temp_path = None
         
         try:
-            # 1. Sauvegarder fichier temporairement (utilise override si dispo pour perf)
+            # 1. Sauvegarder fichier temporairement
             temp_path = os.path.join(
                 settings.TEMP_DIR,
                 f"{analysis_id}_{file.filename}"
             )
             
-            if content_override is not None:
-                content = content_override
-            else:
-                content = await file.read()
+            content = await file.read()
             MAX_SIZE = 50 * 1024 * 1024  # 50MB
             if len(content) > MAX_SIZE:
                 raise ValueError(
