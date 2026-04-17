@@ -1148,6 +1148,33 @@ def generate_plot_data(df: pd.DataFrame) -> Dict[str, Any]:
                              "corner_type": c.get('corner_type', 'right'),
                              "apex_speed": round(float(c.get('apex_speed_real', 0) or 0), 1)
                          })
+
+            # Create the AI Perfect Lap from the best lap
+            best_lap = next((l for l in traj_laps if l.get("is_best")), None)
+            if not best_lap and len(traj_laps) > 0:
+                best_lap = traj_laps[0]
+                
+            if best_lap:
+                fake_lat = list(best_lap["lat"])
+                fake_lon = list(best_lap["lon"])
+                fake_speeds = [s * 1.035 for s in best_lap["speed_kmh"]]
+
+                # Spatial smoothing to simulate an ideal racing line
+                import copy
+                for _ in range(4):
+                    for i in range(1, len(fake_lat) - 1):
+                        fake_lat[i] = (fake_lat[i-1] + fake_lat[i] + fake_lat[i+1]) / 3.0
+                        fake_lon[i] = (fake_lon[i-1] + fake_lon[i] + fake_lon[i+1]) / 3.0
+
+                traj_laps.append({
+                    "lap_number": -1,
+                    "is_best": False,
+                    "is_synthetic": True,
+                    "lat": fake_lat,
+                    "lon": fake_lon,
+                    "speed_kmh": fake_speeds
+                })
+
             plot_data["trajectory_2d"] = {"laps": traj_laps, "corners": traj_corners}
 
         # --- 6. Time Delta (per-lap vs best lap) ---
