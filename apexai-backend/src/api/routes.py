@@ -43,27 +43,35 @@ from jwt.exceptions import PyJWTError
 def _get_user_id_from_authorization(authorization: Optional[str]) -> Optional[str]:
     """
     Extrait user_id (UUID) depuis le header Authorization Bearer <jwt>.
-    Utilise le décodage local pour la performance.
+    Supporte ES256 (JWKS) et HS256 (Local Secret).
     """
     if not authorization or not authorization.startswith("Bearer "):
         return None
     token = authorization.replace("Bearer ", "").strip()
     
-    # Stratégie locale (même logique que auth.py)
+    # 1. Tentative JWKS
+    supabase_url = getattr(settings, "SUPABASE_URL", "")
+    if supabase_url:
+        try:
+            from jwt import PyJWKClient
+            jwks_url = f"{supabase_url.rstrip('/')}/auth/v1/jwks"
+            jwks_client = PyJWKClient(jwks_url)
+            signing_key = jwks_client.get_signing_key_from_jwt(token)
+            payload = jwt.decode(token, signing_key.key, algorithms=["HS256", "ES256"], audience="authenticated")
+            return str(payload.get("sub"))
+        except Exception:
+            pass
+
+    # 2. Fallback Secret local
     secret = getattr(settings, "SUPABASE_JWT_SECRET", "")
     if secret:
         try:
-            # On tente d'abord avec l'audience stricte, sinon sans verification d'aud
-            try:
-                payload = jwt.decode(token, secret, algorithms=["HS256"], audience="authenticated")
-            except PyJWTError:
-                payload = jwt.decode(token, secret, algorithms=["HS256"], options={"verify_aud": False})
-            
+            payload = jwt.decode(token, secret, algorithms=["HS256"], options={"verify_aud": False})
             return str(payload.get("sub"))
-        except PyJWTError:
+        except jwt.PyJWTError:
             pass
 
-    # Fallback SYNC sur Supabase uniquement si le secret est manquant ou décodage KO
+    # 3. Fallback SYNC Supabase API
     if not _supabase:
         return None
     try:
@@ -72,8 +80,7 @@ def _get_user_id_from_authorization(authorization: Optional[str]) -> Optional[st
         if not user:
             return None
         return user.get("id") if isinstance(user, dict) else getattr(user, "id", None)
-    except Exception as e:
-        logger.debug("get_user_id_from_authorization_fallback: %s", e)
+    except Exception:
         return None
 
 

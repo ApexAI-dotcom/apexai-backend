@@ -52,41 +52,55 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
     Vérifie le JWT Supabase et retourne le user_id (sub).
     Fallback : supabase.auth.get_user(token) si decode JWT échoue (support access_token, alg non strict).
     """
-    secret = getattr(settings, "SUPABASE_JWT_SECRET", "") or ""
-    # 1) Tentative decode JWT local (HS256)
+    # --- Stratégie de Vérification ---
+    # 1. Tentative via JWKS (Recommandé pour ES256/ECC)
+    # 2. Fallback via Secret local (Legacy HS256)
+    # 3. Fallback via Supabase API (Dernier recours)
+    
+    supabase_url = getattr(settings, "SUPABASE_URL", "")
+    secret = getattr(settings, "SUPABASE_JWT_SECRET", "")
+    
+    # Tentative JWKS (Auto-détection Algorithme ES256 / HS256)
+    if supabase_url:
+        try:
+            from jwt import PyJWKClient
+            jwks_url = f"{supabase_url.rstrip('/')}/auth/v1/jwks"
+            jwks_client = PyJWKClient(jwks_url)
+            signing_key = jwks_client.get_signing_key_from_jwt(token)
+            
+            payload = jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=["HS256", "ES256"],
+                audience="authenticated",
+            )
+            user_id = payload.get("sub")
+            if user_id:
+                logger.debug("jwt_success_jwks", extra={"user_id": user_id})
+                return str(user_id)
+        except Exception as e_jwks:
+            # On ne loggue en warning que si le second fallback échoue aussi
+            pass
+
+    # Fallback Secret Local (HS256)
     if secret:
         try:
-            # On tente d'abord avec l'audience stricte
             payload = jwt.decode(
                 token,
                 secret,
                 algorithms=["HS256"],
-                audience="authenticated",
+                options={"verify_aud": False}
             )
             user_id = payload.get("sub")
-            if not user_id:
-                raise HTTPException(status_code=401, detail="Invalid token claims")
-            return str(user_id)
-        except PyJWTError as e:
-            # Si échec (souvent audience mismatch), on tente sans vérification d'audience
-            # mais TOUJOURS avec la signature HS256 pour la sécurité.
-            try:
-                payload = jwt.decode(
-                    token,
-                    secret,
-                    algorithms=["HS256"],
-                    options={"verify_aud": False}
-                )
-                user_id = payload.get("sub")
-                if user_id:
-                    logger.info("jwt_success_no_aud", extra={"user_id": user_id})
-                    return str(user_id)
-            except PyJWTError as e2:
-                token_preview = (token[:20] + "...") if len(token) > 20 else token
-                logger.warning(
-                    "jwt_fail",
-                    extra={"error": str(e2), "header": token_preview},
-                )
+            if user_id:
+                logger.info("jwt_success_local_secret", extra={"user_id": user_id})
+                return str(user_id)
+        except PyJWTError as e_local:
+            token_preview = (token[:20] + "...") if len(token) > 20 else token
+            logger.warning(
+                "jwt_fail",
+                extra={"error": str(e_local), "header": token_preview, "method": "local_and_jwks"},
+            )
     else:
         logger.warning("SUPABASE_JWT_SECRET not set, trying Supabase auth fallback only")
 
