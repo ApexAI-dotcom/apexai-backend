@@ -36,11 +36,34 @@ if _SUPABASE_URL and _SUPABASE_SERVICE_KEY and _SUPABASE_SERVICE_KEY != "ton_ser
         pass
 
 
+from .auth import get_current_user
+import jwt
+from jwt.exceptions import PyJWTError
+
 def _get_user_id_from_authorization(authorization: Optional[str]) -> Optional[str]:
-    """Extrait user_id (UUID) depuis le header Authorization Bearer <jwt>."""
+    """
+    Extrait user_id (UUID) depuis le header Authorization Bearer <jwt>.
+    Utilise le décodage local pour la performance.
+    """
     if not authorization or not authorization.startswith("Bearer "):
         return None
     token = authorization.replace("Bearer ", "").strip()
+    
+    # Stratégie locale (même logique que auth.py)
+    secret = getattr(settings, "SUPABASE_JWT_SECRET", "")
+    if secret:
+        try:
+            # On tente d'abord avec l'audience stricte, sinon sans verification d'aud
+            try:
+                payload = jwt.decode(token, secret, algorithms=["HS256"], audience="authenticated")
+            except PyJWTError:
+                payload = jwt.decode(token, secret, algorithms=["HS256"], options={"verify_aud": False})
+            
+            return str(payload.get("sub"))
+        except PyJWTError:
+            pass
+
+    # Fallback SYNC sur Supabase uniquement si le secret est manquant ou décodage KO
     if not _supabase:
         return None
     try:
@@ -50,7 +73,7 @@ def _get_user_id_from_authorization(authorization: Optional[str]) -> Optional[st
             return None
         return user.get("id") if isinstance(user, dict) else getattr(user, "id", None)
     except Exception as e:
-        logger.debug("get_user_id_from_authorization: %s", e)
+        logger.debug("get_user_id_from_authorization_fallback: %s", e)
         return None
 
 
@@ -73,14 +96,16 @@ async def parse_laps(
 ):
     """Parse le CSV et retourne les tours détectés (réutilise la logique detect_laps)."""
     try:
-        validation_error = await validate_csv_file(file)
+        content_bytes = await file.read()
+        await file.seek(0)
+        validation_error = await validate_csv_file(file, content_override=content_bytes)
         if validation_error:
             raise HTTPException(
                 status_code=400,
                 detail={"success": False, "error": "Validation error", "message": validation_error},
             )
         service = AnalysisService()
-        laps = await service.parse_laps(file)
+        laps = await service.parse_laps(file, content_override=content_bytes)
         return JSONResponse(content={"success": True, "laps": laps})
     except HTTPException:
         raise
@@ -182,8 +207,8 @@ async def analyze_telemetry(
         cache_key = hashlib.sha256(cache_str.encode("utf-8")).hexdigest()
         
         redis = getattr(request.app.state, "redis", None)
-        # Validation
-        validation_error = await validate_csv_file(file)
+        # Validation performante (on passe le contenu déjà lu)
+        validation_error = await validate_csv_file(file, content_override=content_bytes)
         if validation_error:
             logger.warning(f"[{analysis_id}] Validation failed: {validation_error}")
             raise HTTPException(
@@ -216,6 +241,7 @@ async def analyze_telemetry(
             track_temperature=temp_c,
             session_name=session_name,
             user_id=user_id,
+            content_override=content_bytes,
         )
 
         # Stocker en cache

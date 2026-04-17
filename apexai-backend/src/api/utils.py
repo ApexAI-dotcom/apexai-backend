@@ -44,12 +44,13 @@ def sanitize_json_data(obj: Any) -> Any:
         return obj
 
 
-async def validate_csv_file(file: UploadFile) -> Optional[str]:
+async def validate_csv_file(file: UploadFile, content_override: Optional[bytes] = None) -> Optional[str]:
     """
     Valider un fichier CSV.
     
     Args:
         file: Fichier uploadé
+        content_override: Si déjà lu, évite un re-read
     
     Returns:
         None si OK, sinon message d'erreur
@@ -63,12 +64,15 @@ async def validate_csv_file(file: UploadFile) -> Optional[str]:
         if ext != '.csv':
             return f"Extension invalide. Attendu: .csv, reçu: {ext}"
         
-        # Lire contenu
-        content = await file.read()
-        size = len(content)
+        # Lire contenu ou utiliser l'override
+        if content_override is not None:
+            content = content_override
+        else:
+            content = await file.read()
+            # Reset pour lecture ultérieure si on n'a pas utilisé l'override
+            await file.seek(0)
         
-        # Reset pour lecture ultérieure
-        await file.seek(0)
+        size = len(content)
         
         # Vérifier taille
         if size > settings.MAX_FILE_SIZE_BYTES:

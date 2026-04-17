@@ -56,6 +56,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
     # 1) Tentative decode JWT local (HS256)
     if secret:
         try:
+            # On tente d'abord avec l'audience stricte
             payload = jwt.decode(
                 token,
                 secret,
@@ -64,14 +65,28 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
             )
             user_id = payload.get("sub")
             if not user_id:
-                raise HTTPException(status_code=401, detail="Invalid token")
+                raise HTTPException(status_code=401, detail="Invalid token claims")
             return str(user_id)
         except PyJWTError as e:
-            token_preview = (token[:20] + "...") if len(token) > 20 else token
-            logger.warning(
-                "jwt_fail",
-                extra={"error": str(e), "header": token_preview},
-            )
+            # Si échec (souvent audience mismatch), on tente sans vérification d'audience
+            # mais TOUJOURS avec la signature HS256 pour la sécurité.
+            try:
+                payload = jwt.decode(
+                    token,
+                    secret,
+                    algorithms=["HS256"],
+                    options={"verify_aud": False}
+                )
+                user_id = payload.get("sub")
+                if user_id:
+                    logger.info("jwt_success_no_aud", extra={"user_id": user_id})
+                    return str(user_id)
+            except PyJWTError as e2:
+                token_preview = (token[:20] + "...") if len(token) > 20 else token
+                logger.warning(
+                    "jwt_fail",
+                    extra={"error": str(e2), "header": token_preview},
+                )
     else:
         logger.warning("SUPABASE_JWT_SECRET not set, trying Supabase auth fallback only")
 
