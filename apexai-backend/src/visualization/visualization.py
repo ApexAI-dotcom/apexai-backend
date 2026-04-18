@@ -1156,25 +1156,43 @@ def generate_plot_data(df: pd.DataFrame) -> Dict[str, Any]:
                 best_lap = traj_laps[0]
                 
             if best_lap:
-                fake_lat = list(best_lap["lat"])
-                fake_lon = list(best_lap["lon"])
-                fake_speeds = [s * 1.035 for s in best_lap["speed_kmh"]]
-
-                # Spatial smoothing to simulate an ideal racing line
-                import copy
-                for _ in range(4):
-                    for i in range(1, len(fake_lat) - 1):
-                        fake_lat[i] = (fake_lat[i-1] + fake_lat[i] + fake_lat[i+1]) / 3.0
-                        fake_lon[i] = (fake_lon[i-1] + fake_lon[i] + fake_lon[i+1]) / 3.0
-
-                traj_laps.append({
-                    "lap_number": -1,
-                    "is_best": False,
-                    "is_synthetic": True,
-                    "lat": fake_lat,
-                    "lon": fake_lon,
-                    "speed_kmh": fake_speeds
-                })
+                import math
+                
+                raw_lat = list(best_lap["lat"])
+                raw_lon = list(best_lap["lon"])
+                raw_spd = list(best_lap["speed_kmh"])
+                
+                # Step 1: Filter out None/NaN coordinates (the root cause bug)
+                def _valid(v):
+                    return v is not None and isinstance(v, (int, float)) and not math.isnan(v) and not math.isinf(v)
+                
+                valid_idx = [i for i in range(min(len(raw_lat), len(raw_lon)))
+                             if _valid(raw_lat[i]) and _valid(raw_lon[i])]
+                
+                if len(valid_idx) >= 20:
+                    fake_lat = [float(raw_lat[i]) for i in valid_idx]
+                    fake_lon = [float(raw_lon[i]) for i in valid_idx]
+                    fake_speeds = [float(raw_spd[i]) * 1.035 if i < len(raw_spd) and _valid(raw_spd[i]) else 60.0
+                                   for i in valid_idx]
+                    
+                    # Step 2: Spatial smoothing on CLEAN data (no NaN contamination)
+                    for _ in range(4):
+                        new_lat = list(fake_lat)
+                        new_lon = list(fake_lon)
+                        for i in range(1, len(fake_lat) - 1):
+                            new_lat[i] = (fake_lat[i-1] + fake_lat[i] + fake_lat[i+1]) / 3.0
+                            new_lon[i] = (fake_lon[i-1] + fake_lon[i] + fake_lon[i+1]) / 3.0
+                        fake_lat = new_lat
+                        fake_lon = new_lon
+                    
+                    traj_laps.append({
+                        "lap_number": -1,
+                        "is_best": False,
+                        "is_synthetic": True,
+                        "lat": fake_lat,
+                        "lon": fake_lon,
+                        "speed_kmh": fake_speeds
+                    })
 
             plot_data["trajectory_2d"] = {"laps": traj_laps, "corners": traj_corners}
 

@@ -63,7 +63,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 REDIS_CACHE_TTL = 3600
-REDIS_KEY_PREFIX = "analysis:v3:"
+REDIS_KEY_PREFIX = "analysis:v4:"
 
 
 @router.post(
