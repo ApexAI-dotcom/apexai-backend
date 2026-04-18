@@ -1153,7 +1153,12 @@ def generate_plot_data(df: pd.DataFrame) -> Dict[str, Any]:
             # Create the AI Perfect Lap from the best lap
             best_lap = next((l for l in traj_laps if l.get("is_best")), None)
             if not best_lap and len(traj_laps) > 0:
-                best_lap = traj_laps[0]
+                # Fallback: DO NOT pick lap 0 (out-lap). Pick the lap with highest max speed.
+                valid_laps = [l for l in traj_laps if l.get("lap_number", 0) > 0]
+                if valid_laps:
+                    best_lap = max(valid_laps, key=lambda l: max(l.get("speed_kmh", [0])))
+                else:
+                    best_lap = traj_laps[-1]
                 
             if best_lap:
                 import math

@@ -470,6 +470,8 @@ def _run_analysis_pipeline_sync(
     lap_time = best_lap_time or 0.0
 
     # Calculate Max Speed & Lap
+    max_speed = 0.0
+    max_speed_lap = 0
     speed_col = "speed_kmh" if "speed_kmh" in df.columns else ("speed" if "speed" in df.columns else None)
     if speed_col and "lap_number" in df.columns:
         valid_speed_df = df[df["lap_number"] > 0] if 0 in df["lap_number"].unique() else df
@@ -482,6 +484,13 @@ def _run_analysis_pipeline_sync(
             max_speed_lap = int(df.loc[df[speed_col].idxmax()]["lap_number"])
     elif speed_col:
         max_speed = round(float(df[speed_col].max()), 1)
+        max_speed_lap = 0
+
+    # CRITICAL: Store in df.attrs so visualization.py uses the correct fast lap, not the out-lap (lap 0)
+    df.attrs["best_lap_number"] = fastest_lap_number if 'fastest_lap_number' in locals() else 0
+    df.attrs["max_speed"] = max_speed
+
+    # FINAL QUALITY GATE: Incoherent Lap Detection
 
     # FINAL QUALITY GATE: Incoherent Lap Detection
     session_duration = 0
