@@ -1170,12 +1170,32 @@ def generate_plot_data(df: pd.DataFrame) -> Dict[str, Any]:
                              if _valid(raw_lat[i]) and _valid(raw_lon[i])]
                 
                 if len(valid_idx) >= 20:
-                    fake_lat = [float(raw_lat[i]) for i in valid_idx]
-                    fake_lon = [float(raw_lon[i]) for i in valid_idx]
-                    fake_speeds = [float(raw_spd[i]) * 1.035 if i < len(raw_spd) and _valid(raw_spd[i]) else 60.0
+                    clean_lat = [float(raw_lat[i]) for i in valid_idx]
+                    clean_lon = [float(raw_lon[i]) for i in valid_idx]
+                    clean_spd = [float(raw_spd[i]) * 1.035 if i < len(raw_spd) and _valid(raw_spd[i]) else 60.0
                                    for i in valid_idx]
                     
-                    # Step 2: Spatial smoothing on CLEAN data (no NaN contamination)
+                    # Step 2: Remove pit lane / stand exit points (low speed zones)
+                    valid_speeds = [s for s in clean_spd if s > 5]
+                    if valid_speeds:
+                        speed_median = sorted(valid_speeds)[len(valid_speeds) // 2]
+                        pit_threshold = max(25.0, speed_median * 0.35)
+                    else:
+                        pit_threshold = 25.0
+                    
+                    track_idx = [i for i in range(len(clean_lat))
+                                 if clean_spd[i] >= pit_threshold]
+                    
+                    if len(track_idx) >= 20:
+                        fake_lat = [clean_lat[i] for i in track_idx]
+                        fake_lon = [clean_lon[i] for i in track_idx]
+                        fake_speeds = [clean_spd[i] for i in track_idx]
+                    else:
+                        fake_lat = clean_lat
+                        fake_lon = clean_lon
+                        fake_speeds = clean_spd
+                    
+                    # Step 3: Spatial smoothing on CLEAN data
                     for _ in range(4):
                         new_lat = list(fake_lat)
                         new_lon = list(fake_lon)
