@@ -172,16 +172,19 @@ class KartService:
             updates = {}
             
             if comp_type == "engine":
-                prev_hours = float(profile.get("engine_hours_current", 0))
-                # Cast to int for history table compatibility (INTEGER)
-                prev_sessions = int(float(profile.get("engine_sessions", 0)))
+                raw_hours = profile.get("engine_hours_current")
+                prev_hours = float(raw_hours) if raw_hours is not None else 0.0
+                raw_sessions = profile.get("engine_sessions")
+                prev_sessions = int(float(raw_sessions)) if raw_sessions is not None else 0
                 updates["engine_hours_current"] = 0.0
                 updates["engine_sessions"] = 0.0
             elif comp_type == "tires":
-                prev_sessions = int(profile.get("tires_sessions_current", 0))
+                raw_sessions = profile.get("tires_sessions_current")
+                prev_sessions = int(raw_sessions) if raw_sessions is not None else 0
                 updates["tires_sessions_current"] = 0
             elif comp_type == "brakes":
-                prev_sessions = int(profile.get("brakes_sessions_current", 0))
+                raw_sessions = profile.get("brakes_sessions_current")
+                prev_sessions = int(raw_sessions) if raw_sessions is not None else 0
                 updates["brakes_sessions_current"] = 0
             else:
                 logger.warning(f"Invalid component type received: {comp_type}")
