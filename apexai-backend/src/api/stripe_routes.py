@@ -337,26 +337,40 @@ def _log_webhook(step: str, **kwargs: object) -> None:
     logger.info("stripe_webhook %s", json.dumps({"step": step, **kwargs}))
 
 
+@router.get("/webhook")
+async def stripe_webhook_verify():
+    """Endpoint pour vérifier que le webhook est bien accessible."""
+    return {"status": "webhook endpoint active", "configuration": "ready" if STRIPE_WEBHOOK_SECRET else "missing_secret"}
+
+
 @router.post("/webhook")
 async def stripe_webhook(request: Request) -> JSONResponse:
     """
     Webhook Stripe. Écrit UNIQUEMENT dans la table profiles (via service_role).
     Événements : checkout.session.completed, customer.subscription.updated, customer.subscription.deleted.
     """
+    _log_webhook("request_received", ip=request.client.host if request.client else "unknown")
+    
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature", "")
 
     if not STRIPE_WEBHOOK_SECRET:
-        logger.warning("STRIPE_WEBHOOK_SECRET not set, rejecting webhook")
+        logger.error("STRIPE_WEBHOOK_SECRET is empty in environment variables")
         raise HTTPException(status_code=500, detail="Webhook not configured")
 
     try:
+        # Log des premiers caractères du secret (pour debug sans leak)
+        secret_hint = f"{STRIPE_WEBHOOK_SECRET[:5]}...{STRIPE_WEBHOOK_SECRET[-3:]}" if len(STRIPE_WEBHOOK_SECRET) > 8 else "***"
+        logger.info(f"Attempting signature verification with secret starting with: {secret_hint}")
+        
         event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+        logger.info("✓ Signature verification successful")
     except ValueError as e:
-        logger.warning("Webhook invalid payload: %s", e)
+        logger.warning("Webhook invalid payload (ValueError): %s", e)
         raise HTTPException(status_code=400, detail="Invalid payload")
     except stripe.error.SignatureVerificationError as e:
-        logger.warning("Webhook invalid signature: %s", e)
+        logger.error("❌ Webhook signature verification failed: %s", e)
+        logger.error("Check if STRIPE_WEBHOOK_SECRET matches the one in Stripe Dashboard (starts with whsec_...)")
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     event_type = event.get("type", "")
