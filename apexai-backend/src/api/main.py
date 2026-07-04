@@ -39,7 +39,7 @@ from .rate_limiter import limiter
 try:
     from .stripe_routes import router as stripe_router
     logger.info("✓ Stripe router loaded successfully")
-except ImportError as e:
+except (ImportError, Exception) as e:
     logger.warning(f"⚠ Warning: Could not import stripe router: {e}")
     logger.warning("  Stripe endpoints will not be available")
     stripe_router = None

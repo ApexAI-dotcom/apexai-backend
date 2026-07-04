@@ -59,7 +59,7 @@ STRIPE_PRICE_TEAM_MONTHLY = (os.getenv("STRIPE_PRICE_TEAM_MONTHLY") or "").strip
 STRIPE_PRICE_TEAM_ANNUAL = (os.getenv("STRIPE_PRICE_TEAM_ANNUAL") or "").strip()
 
 if not STRIPE_PRICE_RACER_MONTHLY:
-    raise RuntimeError("Missing STRIPE_PRICE_*")
+    logger.error("STRIPE_PRICE_RACER_MONTHLY is not set — Stripe checkout will not work")
 
 PRICE_IDS = {
     "racer_monthly": STRIPE_PRICE_RACER_MONTHLY,
@@ -372,6 +372,9 @@ async def stripe_webhook(request: Request) -> JSONResponse:
         logger.error("❌ Webhook signature verification failed: %s", e)
         logger.error("Check if STRIPE_WEBHOOK_SECRET matches the one in Stripe Dashboard (starts with whsec_...)")
         raise HTTPException(status_code=400, detail="Invalid signature")
+    except Exception as e:
+        logger.error("Webhook unexpected error during signature verification: %s", e, exc_info=True)
+        raise HTTPException(status_code=400, detail="Webhook error")
 
     event_type = event.get("type", "")
     event_id = event.get("id", "")
