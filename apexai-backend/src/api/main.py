@@ -274,9 +274,18 @@ async def health():
 
 
 # Handler d'erreurs global
+from fastapi import HTTPException as FastAPIHTTPException
+from fastapi.responses import JSONResponse as FastAPIJSONResponse
+
+@app.exception_handler(FastAPIHTTPException)
+async def http_exception_handler(request: Request, exc: FastAPIHTTPException):
+    return FastAPIJSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Handler global pour les erreurs non capturées"""
+    if isinstance(exc, FastAPIHTTPException):
+        return FastAPIJSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
     logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
     return JSONResponse(
         status_code=500,
