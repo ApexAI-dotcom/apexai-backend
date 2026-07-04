@@ -376,8 +376,12 @@ async def stripe_webhook(request: Request) -> JSONResponse:
         logger.error("Webhook unexpected error during signature verification: %s", e, exc_info=True)
         raise HTTPException(status_code=400, detail="Webhook error")
 
-    event_type = event.get("type", "")
-    event_id = event.get("id", "")
+    try:
+        event_type = event.get("type", "") if hasattr(event, "get") else getattr(event, "type", "")
+        event_id = event.get("id", "") if hasattr(event, "get") else getattr(event, "id", "")
+    except Exception:
+        event_type = getattr(event, "type", "")
+        event_id = getattr(event, "id", "")
     _log_webhook("event_received", event_type=event_type, event_id=event_id)
 
     try:
