@@ -135,9 +135,14 @@ class KartService:
             if dur_hours > 0:
                 updates["engine_hours_current"] = float(profile.get("engine_hours_current", 0)) + dur_hours
                 updates["engine_sessions"] = float(profile.get("engine_sessions", 0)) + 1
+                updates["chain_hours_current"] = float(profile.get("chain_hours_current") or 0.0) + dur_hours
+            
+            laps = int(metrics.get("laps_count", 0))
+            if laps > 0:
+                updates["tires_laps_current"] = int(profile.get("tires_laps_current") or 0) + laps
+                updates["brakes_sessions_current"] = int(profile.get("brakes_sessions_current") or 0) + laps
             
             updates["tires_sessions_current"] = int(profile.get("tires_sessions_current", 0)) + 1
-            updates["brakes_sessions_current"] = int(profile.get("brakes_sessions_current", 0)) + 1
             
             batt_avg = metrics.get("battery_voltage_avg")
             batt_min = metrics.get("battery_voltage_min")
