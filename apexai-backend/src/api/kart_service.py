@@ -101,6 +101,48 @@ class KartService:
             return []
 
     @staticmethod
+    def save_kart_setup(user_id: str, setup_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Save a new kart setup to the kart_setups table."""
+        if not supabase:
+            raise Exception("Supabase client not initialized")
+        
+        # Prepare payload with snake_case keys for the database
+        db_payload = {
+            "user_id": user_id,
+            "weather": setup_data.get("weather"),
+            "air_temp": setup_data.get("airTemp"),
+            "track_temp": setup_data.get("trackTemp"),
+            "mode": setup_data.get("mode"),
+            "circuit": setup_data.get("circuit"),
+            "tire_model": setup_data.get("tireModel"),
+            "cold_pressure_front": setup_data.get("coldPressureFront"),
+            "cold_pressure_rear": setup_data.get("coldPressureRear"),
+            "hot_pressure_front": setup_data.get("hotPressureFront"),
+            "hot_pressure_rear": setup_data.get("hotPressureRear"),
+            "track_width_front": setup_data.get("trackWidthFront"),
+            "track_width_rear": setup_data.get("trackWidthRear"),
+            "ride_height_front": setup_data.get("rideHeightFront"),
+            "ride_height_rear": setup_data.get("rideHeightRear"),
+            "camber": setup_data.get("camber"),
+            "caster": setup_data.get("caster"),
+            "rear_axle": setup_data.get("rearAxle"),
+            "sprocket_front": setup_data.get("sprocketFront"),
+            "sprocket_rear": setup_data.get("sprocketRear"),
+            "carb_config": setup_data.get("carbConfig"),
+        }
+        
+        # Clean up empty strings or None if necessary, but Supabase handles them if columns are nullable
+        
+        try:
+            res = supabase.table("kart_setups").insert(db_payload).execute()
+            if res.data and len(res.data) > 0:
+                return res.data[0]
+            return {}
+        except Exception as e:
+            logger.error(f"Error save_kart_setup: {e}")
+            raise Exception("Could not save Kart setup")
+
+    @staticmethod
     def upsert_session(user_id: str, signature: str, imported_via: str, metrics: Dict[str, Any], analysis_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Upsert a session in kart_session_logs.

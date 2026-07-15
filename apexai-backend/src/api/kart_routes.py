@@ -8,6 +8,7 @@ from src.core.kart_mechanical import parse_kart_mechanical
 from src.api.kart_service import KartService
 from src.api.auth import get_current_user
 from src.api.config import settings
+from src.api.models import KartSetupCreate
 
 router = APIRouter()
 
@@ -178,5 +179,20 @@ async def delete_sessions_by_day(date: str, current_user: str = Depends(get_curr
         return res
     except ValueError as ve:
         raise HTTPException(status_code=404, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/api/kart/setups")
+async def save_kart_setup(setup: KartSetupCreate, current_user: str = Depends(get_current_user)):
+    """Save a new kart setup."""
+    if not is_mon_kart_enabled():
+        raise HTTPException(status_code=404, detail="Mon Kart is currently disabled.")
+        
+    if not KartService.is_racer_or_team(current_user):
+        raise HTTPException(status_code=403, detail="Mon Kart is only available for Racer and Team plans.")
+        
+    try:
+        res = KartService.save_kart_setup(current_user, setup.model_dump())
+        return {"success": True, "setup": res}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

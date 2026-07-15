@@ -134,3 +134,30 @@ class ErrorResponse(BaseModel):
     error: str = Field(description="Type d'erreur")
     message: str = Field(description="Message d'erreur")
     details: Optional[Dict] = Field(default=None, description="Détails supplémentaires")
+
+
+class KartSetupCreate(BaseModel):
+    """Payload for saving a kart setup"""
+    weather: Optional[str] = None
+    airTemp: Optional[float] = None
+    trackTemp: Optional[float] = None
+    mode: Optional[str] = None
+    circuit: Optional[Dict[str, Any]] = None
+    tireModel: Optional[str] = None
+    coldPressureFront: Optional[float] = None
+    coldPressureRear: Optional[float] = None
+    hotPressureFront: Optional[float] = None
+    hotPressureRear: Optional[float] = None
+    trackWidthFront: Optional[float] = None
+    trackWidthRear: Optional[float] = None
+    rideHeightFront: Optional[str] = None
+    rideHeightRear: Optional[str] = None
+    camber: Optional[str] = None
+    caster: Optional[str] = None
+    rearAxle: Optional[str] = None
+    sprocketFront: Optional[float] = None
+    sprocketRear: Optional[float] = None
+    carbConfig: Optional[Dict[str, Any]] = None
+
+    class Config:
+        extra = "allow"
