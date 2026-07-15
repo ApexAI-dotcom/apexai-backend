@@ -109,11 +109,13 @@ class KartService:
         # Prepare payload with snake_case keys for the database
         db_payload = {
             "user_id": user_id,
+            "setup_name": setup_data.get("setupName", "Nouveau Setup"),
             "weather": setup_data.get("weather"),
             "air_temp": setup_data.get("airTemp"),
             "track_temp": setup_data.get("trackTemp"),
             "mode": setup_data.get("mode"),
             "circuit": setup_data.get("circuit"),
+            "circuit_id": setup_data.get("circuit_id"),
             "tire_model": setup_data.get("tireModel"),
             "cold_pressure_front": setup_data.get("coldPressureFront"),
             "cold_pressure_rear": setup_data.get("coldPressureRear"),
@@ -131,8 +133,6 @@ class KartService:
             "carb_config": setup_data.get("carbConfig"),
         }
         
-        # Clean up empty strings or None if necessary, but Supabase handles them if columns are nullable
-        
         try:
             res = supabase.table("kart_setups").insert(db_payload).execute()
             if res.data and len(res.data) > 0:
@@ -141,6 +141,47 @@ class KartService:
         except Exception as e:
             logger.error(f"Error save_kart_setup: {e}")
             raise Exception("Could not save Kart setup")
+
+    @staticmethod
+    def get_kart_setups(user_id: str) -> List[Dict[str, Any]]:
+        """Get all saved setups for a user, joined with circuit info if possible."""
+        if not supabase:
+            raise Exception("Supabase client not initialized")
+            
+        try:
+            res = supabase.table("kart_setups").select("*, circuits(*)").eq("user_id", user_id).order("created_at", desc=True).execute()
+            return res.data or []
+        except Exception as e:
+            logger.error(f"Error get_kart_setups: {e}")
+            return []
+
+    @staticmethod
+    def get_circuits() -> List[Dict[str, Any]]:
+        """Get all circuits."""
+        if not supabase:
+            raise Exception("Supabase client not initialized")
+            
+        try:
+            res = supabase.table("circuits").select("*").order("name").execute()
+            return res.data or []
+        except Exception as e:
+            logger.error(f"Error get_circuits: {e}")
+            return []
+
+    @staticmethod
+    def create_circuit(circuit_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new circuit."""
+        if not supabase:
+            raise Exception("Supabase client not initialized")
+            
+        try:
+            res = supabase.table("circuits").insert(circuit_data).execute()
+            if res.data and len(res.data) > 0:
+                return res.data[0]
+            return {}
+        except Exception as e:
+            logger.error(f"Error create_circuit: {e}")
+            raise Exception("Could not create circuit")
 
     @staticmethod
     def upsert_session(user_id: str, signature: str, imported_via: str, metrics: Dict[str, Any], analysis_id: Optional[str] = None) -> Dict[str, Any]:

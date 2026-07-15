@@ -8,7 +8,7 @@ from src.core.kart_mechanical import parse_kart_mechanical
 from src.api.kart_service import KartService
 from src.api.auth import get_current_user
 from src.api.config import settings
-from src.api.models import KartSetupCreate
+from src.api.models import KartSetupCreate, CircuitCreate
 
 router = APIRouter()
 
@@ -194,5 +194,38 @@ async def save_kart_setup(setup: KartSetupCreate, current_user: str = Depends(ge
     try:
         res = KartService.save_kart_setup(current_user, setup.model_dump())
         return {"success": True, "setup": res}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/api/kart/setups")
+async def get_kart_setups(current_user: str = Depends(get_current_user)):
+    """Get all saved kart setups for the user."""
+    if not is_mon_kart_enabled():
+        raise HTTPException(status_code=404, detail="Mon Kart is currently disabled.")
+        
+    if not KartService.is_racer_or_team(current_user):
+        raise HTTPException(status_code=403, detail="Mon Kart is only available for Racer and Team plans.")
+        
+    try:
+        setups = KartService.get_kart_setups(current_user)
+        return {"setups": setups}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/api/circuits")
+async def get_circuits(current_user: str = Depends(get_current_user)):
+    """Get all available circuits."""
+    try:
+        circuits = KartService.get_circuits()
+        return {"circuits": circuits}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/api/circuits")
+async def create_circuit(circuit: CircuitCreate, current_user: str = Depends(get_current_user)):
+    """Create a new circuit."""
+    try:
+        res = KartService.create_circuit(circuit.model_dump())
+        return {"success": True, "circuit": res}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

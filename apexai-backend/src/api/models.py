@@ -136,13 +136,34 @@ class ErrorResponse(BaseModel):
     details: Optional[Dict] = Field(default=None, description="Détails supplémentaires")
 
 
+class CircuitCreate(BaseModel):
+    name: str
+    country: Optional[str] = None
+    city: Optional[str] = None
+    length_m: Optional[int] = None
+    corners: Optional[int] = None
+    # Paramètres TrackSignature
+    speed_level: Optional[str] = None
+    rotation_level: Optional[str] = None
+    elevation: Optional[str] = None
+    bumps: Optional[str] = None
+    slow_corners: Optional[int] = None
+    medium_corners: Optional[int] = None
+    fast_corners: Optional[int] = None
+    
+    class Config:
+        extra = "allow"
+
+
 class KartSetupCreate(BaseModel):
     """Payload for saving a kart setup"""
+    setupName: Optional[str] = Field(default="Nouveau Setup", description="Nom du setup")
     weather: Optional[str] = None
     airTemp: Optional[float] = None
     trackTemp: Optional[float] = None
     mode: Optional[str] = None
     circuit: Optional[Dict[str, Any]] = None
+    circuit_id: Optional[str] = None
     tireModel: Optional[str] = None
     coldPressureFront: Optional[float] = None
     coldPressureRear: Optional[float] = None
