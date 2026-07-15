@@ -106,6 +106,11 @@ class KartService:
         if not supabase:
             raise Exception("Supabase client not initialized")
         
+        # Extract circuit_id from either top-level or nested circuit dictionary
+        circuit_id = setup_data.get("circuit_id")
+        if not circuit_id and isinstance(setup_data.get("circuit"), dict):
+            circuit_id = setup_data.get("circuit", {}).get("id") or setup_data.get("circuit", {}).get("value")
+
         # Prepare payload with snake_case keys for the database
         db_payload = {
             "user_id": user_id,
@@ -114,8 +119,7 @@ class KartService:
             "air_temp": setup_data.get("airTemp"),
             "track_temp": setup_data.get("trackTemp"),
             "mode": setup_data.get("mode"),
-            "circuit": setup_data.get("circuit"),
-            "circuit_id": setup_data.get("circuit_id"),
+            "circuit_id": circuit_id,
             "tire_model": setup_data.get("tireModel"),
             "cold_pressure_front": setup_data.get("coldPressureFront"),
             "cold_pressure_rear": setup_data.get("coldPressureRear"),
@@ -140,7 +144,7 @@ class KartService:
             return {}
         except Exception as e:
             logger.error(f"Error save_kart_setup: {e}")
-            raise Exception("Could not save Kart setup")
+            raise Exception(f"Could not save Kart setup: {str(e)}")
 
     @staticmethod
     def get_kart_setups(user_id: str) -> List[Dict[str, Any]]:
