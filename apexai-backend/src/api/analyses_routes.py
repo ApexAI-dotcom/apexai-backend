@@ -29,7 +29,11 @@ SUPABASE_SERVICE_ROLE_KEY = (
 )
 
 supabase: Optional[Client] = None
-if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY and SUPABASE_SERVICE_ROLE_KEY not in ("", "ton_service_role_key"):
+if settings.ENVIRONMENT == "development":
+    from .mock_db import MockSupabaseClient
+    supabase = MockSupabaseClient()
+    logger.info("Initialized local mock Supabase client for dev mode in analyses_routes")
+elif SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY and SUPABASE_SERVICE_ROLE_KEY not in ("", "ton_service_role_key"):
     supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     logger.info("Supabase client initialized in analyses_routes: %s", SUPABASE_URL)
 else:

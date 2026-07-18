@@ -15,7 +15,11 @@ SUPABASE_SERVICE_ROLE_KEY = (
 )
 
 supabase: Optional[Client] = None
-if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY and SUPABASE_SERVICE_ROLE_KEY not in ("", "ton_service_role_key"):
+if settings.ENVIRONMENT == "development":
+    from .mock_db import MockSupabaseClient
+    supabase = MockSupabaseClient()
+    logger.info("Initialized local mock Supabase client for dev mode in kart_service")
+elif SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY and SUPABASE_SERVICE_ROLE_KEY not in ("", "ton_service_role_key"):
     supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 else:
     logger.warning("Supabase client is None in kart_service")
@@ -37,6 +41,9 @@ class KartService:
 
     @staticmethod
     def is_racer_or_team(user_id: str) -> bool:
+        # Toujours autoriser en mode développement local
+        if settings.ENVIRONMENT == "development":
+            return True
         tier = KartService.get_subscription_tier(user_id)
         return tier in ["racer", "team"]
 
@@ -135,7 +142,23 @@ class KartService:
             "sprocket_front": setup_data.get("sprocketFront"),
             "sprocket_rear": setup_data.get("sprocketRear"),
             "carb_config": setup_data.get("carbConfig"),
+            "driver_weight": setup_data.get("driverWeight"),
+            "kart_weight": setup_data.get("kartWeight"),
+            "target_weight": setup_data.get("targetWeight"),
+            "ballast": setup_data.get("ballast"),
         }
+        
+        # Check if updating an existing setup
+        setup_id = setup_data.get("id")
+        if setup_id:
+            try:
+                res = supabase.table("kart_setups").update(db_payload).eq("id", setup_id).eq("user_id", user_id).execute()
+                if res.data and len(res.data) > 0:
+                    return res.data[0]
+                return {}
+            except Exception as e:
+                logger.error(f"Error updating kart_setup {setup_id}: {e}")
+                raise Exception(f"Could not update Kart setup: {str(e)}")
         
         try:
             res = supabase.table("kart_setups").insert(db_payload).execute()
@@ -173,19 +196,73 @@ class KartService:
             return []
 
     @staticmethod
-    def create_circuit(circuit_data: Dict[str, Any]) -> Dict[str, Any]:
+    def create_circuit(circuit_data: Dict[str, Any], user_id: str) -> Dict[str, Any]:
         """Create a new circuit."""
         if not supabase:
             raise Exception("Supabase client not initialized")
             
         try:
+            from slugify import slugify
+            generated_slug = slugify(circuit_data.get("name", "circuit"))
+            
+            existing = supabase.table("circuits").select("*").eq("slug", generated_slug).execute()
+            if existing.data and len(existing.data) > 0:
+                return existing.data[0]
+                
+            circuit_data["slug"] = generated_slug
+            circuit_data["created_by"] = user_id
+            circuit_data["verified"] = False
+            
+            # Cast numeric values to int to prevent DB errors
+            if "hairpinsCount" in circuit_data and circuit_data["hairpinsCount"] is not None:
+                try:
+                    circuit_data["hairpinsCount"] = int(circuit_data["hairpinsCount"])
+                except (ValueError, TypeError):
+                    pass
+            if "fastCornersCount" in circuit_data and circuit_data["fastCornersCount"] is not None:
+                try:
+                    circuit_data["fastCornersCount"] = int(circuit_data["fastCornersCount"])
+                except (ValueError, TypeError):
+                    pass
+            
             res = supabase.table("circuits").insert(circuit_data).execute()
             if res.data and len(res.data) > 0:
                 return res.data[0]
-            return {}
+            raise Exception("Insertion failed")
         except Exception as e:
             logger.error(f"Error create_circuit: {e}")
-            raise Exception("Could not create circuit")
+            raise Exception(f"Could not create circuit: {e}")
+
+    @staticmethod
+    def update_circuit(circuit_id: str, circuit_data: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+        """Update an existing circuit."""
+        if not supabase:
+            raise Exception("Supabase client not initialized")
+            
+        try:
+            from slugify import slugify
+            generated_slug = slugify(circuit_data.get("name", "circuit"))
+            circuit_data["slug"] = generated_slug
+            
+            # Cast numeric values to int to prevent DB errors
+            if "hairpinsCount" in circuit_data and circuit_data["hairpinsCount"] is not None:
+                try:
+                    circuit_data["hairpinsCount"] = int(circuit_data["hairpinsCount"])
+                except (ValueError, TypeError):
+                    pass
+            if "fastCornersCount" in circuit_data and circuit_data["fastCornersCount"] is not None:
+                try:
+                    circuit_data["fastCornersCount"] = int(circuit_data["fastCornersCount"])
+                except (ValueError, TypeError):
+                    pass
+            
+            res = supabase.table("circuits").update(circuit_data).eq("id", circuit_id).execute()
+            if res.data and len(res.data) > 0:
+                return res.data[0]
+            raise Exception("Update failed")
+        except Exception as e:
+            logger.error(f"Error update_circuit: {e}")
+            raise Exception(f"Could not update circuit: {e}")
 
     @staticmethod
     def upsert_session(user_id: str, signature: str, imported_via: str, metrics: Dict[str, Any], analysis_id: Optional[str] = None) -> Dict[str, Any]:
@@ -446,3 +523,16 @@ class KartService:
         except Exception as e:
             logger.exception(f"Error delete_sessions_by_day for {user_id}: {e}")
             raise Exception(f"Could not delete sessions: {str(e)}")
+
+    @staticmethod
+    def delete_kart_setup(user_id: str, setup_id: str) -> Dict[str, Any]:
+        """Delete a kart setup."""
+        if not supabase:
+            raise Exception("Supabase client not initialized")
+        try:
+            res = supabase.table("kart_setups").delete().eq("id", setup_id).eq("user_id", user_id).execute()
+            return {"success": True}
+        except Exception as e:
+            logger.error(f"Error delete_kart_setup: {e}")
+            raise Exception(f"Could not delete Kart setup: {str(e)}")
+

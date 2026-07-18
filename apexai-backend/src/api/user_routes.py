@@ -120,6 +120,30 @@ async def get_user_subscription(
             "user_agent": request.headers.get("user-agent"),
         },
     )
+    if settings.ENVIRONMENT == "development":
+        return {
+            "tier": "team",
+            "status": "active",
+            "billing_period": "monthly",
+            "subscription_start_date": None,
+            "subscription_end_date": None,
+            "analyses_count_current_month": 0,
+            "analyses_limit": None,
+            "stripe_customer_id": None,
+            "stripe_subscription_id": None,
+            "limits": {
+                "tier": "team",
+                "analyses_per_month": None,
+                "analyses_used": 0,
+                "can_export_csv": True,
+                "can_export_pdf": True,
+                "can_compare": True,
+                "max_members": 5,
+                "max_circuits": None,
+                "max_cars": None,
+            },
+        }
+
     if not supabase:
         _log_subscription_request(current_user, "jwt", "error", "Supabase client not initialized")
         raise HTTPException(
@@ -259,6 +283,10 @@ async def get_user_profile(authorization: Optional[str] = Header(None)):
     """
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Token manquant")
+    
+    if settings.ENVIRONMENT == "development":
+        return {"tier": "team", "analyses_count": 0, "trial_status": "active", "email": "moreauy58@gmail.com"}
+
     if not supabase:
         return JSONResponse(content={"tier": "free", "analyses_count": 0, "trial_status": "unknown"})
 

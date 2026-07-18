@@ -5,7 +5,7 @@ Apex AI - API Models
 Modèles Pydantic pour l'API REST
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import List, Dict, Optional, Any
 from datetime import datetime
 
@@ -138,25 +138,25 @@ class ErrorResponse(BaseModel):
 
 class CircuitCreate(BaseModel):
     name: str
-    country: Optional[str] = None
-    city: Optional[str] = None
+    country: Optional[str] = "FR"
+    region: Optional[str] = None
     length_m: Optional[int] = None
-    corners: Optional[int] = None
-    # Paramètres TrackSignature
-    speed_level: Optional[str] = None
-    rotation_level: Optional[str] = None
-    elevation: Optional[str] = None
-    bumps: Optional[str] = None
-    slow_corners: Optional[int] = None
-    medium_corners: Optional[int] = None
-    fast_corners: Optional[int] = None
     
+    # Alignement strict avec la Track Signature
+    speed_ratio: str = Field(..., alias="speedRatio")
+    rotation: str
+    hairpins_count: int = Field(0, alias="hairpinsCount")
+    fast_corners_count: int = Field(0, alias="fastCornersCount")
+    elevation: str
+    bumpiness: str
+
     class Config:
-        extra = "allow"
+        populate_by_name = True
 
 
 class KartSetupCreate(BaseModel):
     """Payload for saving a kart setup"""
+    id: Optional[str] = None
     setupName: Optional[str] = Field(default="Nouveau Setup", description="Nom du setup")
     weather: Optional[str] = None
     airTemp: Optional[float] = None
@@ -179,6 +179,17 @@ class KartSetupCreate(BaseModel):
     sprocketFront: Optional[float] = None
     sprocketRear: Optional[float] = None
     carbConfig: Optional[Dict[str, Any]] = None
+    driverWeight: Optional[float] = None
+    kartWeight: Optional[float] = None
+    targetWeight: Optional[float] = None
+    ballast: Optional[float] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def empty_str_to_none(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            return {k: (None if v == "" else v) for k, v in data.items()}
+        return data
 
     class Config:
         extra = "allow"

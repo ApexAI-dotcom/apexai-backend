@@ -39,6 +39,18 @@ async def get_kart_profile(current_user: str = Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/api/kart/last-sessions")
+async def get_last_kart_sessions(limit: int = 3, current_user: str = Depends(get_current_user)):
+    """Get the last N sessions for Magic Link."""
+    if not is_mon_kart_enabled():
+        raise HTTPException(status_code=404, detail="Mon Kart is currently disabled.")
+        
+    try:
+        sessions = KartService.get_sessions(current_user, limit=limit)
+        return {"sessions": sessions}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.put("/api/kart/profile")
 async def update_kart_profile(updates: Dict[str, Any], current_user: str = Depends(get_current_user)):
     if not is_mon_kart_enabled():
@@ -212,6 +224,22 @@ async def get_kart_setups(current_user: str = Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.delete("/api/kart/setups/{setup_id}")
+async def delete_kart_setup(setup_id: str, current_user: str = Depends(get_current_user)):
+    """Delete a saved kart setup."""
+    if not is_mon_kart_enabled():
+        raise HTTPException(status_code=404, detail="Mon Kart is currently disabled.")
+        
+    if not KartService.is_racer_or_team(current_user):
+        raise HTTPException(status_code=403, detail="Mon Kart is only available for Racer and Team plans.")
+        
+    try:
+        res = KartService.delete_kart_setup(current_user, setup_id)
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/api/circuits")
 async def get_circuits(current_user: str = Depends(get_current_user)):
     """Get all available circuits."""
@@ -225,7 +253,17 @@ async def get_circuits(current_user: str = Depends(get_current_user)):
 async def create_circuit(circuit: CircuitCreate, current_user: str = Depends(get_current_user)):
     """Create a new circuit."""
     try:
-        res = KartService.create_circuit(circuit.model_dump())
+        # Pydantic v2 dump with by_alias=False ensures snake_case keys are used in output
+        res = KartService.create_circuit(circuit.model_dump(by_alias=False), current_user)
+        return {"success": True, "circuit": res}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/api/circuits/{circuit_id}")
+async def update_circuit(circuit_id: str, circuit: CircuitCreate, current_user: str = Depends(get_current_user)):
+    """Update an existing circuit."""
+    try:
+        res = KartService.update_circuit(circuit_id, circuit.model_dump(by_alias=False), current_user)
         return {"success": True, "circuit": res}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

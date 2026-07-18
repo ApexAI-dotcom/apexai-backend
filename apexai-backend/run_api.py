@@ -12,6 +12,9 @@ from pathlib import Path
 backend_root = Path(__file__).parent
 sys.path.insert(0, str(backend_root))
 
+from dotenv import load_dotenv
+load_dotenv(backend_root / ".env")
+
 import uvicorn
 from src.api.config import settings
 
