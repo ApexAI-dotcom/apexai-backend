@@ -147,7 +147,32 @@ class KartService:
             "target_weight": setup_data.get("targetWeight"),
             "ballast": setup_data.get("ballast"),
         }
-        
+
+        # Sanitize: the frontend sends '' for empty numeric fields, which breaks
+        # numeric/integer DB columns. Convert '' -> None and cast numeric values.
+        numeric_fields = {
+            "air_temp", "track_temp",
+            "cold_pressure_front", "cold_pressure_rear",
+            "hot_pressure_front", "hot_pressure_rear",
+            "track_width_front", "track_width_rear",
+            "driver_weight", "kart_weight", "target_weight", "ballast",
+        }
+        integer_fields = {"sprocket_front", "sprocket_rear"}
+        for key in list(db_payload.keys()):
+            val = db_payload[key]
+            if val == "":
+                db_payload[key] = None
+            elif key in numeric_fields and val is not None:
+                try:
+                    db_payload[key] = float(val)
+                except (ValueError, TypeError):
+                    db_payload[key] = None
+            elif key in integer_fields and val is not None:
+                try:
+                    db_payload[key] = int(float(val))
+                except (ValueError, TypeError):
+                    db_payload[key] = None
+
         # Check if updating an existing setup
         setup_id = setup_data.get("id")
         if setup_id:
