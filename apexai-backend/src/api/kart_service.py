@@ -216,7 +216,7 @@ class KartService:
             # Clean up payload keys to strictly match database columns
             allowed_keys = {
                 "name", "slug", "speed_ratio", "rotation", "hairpins_count",
-                "fast_corners_count", "elevation", "bumpiness", "created_by", "verified"
+                "fast_corners_count", "elevation", "bumpiness"
             }
             db_payload = {k: v for k, v in circuit_data.items() if k in allowed_keys}
             
