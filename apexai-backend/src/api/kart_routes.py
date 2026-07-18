@@ -249,6 +249,19 @@ async def get_circuits(current_user: str = Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get("/api/catalog/components")
+async def get_catalog_components(category: str = None, current_user: str = Depends(get_current_user)):
+    """Get the component catalog (engines, tires, brakes, chassis, carburetors, axles).
+
+    Optional query param `category` filters on one category.
+    """
+    try:
+        components = KartService.get_catalog_components(category)
+        return {"components": components}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/api/circuits")
 async def create_circuit(circuit: CircuitCreate, current_user: str = Depends(get_current_user)):
     """Create a new circuit."""

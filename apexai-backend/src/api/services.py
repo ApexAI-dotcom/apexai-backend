@@ -27,12 +27,14 @@ from src.analysis.geometry import (
 from src.analysis.scoring import calculate_performance_score, validate_score_consistency
 from src.analysis.coaching import generate_coaching_advice
 from src.analysis.performance_metrics import analyze_corner_performance
+from src.analysis.track_signature import compute_track_signature
 from src.visualization.visualization import generate_all_plots_base64, generate_plot_data
 
 from .config import settings
 from .models import (
     AnalysisResponse, PerformanceScore, ScoreBreakdown,
-    CornerAnalysis, CoachingAdvice, PlotUrls, Statistics, SessionConditions
+    CornerAnalysis, CoachingAdvice, PlotUrls, Statistics, SessionConditions,
+    TrackFeatures
 )
 
 logger = logging.getLogger(__name__)
@@ -511,6 +513,13 @@ def _run_analysis_pipeline_sync(
 
     logger.info(f"[{analysis_id}] ✅ Completed in {processing_time:.2f}s")
 
+    # Signature de piste réelle dérivée des virages détectés (jamais bloquant)
+    try:
+        track_signature = compute_track_signature(corner_details, df)
+    except Exception as e:
+        logger.warning(f"[{analysis_id}] track_signature failed: {e}")
+        track_signature = None
+
     response = AnalysisResponse(
         success=True,
         analysis_id=analysis_id,
@@ -558,6 +567,7 @@ def _run_analysis_pipeline_sync(
             track_condition=track_condition,
             track_temperature=track_temperature,
         ),
+        track_features=TrackFeatures(**track_signature) if track_signature else None,
     )
     return response.dict(exclude_none=True)
 

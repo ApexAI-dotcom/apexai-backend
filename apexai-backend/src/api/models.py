@@ -107,6 +107,19 @@ class SessionConditions(BaseModel):
     track_temperature: Optional[float] = Field(default=None, description="Température piste en °C")
 
 
+class TrackFeatures(BaseModel):
+    """Signature de piste dérivée de la télémétrie (voir analysis/track_signature.py)"""
+    speed_ratio: Optional[str] = Field(default=None, description="sinueux | mixte | rapide")
+    rotation: Optional[str] = Field(default=None, description="horaire | anti-horaire")
+    hairpins_count: Optional[int] = Field(default=None, description="Virages lents (apex < 45 km/h)")
+    fast_corners_count: Optional[int] = Field(default=None, description="Virages rapides (apex > 85 km/h)")
+    elevation: Optional[str] = Field(default=None, description="Non dérivable sans canal altitude")
+    bumpiness: Optional[str] = Field(default=None, description="Non dérivable sans accéléro vertical")
+    corners_total: Optional[int] = Field(default=None, description="Nombre total de virages détectés")
+    track_length_m: Optional[float] = Field(default=None, description="Longueur médiane d'un tour en mètres")
+    avg_apex_speed_kmh: Optional[float] = Field(default=None, description="Vitesse apex moyenne")
+
+
 class AnalysisResponse(BaseModel):
     """Réponse complète d'analyse"""
     success: bool = True
@@ -126,6 +139,7 @@ class AnalysisResponse(BaseModel):
     plot_data: Optional[Dict[str, Any]] = Field(default=None, description="Raw data for interactive frontend plotting (Recharts)")
     statistics: Statistics
     session_conditions: Optional[SessionConditions] = Field(default=None, description="Conditions de piste (sec/humide/mouillé/pluie, température)")
+    track_features: Optional[TrackFeatures] = Field(default=None, description="Signature de piste dérivée de la télémétrie")
 
 
 class ErrorResponse(BaseModel):

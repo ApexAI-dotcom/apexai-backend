@@ -225,17 +225,36 @@ class KartService:
             res = supabase.table("circuits").select("*").order("name").execute()
             circuits_data = res.data or []
             for c in circuits_data:
-                if "bumpiness" in c:
+                if c.get("bumpiness") is not None and not isinstance(c["bumpiness"], str):
                     c["bumpiness"] = "bossele" if c["bumpiness"] == 1 else "lisse"
-                if "elevation" in c:
+                if c.get("elevation") is not None and not isinstance(c["elevation"], str):
                     c["elevation"] = "vallonne" if c["elevation"] == 1 else "plat"
-                if "rotation" in c and not isinstance(c["rotation"], str):
+                if c.get("rotation") is not None and not isinstance(c["rotation"], str):
                     c["rotation"] = "anti-horaire" if c["rotation"] == 1 else "horaire"
-                if "speed_ratio" in c and not isinstance(c["speed_ratio"], str):
+                if c.get("speed_ratio") is not None and not isinstance(c["speed_ratio"], str):
                     c["speed_ratio"] = {0: "sinueux", 1: "mixte", 2: "rapide"}.get(c["speed_ratio"], "mixte")
             return circuits_data
         except Exception as e:
             logger.error(f"Error get_circuits: {e}")
+            return []
+
+    @staticmethod
+    def get_catalog_components(category: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get the global component catalog (kart_components table)."""
+        if not supabase:
+            raise Exception("Supabase client not initialized")
+
+        valid_categories = {"engine", "tire", "brake", "chassis", "carburetor", "axle"}
+        try:
+            query = supabase.table("kart_components").select("*").eq("active", True)
+            if category:
+                if category not in valid_categories:
+                    return []
+                query = query.eq("category", category)
+            res = query.order("category").order("brand").order("name").execute()
+            return res.data or []
+        except Exception as e:
+            logger.error(f"Error get_catalog_components: {e}")
             return []
 
     @staticmethod
