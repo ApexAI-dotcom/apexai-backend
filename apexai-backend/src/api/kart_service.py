@@ -206,6 +206,8 @@ class KartService:
                     c["elevation"] = "vallonne" if c["elevation"] == 1 else "plat"
                 if "rotation" in c and not isinstance(c["rotation"], str):
                     c["rotation"] = "anti-horaire" if c["rotation"] == 1 else "horaire"
+                if "speed_ratio" in c and not isinstance(c["speed_ratio"], str):
+                    c["speed_ratio"] = {0: "sinueux", 1: "mixte", 2: "rapide"}.get(c["speed_ratio"], "mixte")
             return circuits_data
         except Exception as e:
             logger.error(f"Error get_circuits: {e}")
@@ -251,6 +253,8 @@ class KartService:
                 db_payload["elevation"] = 1 if db_payload["elevation"].lower() == "vallonne" else 0
             if "rotation" in db_payload and isinstance(db_payload["rotation"], str):
                 db_payload["rotation"] = 1 if db_payload["rotation"].lower() == "anti-horaire" else 0
+            if "speed_ratio" in db_payload and isinstance(db_payload["speed_ratio"], str):
+                db_payload["speed_ratio"] = {"sinueux": 0, "mixte": 1, "rapide": 2}.get(db_payload["speed_ratio"].lower(), 1)
 
             
             res = supabase.table("circuits").insert(db_payload).execute()
@@ -294,6 +298,8 @@ class KartService:
                 db_payload["elevation"] = 1 if db_payload["elevation"].lower() == "vallonne" else 0
             if "rotation" in db_payload and isinstance(db_payload["rotation"], str):
                 db_payload["rotation"] = 1 if db_payload["rotation"].lower() == "anti-horaire" else 0
+            if "speed_ratio" in db_payload and isinstance(db_payload["speed_ratio"], str):
+                db_payload["speed_ratio"] = {"sinueux": 0, "mixte": 1, "rapide": 2}.get(db_payload["speed_ratio"].lower(), 1)
 
             
             res = supabase.table("circuits").update(db_payload).eq("id", circuit_id).execute()
