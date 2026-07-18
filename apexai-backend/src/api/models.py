@@ -105,6 +105,7 @@ class SessionConditions(BaseModel):
     session_name: Optional[str] = Field(default=None, description="Nom optionnel de la session")
     track_condition: str = Field(default="dry", description="dry | damp | wet | rain")
     track_temperature: Optional[float] = Field(default=None, description="Température piste en °C")
+    circuit_name: Optional[str] = Field(default=None, description="Nom du circuit extrait du header télémétrie (Venue)")
 
 
 class TrackFeatures(BaseModel):

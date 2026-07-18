@@ -225,14 +225,7 @@ class KartService:
             res = supabase.table("circuits").select("*").order("name").execute()
             circuits_data = res.data or []
             for c in circuits_data:
-                if c.get("bumpiness") is not None and not isinstance(c["bumpiness"], str):
-                    c["bumpiness"] = "bossele" if c["bumpiness"] == 1 else "lisse"
-                if c.get("elevation") is not None and not isinstance(c["elevation"], str):
-                    c["elevation"] = "vallonne" if c["elevation"] == 1 else "plat"
-                if c.get("rotation") is not None and not isinstance(c["rotation"], str):
-                    c["rotation"] = "anti-horaire" if c["rotation"] == 1 else "horaire"
-                if c.get("speed_ratio") is not None and not isinstance(c["speed_ratio"], str):
-                    c["speed_ratio"] = {0: "sinueux", 1: "mixte", 2: "rapide"}.get(c["speed_ratio"], "mixte")
+                KartService._normalize_circuit_read(c)
             return circuits_data
         except Exception as e:
             logger.error(f"Error get_circuits: {e}")
@@ -257,53 +250,101 @@ class KartService:
             logger.error(f"Error get_catalog_components: {e}")
             return []
 
+    # Champs "caractéristiques" d'un circuit (stockés en numérique dans la DB prod)
+    CIRCUIT_FEATURE_KEYS = {
+        "speed_ratio", "rotation", "hairpins_count",
+        "fast_corners_count", "elevation", "bumpiness",
+    }
+
+    @staticmethod
+    def _circuit_payload_to_db(circuit_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Filtre les clés autorisées et convertit les valeurs texte -> codes numériques DB."""
+        allowed_keys = {
+            "name", "slug", "speed_ratio", "rotation", "hairpins_count",
+            "fast_corners_count", "elevation", "bumpiness"
+        }
+        p = {k: v for k, v in circuit_data.items() if k in allowed_keys}
+
+        for k in ["hairpins_count", "fast_corners_count"]:
+            if k in p and p[k] is not None:
+                try:
+                    p[k] = int(p[k])
+                except (ValueError, TypeError):
+                    pass
+
+        if isinstance(p.get("bumpiness"), str):
+            p["bumpiness"] = 1 if p["bumpiness"].lower() == "bossele" else 0
+        if isinstance(p.get("elevation"), str):
+            p["elevation"] = 1 if p["elevation"].lower() == "vallonne" else 0
+        if isinstance(p.get("rotation"), str):
+            p["rotation"] = 1 if p["rotation"].lower() == "anti-horaire" else 0
+        if isinstance(p.get("speed_ratio"), str):
+            p["speed_ratio"] = {"sinueux": 0, "mixte": 1, "rapide": 2}.get(p["speed_ratio"].lower(), 1)
+        return p
+
+    @staticmethod
+    def _normalize_circuit_read(c: Dict[str, Any]) -> Dict[str, Any]:
+        """Convertit les codes numériques DB -> valeurs texte attendues par le frontend.
+        Les NULL restent NULL (le frontend applique ses propres défauts)."""
+        if c.get("bumpiness") is not None and not isinstance(c["bumpiness"], str):
+            c["bumpiness"] = "bossele" if c["bumpiness"] == 1 else "lisse"
+        if c.get("elevation") is not None and not isinstance(c["elevation"], str):
+            c["elevation"] = "vallonne" if c["elevation"] == 1 else "plat"
+        if c.get("rotation") is not None and not isinstance(c["rotation"], str):
+            c["rotation"] = "anti-horaire" if c["rotation"] == 1 else "horaire"
+        if c.get("speed_ratio") is not None and not isinstance(c["speed_ratio"], str):
+            c["speed_ratio"] = {0: "sinueux", 1: "mixte", 2: "rapide"}.get(c["speed_ratio"], "mixte")
+        return c
+
     @staticmethod
     def create_circuit(circuit_data: Dict[str, Any], user_id: str) -> Dict[str, Any]:
-        """Create a new circuit."""
+        """Create a circuit, or match+enrich an existing one.
+
+        Matching flou par slug (ex: 'adria-kart' issu du header télémétrie
+        rapproché de la fiche seedée 'adria-karting-raceway'). Quand un circuit
+        existant est trouvé, ses caractéristiques NULL sont remplies avec les
+        nouvelles données (jamais écrasées si déjà renseignées).
+        """
         if not supabase:
             raise Exception("Supabase client not initialized")
-            
+
         try:
             from slugify import slugify
             generated_slug = slugify(circuit_data.get("name", "circuit"))
-            
-            existing = supabase.table("circuits").select("*").eq("slug", generated_slug).execute()
-            if existing.data and len(existing.data) > 0:
-                return existing.data[0]
-                
-            circuit_data["slug"] = generated_slug
-            circuit_data["created_by"] = user_id
-            circuit_data["verified"] = False
-            
-            # Clean up payload keys to strictly match database columns
-            allowed_keys = {
-                "name", "slug", "speed_ratio", "rotation", "hairpins_count",
-                "fast_corners_count", "elevation", "bumpiness"
-            }
-            db_payload = {k: v for k, v in circuit_data.items() if k in allowed_keys}
-            
-            # Cast numeric values to int to prevent DB errors
-            for k in ["hairpins_count", "fast_corners_count"]:
-                if k in db_payload and db_payload[k] is not None:
-                    try:
-                        db_payload[k] = int(db_payload[k])
-                    except (ValueError, TypeError):
-                        pass
 
-            # Map string features to numeric if required by DB schema
-            if "bumpiness" in db_payload and isinstance(db_payload["bumpiness"], str):
-                db_payload["bumpiness"] = 1 if db_payload["bumpiness"].lower() == "bossele" else 0
-            if "elevation" in db_payload and isinstance(db_payload["elevation"], str):
-                db_payload["elevation"] = 1 if db_payload["elevation"].lower() == "vallonne" else 0
-            if "rotation" in db_payload and isinstance(db_payload["rotation"], str):
-                db_payload["rotation"] = 1 if db_payload["rotation"].lower() == "anti-horaire" else 0
-            if "speed_ratio" in db_payload and isinstance(db_payload["speed_ratio"], str):
-                db_payload["speed_ratio"] = {"sinueux": 0, "mixte": 1, "rapide": 2}.get(db_payload["speed_ratio"].lower(), 1)
+            all_res = supabase.table("circuits").select("*").execute()
+            circuits = all_res.data or []
 
-            
+            existing = next((c for c in circuits if c.get("slug") == generated_slug), None)
+            if not existing and len(generated_slug) >= 8:
+                for c in circuits:
+                    s = c.get("slug") or ""
+                    if len(s) >= 8 and (s.startswith(generated_slug) or generated_slug.startswith(s)):
+                        existing = c
+                        logger.info(f"create_circuit: fuzzy match '{generated_slug}' -> '{s}'")
+                        break
+
+            db_payload = KartService._circuit_payload_to_db({**circuit_data, "slug": generated_slug})
+
+            if existing:
+                # Enrichissement : on remplit uniquement les champs encore vides
+                fill = {
+                    k: v for k, v in db_payload.items()
+                    if k in KartService.CIRCUIT_FEATURE_KEYS and v is not None and existing.get(k) is None
+                }
+                if fill:
+                    upd = supabase.table("circuits").update(fill).eq("id", existing["id"]).execute()
+                    if upd.data and len(upd.data) > 0:
+                        existing = upd.data[0]
+                    logger.info(f"create_circuit: enriched '{existing.get('slug')}' with {sorted(fill.keys())}")
+                return KartService._normalize_circuit_read(existing)
+
+            db_payload["created_by"] = user_id
+            db_payload["verified"] = False
+
             res = supabase.table("circuits").insert(db_payload).execute()
             if res.data and len(res.data) > 0:
-                return res.data[0]
+                return KartService._normalize_circuit_read(res.data[0])
             raise Exception("Insertion failed")
         except Exception as e:
             logger.error(f"Error create_circuit: {e}")
@@ -317,38 +358,12 @@ class KartService:
             
         try:
             from slugify import slugify
-            generated_slug = slugify(circuit_data.get("name", "circuit"))
-            circuit_data["slug"] = generated_slug
-            
-            # Clean up payload keys to strictly match database columns
-            allowed_keys = {
-                "name", "slug", "speed_ratio", "rotation", "hairpins_count",
-                "fast_corners_count", "elevation", "bumpiness"
-            }
-            db_payload = {k: v for k, v in circuit_data.items() if k in allowed_keys}
-            
-            # Cast numeric values to int to prevent DB errors
-            for k in ["hairpins_count", "fast_corners_count"]:
-                if k in db_payload and db_payload[k] is not None:
-                    try:
-                        db_payload[k] = int(db_payload[k])
-                    except (ValueError, TypeError):
-                        pass
+            circuit_data["slug"] = slugify(circuit_data.get("name", "circuit"))
+            db_payload = KartService._circuit_payload_to_db(circuit_data)
 
-            # Map string features to numeric if required by DB schema
-            if "bumpiness" in db_payload and isinstance(db_payload["bumpiness"], str):
-                db_payload["bumpiness"] = 1 if db_payload["bumpiness"].lower() == "bossele" else 0
-            if "elevation" in db_payload and isinstance(db_payload["elevation"], str):
-                db_payload["elevation"] = 1 if db_payload["elevation"].lower() == "vallonne" else 0
-            if "rotation" in db_payload and isinstance(db_payload["rotation"], str):
-                db_payload["rotation"] = 1 if db_payload["rotation"].lower() == "anti-horaire" else 0
-            if "speed_ratio" in db_payload and isinstance(db_payload["speed_ratio"], str):
-                db_payload["speed_ratio"] = {"sinueux": 0, "mixte": 1, "rapide": 2}.get(db_payload["speed_ratio"].lower(), 1)
-
-            
             res = supabase.table("circuits").update(db_payload).eq("id", circuit_id).execute()
             if res.data and len(res.data) > 0:
-                return res.data[0]
+                return KartService._normalize_circuit_read(res.data[0])
             raise Exception("Update failed")
         except Exception as e:
             logger.error(f"Error update_circuit: {e}")

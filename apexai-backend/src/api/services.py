@@ -165,6 +165,7 @@ def _run_analysis_pipeline_sync(
     track_condition: str = "dry",
     track_temperature: Optional[float] = None,
     session_name: Optional[str] = None,
+    circuit_name: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Pipeline d'analyse synchrone (exécuté dans un thread pour ne pas bloquer l'event loop)."""
     logger.info(f"[{analysis_id}] Step 1/5: Loading data...")
@@ -566,6 +567,7 @@ def _run_analysis_pipeline_sync(
             session_name=session_name,
             track_condition=track_condition,
             track_temperature=track_temperature,
+            circuit_name=circuit_name,
         ),
         track_features=TrackFeatures(**track_signature) if track_signature else None,
     )
@@ -674,15 +676,20 @@ class AnalysisService:
             
             logger.info(f"[{analysis_id}] File saved: {len(content)} bytes - {file.filename}")
             
-            # Extraire les Beacon Markers AiM/MoTeC depuis le fichier brut
+            # Extraire les Beacon Markers + le nom du circuit (Venue) AiM/MoTeC depuis le header brut
             beacon_markers = []
+            circuit_name = None
             try:
                 with open(temp_path, 'r', encoding='utf-8', errors='ignore') as bfile:
                     for i, bline in enumerate(bfile):
                         if i > 20:
                             break
-                        if 'Beacon' in bline or 'beacon' in bline:
-                            parts = bline.strip().replace('"', '').split(',')
+                        parts = bline.strip().replace('"', '').split(',')
+                        if not circuit_name and parts and parts[0].strip().lower() == 'venue':
+                            if len(parts) >= 2 and parts[1].strip():
+                                circuit_name = parts[1].strip()
+                                logger.info(f"[{analysis_id}] ✓ Venue detected: {circuit_name}")
+                        if not beacon_markers and ('Beacon' in bline or 'beacon' in bline):
                             if len(parts) >= 2:
                                 raw = parts[1].strip()
                                 parsed = []
@@ -693,9 +700,10 @@ class AnalysisService:
                                         pass
                                 if parsed:
                                     beacon_markers = sorted(parsed)
-                                    break
+                        if beacon_markers and circuit_name:
+                            break
             except Exception as be:
-                logger.warning(f"[{analysis_id}] Could not read beacon markers: {be}")
+                logger.warning(f"[{analysis_id}] Could not read header metadata: {be}")
             
             if beacon_markers:
                 logger.info(f"[{analysis_id}] ✓ Beacon Markers: {len(beacon_markers)} passages, "
@@ -717,6 +725,7 @@ class AnalysisService:
                 track_condition,
                 track_temperature,
                 session_name,
+                circuit_name,
             )
             
             # --- Mon Kart Hook ---
