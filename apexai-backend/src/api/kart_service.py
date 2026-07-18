@@ -386,9 +386,22 @@ class KartService:
         
         try:
             # Check if exists
-            existing_res = supabase.table("kart_session_logs").select("id").eq("user_id", user_id).eq("file_signature", signature).execute()
+            existing_res = supabase.table("kart_session_logs").select("id, track_features, circuit_name").eq("user_id", user_id).eq("file_signature", signature).execute()
             if existing_res.data and len(existing_res.data) > 0:
-                return {"session": existing_res.data[0], "is_new": False}
+                existing_session = existing_res.data[0]
+                # Backfill : les sessions importées avant la signature de piste
+                # récupèrent track_features/circuit_name à la ré-analyse.
+                backfill: Dict[str, Any] = {}
+                if metrics.get("track_features") and not existing_session.get("track_features"):
+                    backfill["track_features"] = metrics["track_features"]
+                if metrics.get("circuit_name") and not existing_session.get("circuit_name"):
+                    backfill["circuit_name"] = metrics["circuit_name"]
+                if backfill:
+                    upd = supabase.table("kart_session_logs").update(backfill).eq("id", existing_session["id"]).execute()
+                    if upd.data and len(upd.data) > 0:
+                        existing_session = upd.data[0]
+                    logger.info(f"upsert_session: backfilled {sorted(backfill.keys())}")
+                return {"session": existing_session, "is_new": False}
             
             # Insert
             session_data = {

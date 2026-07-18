@@ -738,11 +738,18 @@ class AnalysisService:
                     if is_mon_kart_enabled() and KartService.is_racer_or_team(user_id):
                         k_res = parse_kart_mechanical(temp_path)
                         if k_res.get("success"):
+                            metrics = dict(k_res["aggregates"] or {})
+                            # Enrichir avec la signature de piste et le Venue issus de l'analyse
+                            tf = result.get("track_features") if isinstance(result, dict) else None
+                            if tf:
+                                metrics["track_features"] = tf
+                            if circuit_name and not metrics.get("circuit_name"):
+                                metrics["circuit_name"] = circuit_name
                             KartService.upsert_session(
                                 user_id=user_id,
                                 signature=k_res["signature"],
                                 imported_via="analyze",
-                                metrics=k_res["aggregates"],
+                                metrics=metrics,
                                 analysis_id=analysis_id
                             )
                 except Exception as k_err:
