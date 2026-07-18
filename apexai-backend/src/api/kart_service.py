@@ -213,19 +213,22 @@ class KartService:
             circuit_data["created_by"] = user_id
             circuit_data["verified"] = False
             
-            # Cast numeric values to int to prevent DB errors
-            if "hairpinsCount" in circuit_data and circuit_data["hairpinsCount"] is not None:
-                try:
-                    circuit_data["hairpinsCount"] = int(circuit_data["hairpinsCount"])
-                except (ValueError, TypeError):
-                    pass
-            if "fastCornersCount" in circuit_data and circuit_data["fastCornersCount"] is not None:
-                try:
-                    circuit_data["fastCornersCount"] = int(circuit_data["fastCornersCount"])
-                except (ValueError, TypeError):
-                    pass
+            # Clean up payload keys to strictly match database columns
+            allowed_keys = {
+                "name", "slug", "speed_ratio", "rotation", "hairpins_count",
+                "fast_corners_count", "elevation", "bumpiness", "created_by", "verified"
+            }
+            db_payload = {k: v for k, v in circuit_data.items() if k in allowed_keys}
             
-            res = supabase.table("circuits").insert(circuit_data).execute()
+            # Cast numeric values to int to prevent DB errors
+            for k in ["hairpins_count", "fast_corners_count"]:
+                if k in db_payload and db_payload[k] is not None:
+                    try:
+                        db_payload[k] = int(db_payload[k])
+                    except (ValueError, TypeError):
+                        pass
+            
+            res = supabase.table("circuits").insert(db_payload).execute()
             if res.data and len(res.data) > 0:
                 return res.data[0]
             raise Exception("Insertion failed")
@@ -244,19 +247,22 @@ class KartService:
             generated_slug = slugify(circuit_data.get("name", "circuit"))
             circuit_data["slug"] = generated_slug
             
-            # Cast numeric values to int to prevent DB errors
-            if "hairpinsCount" in circuit_data and circuit_data["hairpinsCount"] is not None:
-                try:
-                    circuit_data["hairpinsCount"] = int(circuit_data["hairpinsCount"])
-                except (ValueError, TypeError):
-                    pass
-            if "fastCornersCount" in circuit_data and circuit_data["fastCornersCount"] is not None:
-                try:
-                    circuit_data["fastCornersCount"] = int(circuit_data["fastCornersCount"])
-                except (ValueError, TypeError):
-                    pass
+            # Clean up payload keys to strictly match database columns
+            allowed_keys = {
+                "name", "slug", "speed_ratio", "rotation", "hairpins_count",
+                "fast_corners_count", "elevation", "bumpiness"
+            }
+            db_payload = {k: v for k, v in circuit_data.items() if k in allowed_keys}
             
-            res = supabase.table("circuits").update(circuit_data).eq("id", circuit_id).execute()
+            # Cast numeric values to int to prevent DB errors
+            for k in ["hairpins_count", "fast_corners_count"]:
+                if k in db_payload and db_payload[k] is not None:
+                    try:
+                        db_payload[k] = int(db_payload[k])
+                    except (ValueError, TypeError):
+                        pass
+            
+            res = supabase.table("circuits").update(db_payload).eq("id", circuit_id).execute()
             if res.data and len(res.data) > 0:
                 return res.data[0]
             raise Exception("Update failed")
