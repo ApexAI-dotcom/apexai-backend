@@ -357,6 +357,11 @@ class KartService:
             raise Exception("Supabase client not initialized")
             
         try:
+            # Les circuits officiels (verified) sont protégés : données de référence
+            current = supabase.table("circuits").select("id, verified").eq("id", circuit_id).limit(1).execute()
+            if current.data and current.data[0].get("verified"):
+                raise Exception("Ce circuit officiel ApexAI n'est pas modifiable.")
+
             from slugify import slugify
             circuit_data["slug"] = slugify(circuit_data.get("name", "circuit"))
             db_payload = KartService._circuit_payload_to_db(circuit_data)
