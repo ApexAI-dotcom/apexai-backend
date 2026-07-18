@@ -177,7 +177,15 @@ class KartService:
             
         try:
             res = supabase.table("kart_setups").select("*, circuits(*)").eq("user_id", user_id).order("created_at", desc=True).execute()
-            return res.data or []
+            setups = res.data or []
+            for setup in setups:
+                if "circuits" in setup and setup["circuits"]:
+                    c = setup["circuits"]
+                    if "bumpiness" in c:
+                        c["bumpiness"] = "bossele" if c["bumpiness"] == 1 else "lisse"
+                    if "elevation" in c:
+                        c["elevation"] = "vallonne" if c["elevation"] == 1 else "plat"
+            return setups
         except Exception as e:
             logger.error(f"Error get_kart_setups: {e}")
             return []
@@ -190,7 +198,13 @@ class KartService:
             
         try:
             res = supabase.table("circuits").select("*").order("name").execute()
-            return res.data or []
+            circuits_data = res.data or []
+            for c in circuits_data:
+                if "bumpiness" in c:
+                    c["bumpiness"] = "bossele" if c["bumpiness"] == 1 else "lisse"
+                if "elevation" in c:
+                    c["elevation"] = "vallonne" if c["elevation"] == 1 else "plat"
+            return circuits_data
         except Exception as e:
             logger.error(f"Error get_circuits: {e}")
             return []
@@ -227,6 +241,13 @@ class KartService:
                         db_payload[k] = int(db_payload[k])
                     except (ValueError, TypeError):
                         pass
+
+            # Map string features to numeric if required by DB schema
+            if "bumpiness" in db_payload and isinstance(db_payload["bumpiness"], str):
+                db_payload["bumpiness"] = 1 if db_payload["bumpiness"].lower() == "bossele" else 0
+            if "elevation" in db_payload and isinstance(db_payload["elevation"], str):
+                db_payload["elevation"] = 1 if db_payload["elevation"].lower() == "vallonne" else 0
+
             
             res = supabase.table("circuits").insert(db_payload).execute()
             if res.data and len(res.data) > 0:
@@ -261,6 +282,13 @@ class KartService:
                         db_payload[k] = int(db_payload[k])
                     except (ValueError, TypeError):
                         pass
+
+            # Map string features to numeric if required by DB schema
+            if "bumpiness" in db_payload and isinstance(db_payload["bumpiness"], str):
+                db_payload["bumpiness"] = 1 if db_payload["bumpiness"].lower() == "bossele" else 0
+            if "elevation" in db_payload and isinstance(db_payload["elevation"], str):
+                db_payload["elevation"] = 1 if db_payload["elevation"].lower() == "vallonne" else 0
+
             
             res = supabase.table("circuits").update(db_payload).eq("id", circuit_id).execute()
             if res.data and len(res.data) > 0:
