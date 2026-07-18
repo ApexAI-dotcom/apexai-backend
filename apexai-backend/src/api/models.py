@@ -138,9 +138,6 @@ class ErrorResponse(BaseModel):
 
 class CircuitCreate(BaseModel):
     name: str
-    country: Optional[str] = "FR"
-    region: Optional[str] = None
-    length_m: Optional[int] = None
     
     # Alignement strict avec la Track Signature
     speed_ratio: str = Field(..., alias="speedRatio")
