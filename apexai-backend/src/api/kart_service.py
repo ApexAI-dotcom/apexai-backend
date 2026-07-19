@@ -146,6 +146,9 @@ class KartService:
             "kart_weight": setup_data.get("kartWeight"),
             "target_weight": setup_data.get("targetWeight"),
             "ballast": setup_data.get("ballast"),
+            # Recommandations figées au moment de la génération (JSONB) :
+            # restaurées telles quelles au rechargement, jamais recalculées.
+            "recommendations": setup_data.get("recommendations"),
         }
 
         # Sanitize: the frontend sends '' for empty numeric fields, which breaks
@@ -205,11 +208,7 @@ class KartService:
             setups = res.data or []
             for setup in setups:
                 if "circuits" in setup and setup["circuits"]:
-                    c = setup["circuits"]
-                    if "bumpiness" in c:
-                        c["bumpiness"] = "bossele" if c["bumpiness"] == 1 else "lisse"
-                    if "elevation" in c:
-                        c["elevation"] = "vallonne" if c["elevation"] == 1 else "plat"
+                    KartService._normalize_circuit_read(setup["circuits"])
             return setups
         except Exception as e:
             logger.error(f"Error get_kart_setups: {e}")

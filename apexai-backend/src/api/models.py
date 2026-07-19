@@ -208,6 +208,7 @@ class KartSetupCreate(BaseModel):
     kartWeight: Optional[float] = None
     targetWeight: Optional[float] = None
     ballast: Optional[float] = None
+    recommendations: Optional[Dict[str, Any]] = Field(default=None, description="Recommandations figées à la génération")
 
     @model_validator(mode="before")
     @classmethod
