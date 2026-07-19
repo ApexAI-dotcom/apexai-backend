@@ -370,10 +370,14 @@ class KartService:
             raise Exception("Supabase client not initialized")
             
         try:
-            # Les circuits officiels (verified) sont protégés : données de référence
-            current = supabase.table("circuits").select("id, verified").eq("id", circuit_id).limit(1).execute()
+            # Les circuits officiels (verified) sont protégés : données de référence.
+            # Les circuits perso ne sont modifiables que par leur créateur.
+            current = supabase.table("circuits").select("id, verified, created_by").eq("id", circuit_id).limit(1).execute()
             if current.data and current.data[0].get("verified"):
                 raise Exception("Ce circuit officiel ApexAI n'est pas modifiable.")
+            owner = current.data[0].get("created_by") if current.data else None
+            if owner and owner != user_id:
+                raise Exception("Ce circuit appartient à un autre pilote.")
 
             from slugify import slugify
             circuit_data["slug"] = slugify(circuit_data.get("name", "circuit"))
@@ -493,12 +497,15 @@ class KartService:
             raise Exception("Supabase client not initialized")
 
         try:
-            cur = supabase.table("circuits").select("id, verified, name").eq("id", circuit_id).limit(1).execute()
+            cur = supabase.table("circuits").select("id, verified, name, created_by").eq("id", circuit_id).limit(1).execute()
             if not cur.data or len(cur.data) == 0:
                 raise Exception("Circuit introuvable.")
             circuit = cur.data[0]
             if circuit.get("verified"):
                 raise Exception("Ce circuit officiel ApexAI ne peut pas être supprimé.")
+            owner = circuit.get("created_by")
+            if owner and owner != user_id:
+                raise Exception("Ce circuit appartient à un autre pilote.")
 
             # Détacher les réglages qui référencent ce circuit (contrainte FK)
             supabase.table("kart_setups").update({"circuit_id": None}).eq("circuit_id", circuit_id).execute()

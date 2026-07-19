@@ -47,7 +47,12 @@ async def run_migrations(
     """
     TEMPORAIRE. Exécute la migration 20260311000000_analyses.sql (table analyses + RLS).
     Auth : header X-Admin-Key = SUPABASE_SERVICE_ROLE_KEY.
+    Verrou Sprint 0 : désactivée sauf si ADMIN_MIGRATIONS_ENABLED=true est
+    explicitement défini dans l'environnement (les migrations passent
+    désormais par le SQL Editor / MCP, versionnées dans supabase/migrations).
     """
+    if os.getenv("ADMIN_MIGRATIONS_ENABLED", "").lower() != "true":
+        raise HTTPException(status_code=404, detail="Not found")
     _require_service_role(x_admin_key)
 
     database_url = os.getenv("DATABASE_URL") or os.getenv("SUPABASE_DB_URL", "")
