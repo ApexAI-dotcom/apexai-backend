@@ -174,6 +174,23 @@ class AdvisorRequest(BaseModel):
     air_temp: Optional[float] = Field(default=None, alias="airTemp")
     grip: str = Field(default="normal", description="faible | normal | gommée")
     circuit: Optional[Dict[str, Any]] = None
+    mode: Optional[str] = Field(default=None, description="warmup | qualif | course")
+
+    class Config:
+        populate_by_name = True
+
+
+class TireSetPayload(BaseModel):
+    """Création / mise à jour d'un train de pneus."""
+    label: Optional[str] = None
+    component_id: Optional[str] = Field(default=None, alias="componentId")
+    custom_model: Optional[str] = Field(default=None, alias="customModel")
+    state: Optional[str] = Field(default=None, description="neuf | rode | use")
+    is_rain: Optional[bool] = Field(default=None, alias="isRain")
+    laps_current: Optional[int] = Field(default=None, alias="lapsCurrent")
+    laps_life: Optional[int] = Field(default=None, alias="lapsLife")
+    active: Optional[bool] = None
+    notes: Optional[str] = None
 
     class Config:
         populate_by_name = True

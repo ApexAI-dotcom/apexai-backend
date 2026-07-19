@@ -8,8 +8,8 @@ from src.core.kart_mechanical import parse_kart_mechanical
 from src.api.kart_service import KartService
 from src.api.auth import get_current_user
 from src.api.config import settings
-from src.api.models import KartSetupCreate, CircuitCreate, AdvisorRequest
-from src.api.advisor_service import compute_tire_advice
+from src.api.models import KartSetupCreate, CircuitCreate, AdvisorRequest, TireSetPayload
+from src.api.advisor_service import compute_tire_advice, recommend_tire_set
 
 router = APIRouter()
 
@@ -253,7 +253,8 @@ async def get_circuits(current_user: str = Depends(get_current_user)):
 
 @router.post("/api/kart/advisor")
 async def kart_advisor(req: AdvisorRequest, current_user: str = Depends(get_current_user)):
-    """Recommandations ingénieur : pressions pneus depuis les abaques du catalogue."""
+    """Recommandations ingénieur : pressions pneus (abaques catalogue)
+    + train de pneus optimal depuis le stock Mon Kart (si mode fourni)."""
     try:
         components = KartService.get_catalog_components("tire")
         result = compute_tire_advice(
@@ -265,7 +266,49 @@ async def kart_advisor(req: AdvisorRequest, current_user: str = Depends(get_curr
             circuit=req.circuit,
             components=components,
         )
+        if req.mode:
+            tire_sets = KartService.get_tire_sets(current_user)
+            result["tire_set_advice"] = recommend_tire_set(tire_sets, req.mode, req.weather)
         return {"success": True, **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/kart/tire-sets")
+async def get_tire_sets(current_user: str = Depends(get_current_user)):
+    """List the user's tire sets."""
+    try:
+        return {"tire_sets": KartService.get_tire_sets(current_user)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/kart/tire-sets")
+async def create_tire_set(payload: TireSetPayload, current_user: str = Depends(get_current_user)):
+    """Declare a new tire set in the stock."""
+    try:
+        res = KartService.create_tire_set(current_user, payload.model_dump(by_alias=False, exclude_none=True))
+        return {"success": True, "tire_set": res}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/api/kart/tire-sets/{set_id}")
+async def update_tire_set(set_id: str, payload: TireSetPayload, current_user: str = Depends(get_current_user)):
+    """Update a tire set (state, wear, label...)."""
+    try:
+        res = KartService.update_tire_set(current_user, set_id, payload.model_dump(by_alias=False, exclude_none=True))
+        return {"success": True, "tire_set": res}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/api/kart/tire-sets/{set_id}")
+async def delete_tire_set(set_id: str, current_user: str = Depends(get_current_user)):
+    """Remove a tire set from the stock."""
+    try:
+        res = KartService.delete_tire_set(current_user, set_id)
+        return {"success": True, **res}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -56,6 +56,86 @@ def _pressure_range(specs: Dict[str, Any], condition: str) -> Optional[Tuple[flo
     return None
 
 
+STATE_RANK = {"neuf": 2, "rode": 1, "use": 0}
+STATE_LABEL = {"neuf": "Neuf", "rode": "Rodé", "use": "Usé"}
+
+
+def recommend_tire_set(
+    tire_sets: List[Dict[str, Any]],
+    mode: str,
+    weather: str,
+) -> Dict[str, Any]:
+    """Recommande le train de pneus du stock le plus adapté à la session.
+
+    Logique course :
+      - pluie  -> train pluie (alerte si aucun en stock)
+      - qualif -> le train le plus frais (perf pure sur peu de tours)
+      - course -> un train RODÉ de préférence (constance + endurance),
+                  sinon celui avec le plus de vie restante
+      - warmup -> le train le plus usé encore roulable (on préserve le stock)
+    """
+    mode = (mode or "course").lower()
+    rain = (weather or "sec").lower() == "pluie"
+
+    usable = [t for t in tire_sets if t.get("active", True)]
+    candidates = [t for t in usable if bool(t.get("is_rain")) == rain]
+
+    def life_left(t: Dict[str, Any]) -> int:
+        return max(0, int(t.get("laps_life") or 250) - int(t.get("laps_current") or 0))
+
+    def label(t: Dict[str, Any]) -> str:
+        model = t.get("custom_model") or t.get("component_label") or ""
+        return f"{t.get('label', 'Train')}" + (f" — {model}" if model else "")
+
+    if not candidates:
+        if rain:
+            return {
+                "set": None,
+                "message": "⚠️ PLUIE annoncée mais aucun train pluie dans votre stock. "
+                           "Déclarez vos pneus pluie dans Mon Kart, ou prévoyez-en l'achat.",
+                "priority": "high",
+            }
+        return {
+            "set": None,
+            "message": "Aucun train slick actif dans votre stock Mon Kart. Déclarez vos trains pour obtenir une recommandation.",
+            "priority": "medium",
+        }
+
+    worn_out = [t for t in candidates if life_left(t) <= 0]
+    fresh_candidates = [t for t in candidates if life_left(t) > 0] or candidates
+
+    if mode == "qualif":
+        best = max(fresh_candidates, key=lambda t: (STATE_RANK.get(t.get("state"), 1), life_left(t)))
+        why = "Qualif : on monte le train le plus frais — la performance pure prime sur peu de tours."
+    elif mode == "warmup":
+        best = min(fresh_candidates, key=lambda t: (STATE_RANK.get(t.get("state"), 1), life_left(t)))
+        why = "Warm-up : le train le plus entamé suffit pour la mise en température — on préserve les bons trains."
+    else:  # course
+        rodes = [t for t in fresh_candidates if t.get("state") == "rode"]
+        if rodes:
+            best = max(rodes, key=life_left)
+            why = "Course : un train rodé (déjà un cycle de chauffe) offre la meilleure constance sur la durée."
+        else:
+            best = max(fresh_candidates, key=lambda t: (STATE_RANK.get(t.get("state"), 1), life_left(t)))
+            why = "Course : pas de train rodé en stock — on prend le plus frais disponible. Astuce : rodez un train en warm-up pour la prochaine course."
+
+    message = f"{label(best)} ({STATE_LABEL.get(best.get('state'), '?')}, {life_left(best)} tours restants). {why}"
+    if best in worn_out:
+        message += " ⚠️ Ce train a dépassé sa durée de vie : performance dégradée à prévoir."
+
+    return {
+        "set": {
+            "id": best.get("id"),
+            "label": best.get("label"),
+            "model": best.get("custom_model") or best.get("component_label"),
+            "state": best.get("state"),
+            "life_left_laps": life_left(best),
+        },
+        "message": message,
+        "priority": "high" if rain else "medium",
+    }
+
+
 def compute_tire_advice(
     tire_model: str,
     weather: str,

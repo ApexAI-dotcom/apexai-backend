@@ -373,6 +373,87 @@ class KartService:
             logger.error(f"Error update_circuit: {e}")
             raise Exception(f"Could not update circuit: {e}")
 
+    # ─────────────────────────────────────────────
+    # Stock de trains de pneus (kart_tire_sets)
+    # ─────────────────────────────────────────────
+
+    TIRE_SET_FIELDS = {"label", "component_id", "custom_model", "state", "is_rain", "laps_current", "laps_life", "active", "notes"}
+
+    @staticmethod
+    def _sanitize_tire_set(payload: Dict[str, Any]) -> Dict[str, Any]:
+        p = {k: v for k, v in payload.items() if k in KartService.TIRE_SET_FIELDS}
+        for k in ("laps_current", "laps_life"):
+            if k in p and p[k] is not None:
+                try:
+                    p[k] = max(0, int(p[k]))
+                except (ValueError, TypeError):
+                    p.pop(k)
+        if p.get("state") not in (None, "neuf", "rode", "use"):
+            p["state"] = "neuf"
+        return p
+
+    @staticmethod
+    def get_tire_sets(user_id: str) -> List[Dict[str, Any]]:
+        """Get the user's tire sets, enriched with the catalog label if linked."""
+        if not supabase:
+            raise Exception("Supabase client not initialized")
+        try:
+            res = supabase.table("kart_tire_sets").select("*, kart_components(brand, name, subcategory)") \
+                .eq("user_id", user_id).order("created_at").execute()
+            sets = res.data or []
+            for t in sets:
+                comp = t.pop("kart_components", None)
+                if comp:
+                    t["component_label"] = f"{comp.get('brand', '')} {comp.get('name', '')}".strip()
+                    t["compound"] = comp.get("subcategory")
+            return sets
+        except Exception as e:
+            logger.error(f"Error get_tire_sets: {e}")
+            return []
+
+    @staticmethod
+    def create_tire_set(user_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        if not supabase:
+            raise Exception("Supabase client not initialized")
+        try:
+            p = KartService._sanitize_tire_set(payload)
+            p["user_id"] = user_id
+            if not p.get("label"):
+                existing = KartService.get_tire_sets(user_id)
+                p["label"] = f"Train {len(existing) + 1}"
+            res = supabase.table("kart_tire_sets").insert(p).execute()
+            if res.data and len(res.data) > 0:
+                return res.data[0]
+            raise Exception("Insertion failed")
+        except Exception as e:
+            logger.error(f"Error create_tire_set: {e}")
+            raise Exception(f"Could not create tire set: {e}")
+
+    @staticmethod
+    def update_tire_set(user_id: str, set_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        if not supabase:
+            raise Exception("Supabase client not initialized")
+        try:
+            p = KartService._sanitize_tire_set(payload)
+            res = supabase.table("kart_tire_sets").update(p).eq("id", set_id).eq("user_id", user_id).execute()
+            if res.data and len(res.data) > 0:
+                return res.data[0]
+            raise Exception("Tire set not found")
+        except Exception as e:
+            logger.error(f"Error update_tire_set: {e}")
+            raise Exception(f"Could not update tire set: {e}")
+
+    @staticmethod
+    def delete_tire_set(user_id: str, set_id: str) -> Dict[str, Any]:
+        if not supabase:
+            raise Exception("Supabase client not initialized")
+        try:
+            supabase.table("kart_tire_sets").delete().eq("id", set_id).eq("user_id", user_id).execute()
+            return {"deleted": True, "id": set_id}
+        except Exception as e:
+            logger.error(f"Error delete_tire_set: {e}")
+            raise Exception(f"Could not delete tire set: {e}")
+
     @staticmethod
     def delete_circuit(circuit_id: str, user_id: str) -> Dict[str, Any]:
         """Delete a non-official circuit. Official (verified) circuits are protected."""
