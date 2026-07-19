@@ -280,3 +280,13 @@ async def update_circuit(circuit_id: str, circuit: CircuitCreate, current_user: 
         return {"success": True, "circuit": res}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/api/circuits/{circuit_id}")
+async def delete_circuit(circuit_id: str, current_user: str = Depends(get_current_user)):
+    """Delete a non-official circuit."""
+    try:
+        res = KartService.delete_circuit(circuit_id, current_user)
+        return {"success": True, **res}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

@@ -375,6 +375,29 @@ class KartService:
             raise Exception(f"Could not update circuit: {e}")
 
     @staticmethod
+    def delete_circuit(circuit_id: str, user_id: str) -> Dict[str, Any]:
+        """Delete a non-official circuit. Official (verified) circuits are protected."""
+        if not supabase:
+            raise Exception("Supabase client not initialized")
+
+        try:
+            cur = supabase.table("circuits").select("id, verified, name").eq("id", circuit_id).limit(1).execute()
+            if not cur.data or len(cur.data) == 0:
+                raise Exception("Circuit introuvable.")
+            circuit = cur.data[0]
+            if circuit.get("verified"):
+                raise Exception("Ce circuit officiel ApexAI ne peut pas être supprimé.")
+
+            # Détacher les réglages qui référencent ce circuit (contrainte FK)
+            supabase.table("kart_setups").update({"circuit_id": None}).eq("circuit_id", circuit_id).execute()
+            supabase.table("circuits").delete().eq("id", circuit_id).execute()
+            logger.info(f"delete_circuit: '{circuit.get('name')}' ({circuit_id}) deleted by {user_id}")
+            return {"deleted": True, "id": circuit_id}
+        except Exception as e:
+            logger.error(f"Error delete_circuit: {e}")
+            raise Exception(f"Could not delete circuit: {e}")
+
+    @staticmethod
     def upsert_session(user_id: str, signature: str, imported_via: str, metrics: Dict[str, Any], analysis_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Upsert a session in kart_session_logs.
