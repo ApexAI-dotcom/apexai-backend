@@ -174,6 +174,10 @@ def _run_analysis_pipeline_sync(
         raise ValueError(f"Échec chargement: {result.get('error', 'Unknown error')}")
 
     df = result["data"]
+    import_diagnostics = result.get("diagnostics")
+    if import_diagnostics:
+        logger.info(f"[{analysis_id}] Import: {import_diagnostics.get('device')} "
+                    f"({import_diagnostics.get('sample_rate_hz')} Hz, qualité: {import_diagnostics.get('quality')})")
     logger.info(f"[{analysis_id}] Loaded {len(df)} rows")
 
     # PRE-GATES
@@ -570,6 +574,7 @@ def _run_analysis_pipeline_sync(
             circuit_name=circuit_name,
         ),
         track_features=TrackFeatures(**track_signature) if track_signature else None,
+        import_diagnostics=import_diagnostics,
     )
     return response.dict(exclude_none=True)
 

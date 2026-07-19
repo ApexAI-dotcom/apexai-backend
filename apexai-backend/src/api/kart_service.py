@@ -391,6 +391,79 @@ class KartService:
             logger.error(f"Error update_circuit: {e}")
             raise Exception(f"Could not update circuit: {e}")
 
+    @staticmethod
+    def estimate_kart_weight(user_id: str) -> Dict[str, Any]:
+        """Estime la masse totale kart + pilote depuis le Garage.
+
+        Somme : poids châssis (catalogue) + poids moteur (catalogue)
+              + poids pilote (profil, équipement compris).
+        Retourne le détail complet pour affichage transparent — c'est une
+        ESTIMATION (±3 kg : essence, lest, accessoires non comptés).
+        """
+        from src.api.advisor_service import _norm
+
+        profile = KartService.get_or_create_kart_profile(user_id)
+        setup_json = profile.get("setup_json") or {}
+        components = KartService.get_catalog_components()
+
+        def match_component(label: str, category: str) -> Optional[Dict[str, Any]]:
+            target = set(_norm(label or "").split())
+            if not target:
+                return None
+            best, best_score = None, 0.0
+            for c in components:
+                if c.get("category") != category:
+                    continue
+                cand = set(_norm(f"{c.get('brand','')} {c.get('name','')}").split())
+                if not cand:
+                    continue
+                score = len(target & cand) / len(cand)
+                if score > best_score:
+                    best, best_score = c, score
+            return best if best_score >= 0.5 else None
+
+        chassis_label = f"{setup_json.get('chassis_brand', '')} {setup_json.get('chassis_model', '')}".strip() \
+            or profile.get("chassis_brand") or ""
+        engine_label = profile.get("engine_model") or ""
+
+        chassis = match_component(chassis_label, "chassis")
+        engine = match_component(engine_label, "engine")
+        chassis_w = (chassis or {}).get("specs", {}).get("weight_kg")
+        engine_w = (engine or {}).get("specs", {}).get("weight_kg")
+        driver_w = profile.get("driver_weight_kg")
+
+        missing = []
+        if not chassis_label or chassis_w is None:
+            missing.append("chassis")
+        if not engine_label or engine_w is None:
+            missing.append("engine")
+        if driver_w is None:
+            missing.append("driver")
+
+        kart_w = None
+        if chassis_w is not None and engine_w is not None:
+            kart_w = round(float(chassis_w) + float(engine_w), 1)
+
+        total = None
+        if kart_w is not None and driver_w is not None:
+            total = round(kart_w + float(driver_w), 1)
+
+        return {
+            "driver_weight_kg": float(driver_w) if driver_w is not None else None,
+            "chassis": {
+                "label": f"{chassis['brand']} {chassis['name']}" if chassis else (chassis_label or None),
+                "weight_kg": float(chassis_w) if chassis_w is not None else None,
+            },
+            "engine": {
+                "label": f"{engine['brand']} {engine['name']}" if engine else (engine_label or None),
+                "weight_kg": float(engine_w) if engine_w is not None else None,
+            },
+            "kart_weight_kg": kart_w,          # châssis + moteur = kart à vide estimé
+            "estimated_total_kg": total,       # + pilote
+            "tolerance_kg": 3,
+            "missing": missing,
+        }
+
     # ─────────────────────────────────────────────
     # Stock de trains de pneus (kart_tire_sets)
     # ─────────────────────────────────────────────

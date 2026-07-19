@@ -141,6 +141,7 @@ class AnalysisResponse(BaseModel):
     statistics: Statistics
     session_conditions: Optional[SessionConditions] = Field(default=None, description="Conditions de piste (sec/humide/mouillé/pluie, température)")
     track_features: Optional[TrackFeatures] = Field(default=None, description="Signature de piste dérivée de la télémétrie")
+    import_diagnostics: Optional[Dict[str, Any]] = Field(default=None, description="Diagnostic d'import : appareil détecté, canaux trouvés/manquants, fréquence")
 
 
 class ErrorResponse(BaseModel):

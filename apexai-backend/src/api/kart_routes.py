@@ -303,6 +303,15 @@ async def kart_advisor(req: AdvisorRequest, current_user: str = Depends(get_curr
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/api/kart/weight-estimate")
+async def get_weight_estimate(current_user: str = Depends(get_current_user)):
+    """Estimation de la masse kart + pilote depuis les composants du Garage."""
+    try:
+        return {"success": True, "estimate": KartService.estimate_kart_weight(current_user)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/api/kart/tire-sets")
 async def get_tire_sets(current_user: str = Depends(get_current_user)):
     """List the user's tire sets."""

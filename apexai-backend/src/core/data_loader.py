@@ -147,6 +147,16 @@ def _parse_with_pandas(file_path: str, skiprows: int, encoding: str = 'utf-8') -
         return None
 
 
+# Alias de colonnes reconnus lors de la dernière normalisation (alimenté par
+# _normalize_columns, consommé par device_profiles pour le diagnostic d'import)
+_COLUMN_ALIASES: set = set()
+
+
+def get_known_column_aliases() -> set:
+    """Retourne les noms de colonnes (minuscules) reconnus par le mapping."""
+    return set(_COLUMN_ALIASES)
+
+
 def _normalize_columns(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
     """
     Normalise les noms de colonnes : minuscules et mapping standard.
@@ -235,6 +245,9 @@ def _normalize_columns(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
         'accel_lat': 'lateral_g',
     }
 
+    # Mémoriser les alias reconnus (pour le diagnostic d'import)
+    _COLUMN_ALIASES.update(column_mapping.keys())
+
     # Appliquer le mapping
     df_normalized.rename(columns=column_mapping, inplace=True)
 
@@ -256,6 +269,7 @@ def _normalize_columns(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
             col_map[col] = 'speed'
         elif 'time' in col_lower and 'time' not in df_normalized.columns and col != 'time':
             col_map[col] = 'time'
+    _COLUMN_ALIASES.update(col_map.keys())
     df_normalized.rename(columns=col_map, inplace=True)
 
     if 'time' in df_normalized.columns:
@@ -485,6 +499,9 @@ def robust_load_telemetry(file_path: str) -> Dict[str, Any]:
         result['error'] = "Error: Impossible de parser le fichier avec toutes les méthodes essayées"
         return result
     
+    # Nombre de lignes du fichier source (pour la fréquence d'échantillonnage réelle)
+    pre_downsample_rows = len(df)
+
     # === DOWNSAMPLING : max 6000 points pour performance (évite timeout 30s) ===
     MAX_POINTS = 6000
     if len(df) > MAX_POINTS:
@@ -497,6 +514,9 @@ def robust_load_telemetry(file_path: str) -> Dict[str, Any]:
         warnings.warn(msg)
         result['warnings'].append(msg)
     
+    # Colonnes brutes (avant normalisation) pour le diagnostic d'import
+    original_columns = [str(c) for c in df.columns]
+
     # Normalisation des colonnes
     try:
         df, norm_warnings = _normalize_columns(df)
@@ -534,8 +554,22 @@ def robust_load_telemetry(file_path: str) -> Dict[str, Any]:
             'circuit_length_m': 0.0
         }
     
+    # Diagnostic d'import (identification appareil + inventaire des canaux)
+    try:
+        from src.core.device_profiles import build_import_diagnostics
+        sample_rate = None
+        duration = result['metadata'].get('duration_seconds')
+        if duration and duration > 0:
+            sample_rate = pre_downsample_rows / float(duration)
+        result['diagnostics'] = build_import_diagnostics(
+            file_path, original_columns, [str(c) for c in df.columns], sample_rate
+        )
+    except Exception as e:
+        result['warnings'].append(f"Warning: diagnostic d'import indisponible : {str(e)[:80]}")
+        result['diagnostics'] = None
+
     # Succès !
     result['success'] = True
     result['data'] = df
-    
+
     return result
