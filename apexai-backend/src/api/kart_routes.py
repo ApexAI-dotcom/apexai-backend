@@ -9,7 +9,7 @@ from src.api.kart_service import KartService
 from src.api.auth import get_current_user
 from src.api.config import settings
 from src.api.models import KartSetupCreate, CircuitCreate, AdvisorRequest, TireSetPayload
-from src.api.advisor_service import compute_tire_advice, recommend_tire_set
+from src.api.advisor_service import compute_tire_advice, recommend_tire_set, compute_setup_advice
 
 router = APIRouter()
 
@@ -298,6 +298,29 @@ async def kart_advisor(req: AdvisorRequest, current_user: str = Depends(get_curr
         )
         if set_advice:
             result["tire_set_advice"] = set_advice
+
+        # Recommandations châssis/géométrie/transmission/carburation :
+        # profil Garage lu côté serveur (source de vérité unique).
+        try:
+            profile = KartService.get_or_create_kart_profile(current_user)
+            setup_json = profile.get("setup_json") or {}
+            setup_recs = compute_setup_advice(
+                weather=req.weather,
+                track_temp=req.track_temp,
+                grip=req.grip,
+                circuit=req.circuit,
+                total_weight=req.total_weight,
+                chassis_brand=setup_json.get("chassis_brand") or profile.get("chassis_brand") or "",
+                engine_model=profile.get("engine_model") or "",
+                current_sprocket_front=req.sprocket_front,
+                current_sprocket_rear=req.sprocket_rear,
+            )
+            result["recommendations"].update(setup_recs)
+        except Exception as setup_err:
+            # Les pressions restent servies même si le bloc setup échoue
+            import logging
+            logging.getLogger(__name__).warning(f"setup advice failed: {setup_err}")
+
         return {"success": True, **result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

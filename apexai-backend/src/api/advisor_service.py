@@ -56,6 +56,174 @@ def _pressure_range(specs: Dict[str, Any], condition: str) -> Optional[Tuple[flo
     return None
 
 
+def _rec(field: str, value: Any, message: str, priority: str = "medium",
+         suggested: Any = None) -> Dict[str, Any]:
+    return {
+        "field": field, "value": value, "message": message,
+        "priority": priority,
+        "suggestedValue": value if suggested is None else suggested,
+    }
+
+
+def compute_setup_advice(
+    weather: str,
+    track_temp: Optional[float],
+    grip: str,
+    circuit: Optional[Dict[str, Any]],
+    total_weight: Optional[float],
+    chassis_brand: str,
+    engine_model: str,
+    current_sprocket_front: Optional[int] = None,
+    current_sprocket_rear: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Recommandations châssis / géométrie / transmission / carburation.
+
+    Portage backend de l'advisorEngine frontend : mêmes règles physiques,
+    mais alimentées par la signature circuit MESURÉE (télémétrie) et le
+    profil Garage lu côté serveur. Source de vérité unique.
+    """
+    recs: Dict[str, Any] = {}
+    is_rain = (weather or "sec").lower() == "pluie"
+    grip = (grip or "normal").lower()
+    t = float(track_temp) if isinstance(track_temp, (int, float)) else 20.0
+    is_hot = t > 35
+
+    c = circuit or {}
+    speed_ratio = (c.get("speedRatio") or c.get("speed_ratio") or "mixte")
+    hairpins = c.get("hairpinsCount") if c.get("hairpinsCount") is not None else c.get("hairpins_count") or 0
+    fast_corners = c.get("fastCornersCount") if c.get("fastCornersCount") is not None else c.get("fast_corners_count") or 0
+    elevation = (c.get("elevation") or "plat")
+    bumpiness = (c.get("bumpiness") or "lisse")
+    is_sinueux = speed_ratio == "sinueux"
+    is_rapide = speed_ratio == "rapide"
+
+    chassis_l = (chassis_brand or "").lower()
+    engine_l = (engine_model or "").lower()
+
+    # ── Voies (largeur des trains) ──
+    base_rear = 1395 if any(k in chassis_l for k in ("tony", "kosmic", "exprit", "otk", "redspeed")) else 1400
+    rear_w, front_w = base_rear, 120
+    rear_msg = f"Base constructeur {chassis_brand or 'standard'} : {base_rear} mm."
+    front_msg = "Voie avant standard (120 cm)."
+    if is_rain:
+        rear_w, front_w = 1360, 125
+        rear_msg = "PLUIE : rentrer le train arrière au minimum (~1360 mm) pour planter la roue extérieure."
+        front_msg = "PLUIE : élargir le train avant au maximum pour un avant incisif qui mord la piste humide. ASTUCE : desserrer/enlever les barres de torsion pour libérer le châssis."
+    else:
+        if grip == "gommée" or grip == "gommee":
+            rear_w = min(1400, base_rear + 5)
+            rear_msg += " Piste gommée : on élargit pour libérer l'arrière."
+        elif grip == "faible":
+            rear_w = max(1385, base_rear - 5)
+            rear_msg += " Grip faible : on rétrécit pour générer du grip mécanique."
+        if is_sinueux or hairpins >= 4:
+            front_w = 122
+            front_msg = f"Circuit sinueux ({hairpins} épingles mesurées) : élargir l'avant (~122 cm) pour engager le kart. ASTUCE : retirer la barre de torsion avant pour aider à pivoter."
+        elif fast_corners >= 4:
+            front_w = 118
+            front_msg = f"{fast_corners} courbes rapides mesurées : rentrer l'avant (~118 cm) pour stabiliser à haute vitesse. ASTUCE : insérer la barre de torsion avant."
+    recs["trackWidthRear"] = _rec("trackWidthRear", rear_w, rear_msg, "high" if (is_rain or grip.startswith("gomm")) else "low")
+    recs["trackWidthFront"] = _rec("trackWidthFront", front_w, front_msg, "medium")
+
+    # ── Arbre arrière ──
+    axle, axle_msg, axle_p = "M", f"Arbre standard (M) pour conditions normales ({chassis_brand or 'standard'}).", "low"
+    if is_rain or grip == "faible":
+        axle = "S"
+        axle_msg = f"{'PLUIE' if is_rain else 'GRIP FAIBLE'} : arbre souple (S) pour faire travailler le châssis et chercher du grip mécanique."
+        axle_p = "high"
+    elif grip.startswith("gomm") and is_hot:
+        axle = "H"
+        axle_msg = "PISTE GOMMÉE & CHAUDE : arbre dur (H) pour rigidifier le châssis et le forcer à glisser légèrement."
+        axle_p = "high"
+    recs["rearAxle"] = _rec("rearAxle", axle, axle_msg, axle_p)
+
+    # ── Géométrie (chasse / carrossage) ──
+    caster, caster_msg = "Neutre", "Chasse standard d'usine (Neutre)."
+    camber, camber_msg = "Neutre", "Carrossage standard (Neutre ou légèrement négatif)."
+    if is_rain:
+        caster, caster_msg = "Max Positif", "PLUIE : chasse maximale pour charger le train avant et planter les pneus dans l'eau."
+        camber, camber_msg = "Neutre à Positif", "PLUIE : éviter le carrossage négatif pour utiliser toute la bande de roulement."
+    elif hairpins >= 4 and not grip.startswith("gomm"):
+        caster, caster_msg = "Positif", f"{hairpins} épingles : augmenter la chasse pour soulever la roue arrière intérieure et pivoter."
+    elif grip.startswith("gomm"):
+        caster, caster_msg = "Négatif", "Piste gommée : diminuer la chasse pour ne pas trop lever l'arrière (étouffe le moteur en sortie)."
+    recs["caster"] = _rec("caster", caster, caster_msg, "medium")
+    recs["camber"] = _rec("camber", camber, camber_msg, "low")
+
+    # ── Hauteurs de caisse ──
+    ride, ride_msg = "standard", "Hauteur de caisse standard recommandée."
+    if is_rain:
+        ride, ride_msg = "haute", "PLUIE : relever le châssis pour amplifier le transfert de charge sur la roue extérieure."
+    elif bumpiness == "bossele":
+        ride, ride_msg = "haute", "PISTE BOSSELÉE : relever le châssis pour éviter de talonner sur les vibreurs."
+    ride_p = "medium" if ride != "standard" else "low"
+    recs["rideHeightFront"] = _rec("rideHeightFront", ride, ride_msg, ride_p)
+    recs["rideHeightRear"] = _rec("rideHeightRear", ride, ride_msg, ride_p)
+
+    # ── Transmission ──
+    std_front, std_rear = 12, 80
+    if "kz" in engine_l or "tm" in engine_l:
+        std_front, std_rear = 17, 26
+    elif "micro" in engine_l or "mini" in engine_l:
+        std_front, std_rear = 11, 74
+    cur_rear = int(current_sprocket_rear) if current_sprocket_rear else std_rear
+    cur_front = int(current_sprocket_front) if current_sprocket_front else std_front
+
+    delta, reasons = 0.0, []
+    if is_rapide:
+        delta -= 1.5; reasons.append("circuit rapide (mesuré)")
+    elif is_sinueux:
+        delta += 1.5; reasons.append("circuit sinueux (mesuré)")
+    if elevation == "vallonne":
+        delta += 1; reasons.append("relief vallonné")
+    if total_weight and total_weight > 165:
+        delta += 1; reasons.append("équipage lourd")
+    elif total_weight and 0 < total_weight < 145:
+        delta -= 0.5; reasons.append("équipage léger")
+
+    # Arrondi "Math.round" JS (demi vers +inf) pour parité avec l'ancien moteur
+    import math
+    rounded = int(math.floor(delta + 0.5))
+    if rounded != 0:
+        final_rear = cur_rear + rounded
+        sign = "+" if rounded > 0 else ""
+        recs["sprocketRear"] = _rec("sprocketRear", final_rear,
+            f"Passer à {final_rear} dents (actuellement {cur_rear}) : {sign}{rounded} dent(s) — {', '.join(reasons)}.", "high")
+    else:
+        recs["sprocketRear"] = _rec("sprocketRear", cur_rear, f"Rapport standard conseillé : {cur_rear} dents.", "low")
+    recs["sprocketFront"] = _rec("sprocketFront", cur_front, f"Pignon standard conseillé : {cur_front} dents.", "low")
+
+    # ── Carburation ──
+    is_tillotson = any(k in engine_l for k in ("x30", "swift", "60"))
+    is_dellorto = any(k in engine_l for k in ("rotax", "tm", "vortex", "junior", "evo", "kz"))
+    if is_tillotson:
+        high, low = "1T 05m", "1T 15m"
+        if t > 28:
+            high = "1T 00m"
+            msg = "Tillotson (X30) : piste chaude, resserrer la vis H à 1 tour."
+        elif t < 15:
+            high = "1T 10m"
+            msg = "Tillotson (X30) : froid, enrichir la vis H (1T 10m) pour éviter le serrage."
+        else:
+            msg = "Tillotson (X30) : réglage d'usine (H = 1T 5m, L = 1T 15m)."
+        recs["carbConfig"] = _rec("carbConfig", f"H: {high} / L: {low}", msg, "medium",
+                                  {"highSpeedScrew": high, "lowSpeedScrew": low})
+    elif is_dellorto:
+        main_jet, pilot = 125, 60
+        if t > 28:
+            main_jet = 122
+            msg = "Dell'Orto (Rotax/KZ) : forte température, gicleur principal 122 pour ne pas engorger."
+        elif t < 15:
+            main_jet = 130
+            msg = "Dell'Orto (Rotax/KZ) : froid, gicleur principal 130 pour éviter d'être trop pauvre."
+        else:
+            msg = "Dell'Orto (Rotax/KZ) : gicleur principal 125, ralenti 60."
+        recs["carbConfig"] = _rec("carbConfig", f"Gicleur principal: {main_jet}", msg, "medium",
+                                  {"mainJet": main_jet, "pilotJet": pilot})
+
+    return recs
+
+
 STATE_RANK = {"neuf": 2, "rode": 1, "use": 0}
 STATE_LABEL = {"neuf": "Neuf", "rode": "Rodé", "use": "Usé"}
 
