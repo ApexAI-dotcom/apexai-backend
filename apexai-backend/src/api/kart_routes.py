@@ -257,8 +257,20 @@ async def kart_advisor(req: AdvisorRequest, current_user: str = Depends(get_curr
     + train de pneus optimal depuis le stock Mon Kart (si mode fourni)."""
     try:
         components = KartService.get_catalog_components("tire")
+        tire_sets = KartService.get_tire_sets(current_user)
+        set_advice = recommend_tire_set(tire_sets, req.mode or "course", req.weather) if tire_sets else None
+
+        # Base des pressions : le pneu réellement concerné par la session.
+        # Priorité au train recommandé (ce qu'ApexAI conseille de rouler),
+        # sinon le train monté, sinon le modèle envoyé par le frontend.
+        pressure_tire = req.tire_model or ""
+        if set_advice and set_advice.get("set") and set_advice["set"].get("model"):
+            pressure_tire = set_advice["set"]["model"]
+        elif set_advice and set_advice.get("mounted") and set_advice["mounted"].get("model"):
+            pressure_tire = set_advice["mounted"]["model"]
+
         result = compute_tire_advice(
-            tire_model=req.tire_model or "",
+            tire_model=pressure_tire,
             weather=req.weather,
             track_temp=req.track_temp,
             air_temp=req.air_temp,
@@ -266,9 +278,8 @@ async def kart_advisor(req: AdvisorRequest, current_user: str = Depends(get_curr
             circuit=req.circuit,
             components=components,
         )
-        if req.mode:
-            tire_sets = KartService.get_tire_sets(current_user)
-            result["tire_set_advice"] = recommend_tire_set(tire_sets, req.mode, req.weather)
+        if set_advice:
+            result["tire_set_advice"] = set_advice
         return {"success": True, **result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -309,6 +320,16 @@ async def delete_tire_set(set_id: str, current_user: str = Depends(get_current_u
     try:
         res = KartService.delete_tire_set(current_user, set_id)
         return {"success": True, **res}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/kart/tire-sets/{set_id}/mount")
+async def mount_tire_set(set_id: str, current_user: str = Depends(get_current_user)):
+    """Mark a tire set as currently mounted on the kart."""
+    try:
+        res = KartService.mount_tire_set(current_user, set_id)
+        return {"success": True, "tire_set": res}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

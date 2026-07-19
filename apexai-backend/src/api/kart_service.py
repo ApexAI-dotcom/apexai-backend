@@ -377,7 +377,7 @@ class KartService:
     # Stock de trains de pneus (kart_tire_sets)
     # ─────────────────────────────────────────────
 
-    TIRE_SET_FIELDS = {"label", "component_id", "custom_model", "state", "is_rain", "laps_current", "laps_life", "active", "notes"}
+    TIRE_SET_FIELDS = {"label", "component_id", "custom_model", "state", "is_rain", "laps_current", "laps_life", "active", "notes", "is_mounted"}
 
     @staticmethod
     def _sanitize_tire_set(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -399,7 +399,7 @@ class KartService:
             raise Exception("Supabase client not initialized")
         try:
             res = supabase.table("kart_tire_sets").select("*, kart_components(brand, name, subcategory)") \
-                .eq("user_id", user_id).order("created_at").execute()
+                .eq("user_id", user_id).order("is_mounted", desc=True).order("created_at").execute()
             sets = res.data or []
             for t in sets:
                 comp = t.pop("kart_components", None)
@@ -442,6 +442,24 @@ class KartService:
         except Exception as e:
             logger.error(f"Error update_tire_set: {e}")
             raise Exception(f"Could not update tire set: {e}")
+
+    @staticmethod
+    def mount_tire_set(user_id: str, set_id: str) -> Dict[str, Any]:
+        """Mark a tire set as the one currently mounted on the kart (exclusive)."""
+        if not supabase:
+            raise Exception("Supabase client not initialized")
+        try:
+            # Démonter tous les autres trains, puis monter celui-ci
+            supabase.table("kart_tire_sets").update({"is_mounted": False}) \
+                .eq("user_id", user_id).eq("is_mounted", True).execute()
+            res = supabase.table("kart_tire_sets").update({"is_mounted": True}) \
+                .eq("id", set_id).eq("user_id", user_id).execute()
+            if res.data and len(res.data) > 0:
+                return res.data[0]
+            raise Exception("Tire set not found")
+        except Exception as e:
+            logger.error(f"Error mount_tire_set: {e}")
+            raise Exception(f"Could not mount tire set: {e}")
 
     @staticmethod
     def delete_tire_set(user_id: str, set_id: str) -> Dict[str, Any]:

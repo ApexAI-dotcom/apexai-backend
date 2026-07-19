@@ -119,7 +119,17 @@ def recommend_tire_set(
             best = max(fresh_candidates, key=lambda t: (STATE_RANK.get(t.get("state"), 1), life_left(t)))
             why = "Course : pas de train rodé en stock — on prend le plus frais disponible. Astuce : rodez un train en warm-up pour la prochaine course."
 
-    message = f"{label(best)} ({STATE_LABEL.get(best.get('state'), '?')}, {life_left(best)} tours restants). {why}"
+    mounted = next((t for t in usable if t.get("is_mounted")), None)
+    is_change = bool(mounted) and mounted.get("id") != best.get("id")
+
+    best_desc = f"{label(best)} ({STATE_LABEL.get(best.get('state'), '?')}, {life_left(best)} tours restants)"
+    if not mounted:
+        message = f"Monte le {best_desc}. {why}"
+    elif is_change:
+        message = f"🔄 Changement recommandé : tu as le {label(mounted)} monté, passe au {best_desc}. {why}"
+    else:
+        message = f"✔ Le {best_desc} est déjà monté — c'est le bon choix pour cette session. {why}"
+
     if best in worn_out:
         message += " ⚠️ Ce train a dépassé sa durée de vie : performance dégradée à prévoir."
 
@@ -131,8 +141,15 @@ def recommend_tire_set(
             "state": best.get("state"),
             "life_left_laps": life_left(best),
         },
+        "mounted": {
+            "id": mounted.get("id"),
+            "label": mounted.get("label"),
+            "model": mounted.get("custom_model") or mounted.get("component_label"),
+        } if mounted else None,
+        "is_change": is_change,
+        "is_optimal": bool(mounted) and not is_change,
         "message": message,
-        "priority": "high" if rain else "medium",
+        "priority": "high" if (rain or is_change) else "medium",
     }
 
 
