@@ -166,6 +166,19 @@ class CircuitCreate(BaseModel):
         populate_by_name = True
 
 
+class AdvisorRequest(BaseModel):
+    """Requête de recommandations ingénieur (pressions pneus)."""
+    tire_model: Optional[str] = Field(default=None, alias="tireModel")
+    weather: str = Field(default="sec", description="sec | humide | pluie")
+    track_temp: Optional[float] = Field(default=None, alias="trackTemp")
+    air_temp: Optional[float] = Field(default=None, alias="airTemp")
+    grip: str = Field(default="normal", description="faible | normal | gommée")
+    circuit: Optional[Dict[str, Any]] = None
+
+    class Config:
+        populate_by_name = True
+
+
 class KartSetupCreate(BaseModel):
     """Payload for saving a kart setup"""
     id: Optional[str] = None

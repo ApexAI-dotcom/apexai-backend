@@ -8,7 +8,8 @@ from src.core.kart_mechanical import parse_kart_mechanical
 from src.api.kart_service import KartService
 from src.api.auth import get_current_user
 from src.api.config import settings
-from src.api.models import KartSetupCreate, CircuitCreate
+from src.api.models import KartSetupCreate, CircuitCreate, AdvisorRequest
+from src.api.advisor_service import compute_tire_advice
 
 router = APIRouter()
 
@@ -246,6 +247,25 @@ async def get_circuits(current_user: str = Depends(get_current_user)):
     try:
         circuits = KartService.get_circuits()
         return {"circuits": circuits}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/kart/advisor")
+async def kart_advisor(req: AdvisorRequest, current_user: str = Depends(get_current_user)):
+    """Recommandations ingénieur : pressions pneus depuis les abaques du catalogue."""
+    try:
+        components = KartService.get_catalog_components("tire")
+        result = compute_tire_advice(
+            tire_model=req.tire_model or "",
+            weather=req.weather,
+            track_temp=req.track_temp,
+            air_temp=req.air_temp,
+            grip=req.grip,
+            circuit=req.circuit,
+            components=components,
+        )
+        return {"success": True, **result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
