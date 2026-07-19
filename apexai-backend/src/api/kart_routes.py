@@ -27,6 +27,9 @@ class AddHistoryRequest(BaseModel):
     notes: str
     date: Optional[str] = None
 
+class RenameSetupRequest(BaseModel):
+    name: str
+
 @router.get("/api/kart/profile")
 async def get_kart_profile(current_user: str = Depends(get_current_user)):
     if not is_mon_kart_enabled():
@@ -237,6 +240,21 @@ async def delete_kart_setup(setup_id: str, current_user: str = Depends(get_curre
     try:
         res = KartService.delete_kart_setup(current_user, setup_id)
         return res
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.patch("/api/kart/setups/{setup_id}/rename")
+async def rename_kart_setup(setup_id: str, req: RenameSetupRequest, current_user: str = Depends(get_current_user)):
+    """Rename a saved kart setup."""
+    if not is_mon_kart_enabled():
+        raise HTTPException(status_code=404, detail="Mon Kart is currently disabled.")
+        
+    if not KartService.is_racer_or_team(current_user):
+        raise HTTPException(status_code=403, detail="Mon Kart is only available for Racer and Team plans.")
+        
+    try:
+        res = KartService.rename_kart_setup(current_user, setup_id, req.name)
+        return {"success": True, "setup": res}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

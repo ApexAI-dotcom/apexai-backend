@@ -215,6 +215,20 @@ class KartService:
             return []
 
     @staticmethod
+    def rename_kart_setup(user_id: str, setup_id: str, new_name: str) -> Dict[str, Any]:
+        """Rename a saved kart setup."""
+        if not supabase:
+            raise Exception("Supabase client not initialized")
+        try:
+            res = supabase.table("kart_setups").update({"setup_name": new_name}).eq("id", setup_id).eq("user_id", user_id).execute()
+            if res.data and len(res.data) > 0:
+                return res.data[0]
+            raise Exception("Setup not found or access denied")
+        except Exception as e:
+            logger.error(f"Error renaming kart_setup {setup_id}: {e}")
+            raise Exception(f"Could not rename Kart setup: {str(e)}")
+
+    @staticmethod
     def get_circuits() -> List[Dict[str, Any]]:
         """Get all circuits."""
         if not supabase:
