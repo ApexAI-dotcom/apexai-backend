@@ -562,7 +562,21 @@ class KartService:
                     updates["battery_voltage_min_ever"] = float(batt_min)
             
             KartService.update_kart_profile(user_id, updates)
-            
+
+            # Décrémente aussi l'usure du TRAIN MONTÉ (stock de pneus).
+            # Best-effort : ne doit jamais faire échouer l'import de session.
+            if laps > 0:
+                try:
+                    mounted = supabase.table("kart_tire_sets").select("id, laps_current") \
+                        .eq("user_id", user_id).eq("is_mounted", True).eq("active", True).limit(1).execute()
+                    if mounted.data and len(mounted.data) > 0:
+                        m = mounted.data[0]
+                        supabase.table("kart_tire_sets").update(
+                            {"laps_current": int(m.get("laps_current") or 0) + laps}
+                        ).eq("id", m["id"]).execute()
+                except Exception as tire_err:
+                    logger.warning(f"upsert_session: tire set wear update skipped: {tire_err}")
+
             return {"session": new_session, "is_new": True}
         except Exception as e:
             logger.error(f"Error upsert_session: {e}")
