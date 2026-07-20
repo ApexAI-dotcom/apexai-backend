@@ -103,8 +103,10 @@ def compute_setup_advice(
     # ── Voies (largeur des trains) ──
     base_rear = 1395 if any(k in chassis_l for k in ("tony", "kosmic", "exprit", "otk", "redspeed")) else 1400
     rear_w, front_w = base_rear, 120
-    rear_msg = f"Base constructeur {chassis_brand or 'standard'} : {base_rear} mm."
-    front_msg = "Voie avant standard (120 cm)."
+    has_signature = bool(c) and (c.get("hairpinsCount") is not None or c.get("hairpins_count") is not None)
+    sig_txt = f"Signature mesurée du tracé : {speed_ratio}, {hairpins} épingle(s), {fast_corners} courbe(s) rapide(s). " if has_signature else ""
+    rear_msg = f"{sig_txt}Base constructeur {chassis_brand or 'standard'} : {base_rear} mm."
+    front_msg = f"{sig_txt}Voie avant standard (120 cm) — aucun seuil d'ajustement franchi (élargie si ≥4 épingles, rentrée si ≥4 courbes rapides)."
     if is_rain:
         rear_w, front_w = 1360, 125
         rear_msg = "PLUIE : rentrer le train arrière au minimum (~1360 mm) pour planter la roue extérieure."
