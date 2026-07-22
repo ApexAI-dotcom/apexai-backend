@@ -15,6 +15,7 @@ envoyé par le client. Chaque endpoint déclare la permission qu'il exige.
 
 import logging
 import os
+import re
 import secrets
 import string
 from datetime import datetime, timedelta, timezone
@@ -183,6 +184,105 @@ async def admin_stats(ctx: Dict[str, Any] = Depends(require_permission("stats"))
         },
         "generated_at": now.isoformat(),
     }
+
+
+# ─────────────────────────────────────────────
+# Stats contextuelles (widget flottant selon la page)
+# ─────────────────────────────────────────────
+@router.get("/context-stats")
+async def context_stats(path: str = "/", ctx: Dict[str, Any] = Depends(require_permission("stats"))):
+    """Renvoie quelques indicateurs pertinents pour la page courante."""
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Service indisponible")
+
+    now = datetime.now(timezone.utc)
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    week = (now - timedelta(days=7)).isoformat()
+    p = _normalize_path_light(path)
+
+    def count_since(table: str, col: str, since: str, **eq) -> int:
+        try:
+            q = supabase.table(table).select("*", count="exact", head=True).gte(col, since)
+            for k, v in eq.items():
+                q = q.eq(k, v)
+            return q.execute().count or 0
+        except Exception:
+            return 0
+
+    def count(table: str) -> int:
+        try:
+            return supabase.table(table).select("*", count="exact", head=True).execute().count or 0
+        except Exception:
+            return 0
+
+    # Vues + visiteurs uniques du jour (global, toujours affiché)
+    views_today, unique_today = 0, 0
+    try:
+        res = supabase.table("page_events").select("session_id, path") \
+            .eq("event_type", "view").gte("created_at", today).limit(5000).execute()
+        rows = res.data or []
+        views_today = len(rows)
+        unique_today = len({r.get("session_id") for r in rows if r.get("session_id")})
+        page_views_today = len([r for r in rows if r.get("path") == p])
+    except Exception:
+        page_views_today = 0
+
+    stats: List[Dict[str, Any]] = [
+        {"label": "Vues du site aujourd'hui", "value": views_today},
+        {"label": "Visiteurs uniques aujourd'hui", "value": unique_today},
+    ]
+    title = "Aperçu du jour"
+
+    # Indicateurs spécifiques à la page
+    if p in ("/upload", "/analyser", "/analysis"):
+        title = "Analyses"
+        stats += [
+            {"label": "Analyses aujourd'hui", "value": count_since("analyses", "created_at", today)},
+            {"label": "Analyses cette semaine", "value": count_since("analyses", "created_at", week)},
+        ]
+    elif p == "/mon-kart":
+        title = "Mon Kart"
+        stats += [
+            {"label": "Sessions importées (7j)", "value": count_since("kart_session_logs", "created_at", week)},
+            {"label": "Garages configurés", "value": count("kart_profiles")},
+        ]
+    elif p == "/setup":
+        title = "Réglages"
+        stats += [
+            {"label": "Réglages créés (7j)", "value": count_since("kart_setups", "created_at", week)},
+            {"label": "Réglages au total", "value": count("kart_setups")},
+        ]
+    elif p == "/dashboard":
+        title = "Tableau de bord"
+        stats += [
+            {"label": "Analyses au total", "value": count("analyses")},
+            {"label": "Retours non traités", "value": count_since("feedback_messages", "created_at", "1970-01-01", status="new")},
+        ]
+    elif p == "/":
+        title = "Accueil"
+        stats += [
+            {"label": "Vues de l'accueil aujourd'hui", "value": page_views_today},
+            {"label": "Essais Paddock actifs", "value": _count_active_trials(now)},
+        ]
+    else:
+        stats += [{"label": f"Vues de cette page aujourd'hui", "value": page_views_today}]
+
+    return {"title": title, "path": p, "stats": stats, "generated_at": now.isoformat()}
+
+
+def _normalize_path_light(path: str) -> str:
+    p = (path or "/").split("?")[0].split("#")[0]
+    p = re.sub(r"/[0-9a-fA-F-]{8,}", "", p)
+    p = re.sub(r"/\d+", "", p)
+    return p or "/"
+
+
+def _count_active_trials(now: datetime) -> int:
+    try:
+        return supabase.table("profiles").select("*", count="exact", head=True) \
+            .gt("trial_until", now.isoformat()).execute().count or 0
+    except Exception:
+        return 0
 
 
 # ─────────────────────────────────────────────
