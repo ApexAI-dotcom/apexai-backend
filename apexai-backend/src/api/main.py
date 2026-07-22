@@ -207,6 +207,22 @@ try:
 except ImportError as e:
     logger.warning("⚠ Feedback routes not loaded: %s", e)
 
+# Back-office administrateur (rôles délégables, stats, Paddock Pass)
+try:
+    from .admin_panel_routes import router as admin_panel_router
+    app.include_router(admin_panel_router)
+    logger.info("✓ Admin panel routes loaded (/api/admin)")
+except ImportError as e:
+    logger.warning("⚠ Admin panel routes not loaded: %s", e)
+
+# Paddock Pass (activation d'un code par un pilote)
+try:
+    from .paddock_pass_routes import router as paddock_router
+    app.include_router(paddock_router)
+    logger.info("✓ Paddock Pass routes loaded (/api/paddock-pass)")
+except ImportError as e:
+    logger.warning("⚠ Paddock Pass routes not loaded: %s", e)
+
 # Routes Home (tips, insights, reset)
 try:
     from .home_routes import router as home_router

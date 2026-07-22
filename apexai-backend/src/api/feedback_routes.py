@@ -61,7 +61,18 @@ class FeedbackAdminUpdate(BaseModel):
 
 
 def _is_admin(user_id: str) -> bool:
-    """L'admin est identifié par son email dans auth.users (source de vérité)."""
+    """Autorisé si le compte porte un rôle avec la permission "feedback".
+
+    Le rôle vient de la table admin_roles (délégable à des collaborateurs) ;
+    l'email fondateur reste un filet de sécurité.
+    """
+    try:
+        from .admin_panel_routes import get_admin_role, PERMISSIONS
+        role = get_admin_role(user_id)
+        if role and "feedback" in PERMISSIONS.get(role, set()):
+            return True
+    except Exception as e:
+        logger.warning(f"feedback: role check failed: {e}")
     if not supabase:
         return False
     try:

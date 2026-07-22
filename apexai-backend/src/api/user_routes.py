@@ -158,7 +158,8 @@ async def get_user_subscription(
                 "subscription_tier, subscription_status, billing_period, "
                 "stripe_customer_id, stripe_subscription_id, "
                 "subscription_start_date, subscription_end_date, "
-                "analyses_count_current_month, last_analysis_reset_date",
+                "analyses_count_current_month, last_analysis_reset_date, "
+                "trial_tier, trial_until",
             )
             .eq("id", current_user)
             .limit(1)
@@ -214,6 +215,29 @@ async def get_user_subscription(
                 logger.warning("Silent sync failed for user_id=%s: %s", current_user, se)
         # -------------------
 
+        # --- PADDOCK PASS ---
+        # Essai temporaire : purement ADDITIF. Il ne peut que SURCLASSER un
+        # compte, jamais le dégrader — un abonné payant n'est donc jamais
+        # affecté, et à l'expiration le pilote retrouve exactement son état.
+        trial_active = False
+        trial_until_iso = None
+        trial_raw = data.get("trial_until")
+        if trial_raw:
+            try:
+                trial_dt = trial_raw if hasattr(trial_raw, "year") else datetime.fromisoformat(str(trial_raw).replace("Z", "+00:00"))
+                if trial_dt.tzinfo is None:
+                    trial_dt = trial_dt.replace(tzinfo=timezone.utc)
+                if trial_dt > datetime.now(timezone.utc):
+                    trial_tier = (data.get("trial_tier") or "racer").lower()
+                    rank = {"rookie": 0, "racer": 1, "team": 2}
+                    if rank.get(trial_tier, 0) > rank.get(tier, 0):
+                        tier = trial_tier
+                    trial_active = True
+                    trial_until_iso = trial_dt.isoformat()
+            except Exception as e:
+                logger.debug("Failed to parse trial_until: %s", e)
+        # --------------------
+
         if tier not in TIER_LIMITS:
             tier = "rookie"
 
@@ -265,6 +289,8 @@ async def get_user_subscription(
             "stripe_customer_id": data.get("stripe_customer_id"),
             "stripe_subscription_id": data.get("stripe_subscription_id"),
             "limits": limits,
+            "trial_active": trial_active,
+            "trial_until": trial_until_iso,
         }
 
     except HTTPException:
