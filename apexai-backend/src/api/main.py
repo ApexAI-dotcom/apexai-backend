@@ -199,6 +199,14 @@ try:
 except ImportError as e:
     logger.warning("⚠ Analyses routes not loaded: %s", e)
 
+# Routes Feedback (boîte à recommandations privée pilote <-> admin)
+try:
+    from .feedback_routes import router as feedback_router
+    app.include_router(feedback_router)
+    logger.info("✓ Feedback routes loaded (/api/feedback)")
+except ImportError as e:
+    logger.warning("⚠ Feedback routes not loaded: %s", e)
+
 # Routes Home (tips, insights, reset)
 try:
     from .home_routes import router as home_router
