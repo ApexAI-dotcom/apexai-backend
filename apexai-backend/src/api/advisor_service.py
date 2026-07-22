@@ -100,64 +100,94 @@ def compute_setup_advice(
     chassis_l = (chassis_brand or "").lower()
     engine_l = (engine_model or "").lower()
 
+    # Éléments de contexte réutilisés : chaque recommandation cite les données
+    # qui la concernent (tracé mesuré + conditions), jamais un préfixe générique.
+    grip_lbl = {"gommée": "gommée", "gommee": "gommée", "faible": "faible"}.get(grip, "normal")
+    weather_lbl = {"pluie": "pluie", "humide": "humide"}.get((weather or "sec").lower(), "sèche")
+    temp_txt = f"{t:.0f} °C" if isinstance(track_temp, (int, float)) else "température inconnue"
+    track_txt = f"tracé {speed_ratio} ({hairpins} épingle(s), {fast_corners} courbe(s) rapide(s))"
+
     # ── Voies (largeur des trains) ──
     base_rear = 1395 if any(k in chassis_l for k in ("tony", "kosmic", "exprit", "otk", "redspeed")) else 1400
     rear_w, front_w = base_rear, 120
-    has_signature = bool(c) and (c.get("hairpinsCount") is not None or c.get("hairpins_count") is not None)
-    sig_txt = f"Signature mesurée du tracé : {speed_ratio}, {hairpins} épingle(s), {fast_corners} courbe(s) rapide(s). " if has_signature else ""
-    rear_msg = f"{sig_txt}Base constructeur {chassis_brand or 'standard'} : {base_rear} mm."
-    front_msg = f"{sig_txt}Voie avant standard (120 cm) — aucun seuil d'ajustement franchi (élargie si ≥4 épingles, rentrée si ≥4 courbes rapides)."
+    rear_msg = (f"Piste {weather_lbl} à {temp_txt}, grip {grip_lbl} — châssis {chassis_brand or 'standard'} : "
+                f"voie arrière de base {base_rear} mm, largeur neutre qui équilibre le transfert de charge.")
+    front_msg = (f"{track_txt.capitalize()} : voie avant standard 120 cm. L'ajustement se déclenche à partir de "
+                 f"4 épingles (élargir pour pivoter) ou 4 courbes rapides (rentrer pour stabiliser) — non atteint ici.")
     if is_rain:
         rear_w, front_w = 1360, 125
-        rear_msg = "PLUIE : rentrer le train arrière au minimum (~1360 mm) pour planter la roue extérieure."
-        front_msg = "PLUIE : élargir le train avant au maximum pour un avant incisif qui mord la piste humide. ASTUCE : desserrer/enlever les barres de torsion pour libérer le châssis."
+        rear_msg = (f"PLUIE sur {track_txt} : rentrer le train arrière au minimum (1360 mm) pour forcer le châssis "
+                    f"à planter la roue extérieure et retrouver de l'appui.")
+        front_msg = ("PLUIE : élargir le train avant au maximum (125 cm) pour un avant incisif qui mord la piste humide. "
+                     "ASTUCE : desserrer ou enlever les barres de torsion pour libérer le châssis.")
     else:
-        if grip == "gommée" or grip == "gommee":
+        if grip.startswith("gomm"):
             rear_w = min(1400, base_rear + 5)
-            rear_msg += " Piste gommée : on élargit pour libérer l'arrière."
+            rear_msg = (f"Piste gommée à {temp_txt} (adhérence élevée) : élargir à {rear_w} mm pour libérer l'arrière "
+                        f"et éviter que le châssis sature en appui.")
         elif grip == "faible":
             rear_w = max(1385, base_rear - 5)
-            rear_msg += " Grip faible : on rétrécit pour générer du grip mécanique."
+            rear_msg = (f"Grip faible à {temp_txt} : rétrécir à {rear_w} mm pour concentrer la charge sur la roue "
+                        f"extérieure et générer du grip mécanique.")
         if is_sinueux or hairpins >= 4:
             front_w = 122
-            front_msg = f"Circuit sinueux ({hairpins} épingles mesurées) : élargir l'avant (~122 cm) pour engager le kart. ASTUCE : retirer la barre de torsion avant pour aider à pivoter."
+            front_msg = (f"{hairpins} épingle(s) mesurée(s) sur ce {speed_ratio} : élargir l'avant à 122 cm pour engager "
+                         f"le kart dans les virages serrés. ASTUCE : retirer la barre de torsion avant pour aider à pivoter.")
         elif fast_corners >= 4:
             front_w = 118
-            front_msg = f"{fast_corners} courbes rapides mesurées : rentrer l'avant (~118 cm) pour stabiliser à haute vitesse. ASTUCE : insérer la barre de torsion avant."
+            front_msg = (f"{fast_corners} courbes rapides mesurées (apex moyen élevé) : rentrer l'avant à 118 cm pour "
+                         f"limiter l'agressivité et stabiliser le kart à haute vitesse. ASTUCE : insérer la barre de torsion avant.")
     recs["trackWidthRear"] = _rec("trackWidthRear", rear_w, rear_msg, "high" if (is_rain or grip.startswith("gomm")) else "low")
     recs["trackWidthFront"] = _rec("trackWidthFront", front_w, front_msg, "medium")
 
     # ── Arbre arrière ──
-    axle, axle_msg, axle_p = "M", f"Arbre standard (M) pour conditions normales ({chassis_brand or 'standard'}).", "low"
+    axle, axle_p = "M", "low"
+    axle_msg = (f"Grip {grip_lbl} à {temp_txt} sur piste {weather_lbl} : arbre médium (M), le compromis "
+                f"rigidité/souplesse de référence — aucune condition extrême ne justifie de le changer.")
     if is_rain or grip == "faible":
         axle = "S"
-        axle_msg = f"{'PLUIE' if is_rain else 'GRIP FAIBLE'} : arbre souple (S) pour faire travailler le châssis et chercher du grip mécanique."
+        axle_msg = (f"{'PLUIE' if is_rain else f'GRIP FAIBLE à {temp_txt}'} : arbre souple (S) pour faire travailler "
+                    f"le châssis en torsion et aller chercher du grip mécanique là où la gomme n'accroche pas.")
         axle_p = "high"
     elif grip.startswith("gomm") and is_hot:
         axle = "H"
-        axle_msg = "PISTE GOMMÉE & CHAUDE : arbre dur (H) pour rigidifier le châssis et le forcer à glisser légèrement."
+        axle_msg = (f"Piste gommée ET chaude ({temp_txt}) : l'adhérence sature le châssis. Arbre dur (H) pour le "
+                    f"rigidifier et le forcer à glisser légèrement, sinon il « colle » et étouffe les sorties.")
         axle_p = "high"
     recs["rearAxle"] = _rec("rearAxle", axle, axle_msg, axle_p)
 
     # ── Géométrie (chasse / carrossage) ──
-    caster, caster_msg = "Neutre", "Chasse standard d'usine (Neutre)."
-    camber, camber_msg = "Neutre", "Carrossage standard (Neutre ou légèrement négatif)."
+    caster = "Neutre"
+    caster_msg = (f"{hairpins} épingle(s) sur ce {speed_ratio} et grip {grip_lbl} : chasse d'usine (Neutre). "
+                  f"Le tracé n'exige pas de forcer le levage de roue arrière intérieure.")
+    camber = "Neutre"
+    camber_msg = (f"Piste {weather_lbl} à {temp_txt} : carrossage neutre (ou -1 mm), la gomme travaille à plat "
+                  f"sur toute la bande de roulement.")
     if is_rain:
-        caster, caster_msg = "Max Positif", "PLUIE : chasse maximale pour charger le train avant et planter les pneus dans l'eau."
-        camber, camber_msg = "Neutre à Positif", "PLUIE : éviter le carrossage négatif pour utiliser toute la bande de roulement."
+        caster, caster_msg = "Max Positif", ("PLUIE : chasse maximale pour charger le train avant et planter les pneus "
+                                             "dans l'eau — sans ça l'avant flotte à l'inscription.")
+        camber, camber_msg = "Neutre à Positif", ("PLUIE : éviter le carrossage négatif pour poser toute la bande de "
+                                                  "roulement et maximiser la surface d'évacuation d'eau.")
     elif hairpins >= 4 and not grip.startswith("gomm"):
-        caster, caster_msg = "Positif", f"{hairpins} épingles : augmenter la chasse pour soulever la roue arrière intérieure et pivoter."
+        caster, caster_msg = "Positif", (f"{hairpins} épingles mesurées : augmenter la chasse pour soulever la roue "
+                                         f"arrière intérieure et faire pivoter le kart dans les serrés.")
     elif grip.startswith("gomm"):
-        caster, caster_msg = "Négatif", "Piste gommée : diminuer la chasse pour ne pas trop lever l'arrière (étouffe le moteur en sortie)."
+        caster, caster_msg = "Négatif", (f"Piste gommée à {temp_txt} : diminuer la chasse pour ne pas trop lever "
+                                         f"l'arrière, ce qui ferait étouffer le moteur en sortie de courbe.")
     recs["caster"] = _rec("caster", caster, caster_msg, "medium")
     recs["camber"] = _rec("camber", camber, camber_msg, "low")
 
     # ── Hauteurs de caisse ──
-    ride, ride_msg = "standard", "Hauteur de caisse standard recommandée."
+    bump_lbl = "bosselé" if bumpiness == "bossele" else "lisse"
+    ride = "standard"
+    ride_msg = (f"Revêtement {bump_lbl} et piste {weather_lbl} : hauteur de caisse standard. Le centre de gravité "
+                f"reste bas, ce qui privilégie la stabilité en appui.")
     if is_rain:
-        ride, ride_msg = "haute", "PLUIE : relever le châssis pour amplifier le transfert de charge sur la roue extérieure."
+        ride, ride_msg = "haute", ("PLUIE : relever le châssis pour amplifier le transfert de charge dynamique sur la "
+                                   "roue extérieure et faire mordre la gomme.")
     elif bumpiness == "bossele":
-        ride, ride_msg = "haute", "PISTE BOSSELÉE : relever le châssis pour éviter de talonner sur les vibreurs."
+        ride, ride_msg = "haute", ("Revêtement bosselé mesuré : relever le châssis pour éviter de talonner sur les "
+                                   "vibreurs et absorber les irrégularités.")
     ride_p = "medium" if ride != "standard" else "low"
     recs["rideHeightFront"] = _rec("rideHeightFront", ride, ride_msg, ride_p)
     recs["rideHeightRear"] = _rec("rideHeightRear", ride, ride_msg, ride_p)
@@ -189,11 +219,21 @@ def compute_setup_advice(
     if rounded != 0:
         final_rear = cur_rear + rounded
         sign = "+" if rounded > 0 else ""
+        effect = "plus longue (vitesse de pointe)" if rounded < 0 else "plus courte (relance et couple)"
         recs["sprocketRear"] = _rec("sprocketRear", final_rear,
-            f"Passer à {final_rear} dents (actuellement {cur_rear}) : {sign}{rounded} dent(s) — {', '.join(reasons)}.", "high")
+            f"Passer de {cur_rear} à {final_rear} dents ({sign}{rounded}) : démultiplication {effect}. "
+            f"Facteurs retenus — {', '.join(reasons)}.", "high")
     else:
-        recs["sprocketRear"] = _rec("sprocketRear", cur_rear, f"Rapport standard conseillé : {cur_rear} dents.", "low")
-    recs["sprocketFront"] = _rec("sprocketFront", cur_front, f"Pignon standard conseillé : {cur_front} dents.", "low")
+        why_none = ", ".join(reasons) if reasons else "aucun facteur dominant"
+        recs["sprocketRear"] = _rec("sprocketRear", cur_rear,
+            f"Garder {cur_rear} dents : sur ce {speed_ratio}, les facteurs ({why_none}) se compensent — "
+            f"le rapport actuel reste le meilleur compromis relance / vitesse de pointe.", "low")
+
+    ratio_val = cur_rear / cur_front if cur_front else 0
+    recs["sprocketFront"] = _rec("sprocketFront", cur_front,
+        f"Pignon {cur_front} dents (base {engine_model or 'moteur standard'} : {std_front}/{std_rear}) — "
+        f"rapport final {ratio_val:.2f}:1 avec {cur_rear} dents, cohérent pour un {speed_ratio}. "
+        f"On ajuste la couronne en priorité, le pignon ne bouge que pour un changement majeur de tracé.", "low")
 
     # ── Carburation ──
     is_tillotson = any(k in engine_l for k in ("x30", "swift", "60"))
