@@ -208,10 +208,14 @@ def compute_setup_advice(
         delta += 1.5; reasons.append("circuit sinueux (mesuré)")
     if elevation == "vallonne":
         delta += 1; reasons.append("relief vallonné")
+    # Le poids de l'équipage compte toujours dans le raisonnement, même quand
+    # il ne déclenche aucun ajustement (zone neutre 145-165 kg).
     if total_weight and total_weight > 165:
-        delta += 1; reasons.append("équipage lourd")
+        delta += 1; reasons.append(f"équipage lourd ({total_weight:.0f} kg, il faut du couple à la relance)")
     elif total_weight and 0 < total_weight < 145:
-        delta -= 0.5; reasons.append("équipage léger")
+        delta -= 0.5; reasons.append(f"équipage léger ({total_weight:.0f} kg, on allonge)")
+    elif total_weight:
+        reasons.append(f"équipage {total_weight:.0f} kg (dans la plage neutre 145-165 kg, sans effet)")
 
     # Arrondi "Math.round" JS (demi vers +inf) pour parité avec l'ancien moteur
     import math
