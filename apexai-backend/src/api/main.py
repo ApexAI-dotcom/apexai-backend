@@ -223,6 +223,14 @@ try:
 except ImportError as e:
     logger.warning("⚠ Paddock Pass routes not loaded: %s", e)
 
+# Analytics de navigation (parcours utilisateurs)
+try:
+    from .analytics_routes import router as analytics_router
+    app.include_router(analytics_router)
+    logger.info("✓ Analytics routes loaded (/api/analytics)")
+except ImportError as e:
+    logger.warning("⚠ Analytics routes not loaded: %s", e)
+
 # Routes Home (tips, insights, reset)
 try:
     from .home_routes import router as home_router
