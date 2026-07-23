@@ -174,43 +174,34 @@ async def get_user_subscription(
         tier = (data.get("subscription_tier") or "rookie").lower()
         
         # --- SILENT SYNC ---
-        # Si l'utilisateur est rookie, on tente une synchro silencieuse avec Stripe 
-        # (en cas de webhook en retard ou échoué)
-        if tier == "rookie" and os.getenv("STRIPE_SECRET_KEY"):
+        # Si l'utilisateur est rookie ET a déjà un stripe_customer_id enregistré,
+        # on vérifie que Stripe est bien à jour (cas d'un webhook en retard/échoué
+        # sur SON PROPRE client). On ne cherche plus par email : une recherche par
+        # email peut retrouver le mauvais client (comptes de test, adresses
+        # partagées) et écraser un tier remis à zéro intentionnellement.
+        if tier == "rookie" and os.getenv("STRIPE_SECRET_KEY") and data.get("stripe_customer_id"):
             try:
                 import stripe
                 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
                 customer_id = data.get("stripe_customer_id")
-                
-                # 1. Trouver l'email si pas de customer_id
-                if not customer_id:
-                    user_auth = supabase.auth.admin.get_user_by_id(current_user)
-                    if user_auth and user_auth.user:
-                        email = user_auth.user.email
-                        customers = stripe.Customer.list(email=email, limit=1)
-                        if customers.data:
-                            customer_id = customers.data[0].id
 
-                # 2. Chercher abonnements actifs
-                if customer_id:
-                    subs = stripe.Subscription.list(customer=customer_id, status="active", limit=1)
-                    if subs.data:
-                        sub = subs.data[0]
-                        # On a trouvé un abonnement actif ! MAJ immédiate du tier pour ce retour
-                        tier = "racer" # Par défaut si actif
-                        # On pourrait extraire le périod/tier exact via PRICE_TO_TIER mais 
-                        # on fait simple pour le "silent sync" : on dit juste que c'est Racer actif
-                        
-                        # Mettre à jour la base de données en arrière-plan (fire and forget ou immédiat)
-                        # On le fait en immédiat ici pour que le prochain appel soit rapide
+                subs = stripe.Subscription.list(customer=customer_id, status="active", limit=1)
+                if subs.data:
+                    sub = subs.data[0]
+                    # Tier dérivé du price_id réel (Racer vs Team), jamais figé en dur.
+                    from .stripe_routes import _price_id_to_tier_and_period
+                    price_id = sub["items"]["data"][0]["price"]["id"] if sub.get("items", {}).get("data") else None
+                    synced_tier, _period = _price_id_to_tier_and_period(price_id or "")
+                    if synced_tier in ("racer", "team"):
+                        tier = synced_tier
                         payload = {
-                            "subscription_tier": "racer",
+                            "subscription_tier": synced_tier,
                             "subscription_status": "active",
                             "stripe_customer_id": customer_id,
-                            "stripe_subscription_id": sub.id
+                            "stripe_subscription_id": sub.id,
                         }
                         supabase.table("profiles").update(payload).eq("id", current_user).execute()
-                        logger.info("Silent sync success for user_id=%s, upgraded to racer", current_user)
+                        logger.info("Silent sync success for user_id=%s, tier=%s", current_user, synced_tier)
             except Exception as se:
                 logger.warning("Silent sync failed for user_id=%s: %s", current_user, se)
         # -------------------
