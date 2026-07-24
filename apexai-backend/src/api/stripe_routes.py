@@ -337,6 +337,114 @@ def _log_webhook(step: str, **kwargs: object) -> None:
     logger.info("stripe_webhook %s", json.dumps({"step": step, **kwargs}))
 
 
+# Statuts d'abonnement Stripe qui donnent droit à l'accès premium.
+# past_due = période de grâce (Stripe retente le paiement) → on garde l'accès.
+# Tout le reste (canceled, unpaid, incomplete, incomplete_expired) → rookie.
+GRANTING_STATUSES = {"active", "trialing", "past_due"}
+
+
+def reconcile_profile_from_stripe(user_id: str, profile: dict) -> tuple[str, Optional[str]]:
+    """
+    Source de vérité : vérifie l'état RÉEL de l'abonnement chez Stripe et corrige
+    la table profiles dans LES DEUX SENS (upgrade ET downgrade). Garantit que la
+    base reste un miroir fidèle de Stripe même si un webhook n'est jamais livré.
+
+    - Ne touche JAMAIS un compte 'complimentary' (accès offert, hors Stripe).
+    - N'écrit en base que si l'état effectif diffère de l'état stocké.
+    Retourne (tier, status) effectifs après réconciliation.
+    """
+    tier = (profile.get("subscription_tier") or "rookie").lower()
+    status = profile.get("subscription_status")
+
+    # Accès offert (fondateur/partenaire) : géré à la main, jamais via Stripe.
+    if status == "complimentary":
+        return tier, status
+
+    if not STRIPE_SECRET_KEY or not supabase_client:
+        return tier, status
+
+    sub_id = profile.get("stripe_subscription_id")
+    customer_id = profile.get("stripe_customer_id")
+
+    # Rien pour interroger Stripe : on ne peut ni upgrader ni downgrader.
+    if not sub_id and not customer_id:
+        return tier, status
+
+    try:
+        sub = None
+        # 1. Abonnement précis connu → on le vérifie directement (le plus fiable).
+        if sub_id:
+            try:
+                sub = stripe.Subscription.retrieve(sub_id)
+            except Exception:
+                sub = None
+        # 2. Sinon on cherche un abonnement vivant sur le client (StoreID stocké only).
+        if sub is None and customer_id:
+            lst = stripe.Subscription.list(customer=customer_id, status="all", limit=10)
+            live = [s for s in lst.get("data", []) if (s.get("status") in GRANTING_STATUSES)]
+            sub = live[0] if live else None
+
+        # 3. Aucun abonnement exploitable → si le profil se croit payant, on coupe.
+        if sub is None:
+            if tier in ("racer", "team"):
+                _update_profile_subscription(
+                    user_id,
+                    subscription_tier="rookie",
+                    subscription_status="canceled",
+                    stripe_subscription_id=None,
+                    subscription_end_date=datetime.now(timezone.utc),
+                )
+                logger.info("reconcile: user_id=%s downgraded to rookie (aucun abonnement vivant)", user_id)
+                return "rookie", "canceled"
+            return tier, status
+
+        sub_status = (sub.get("status") or "").strip()
+        items = (sub.get("items") or {}).get("data") or []
+        price_id = (items[0].get("price") or {}).get("id") if items else None
+        real_tier, real_period = _price_id_to_tier_and_period(price_id or "")
+        start_ts, end_ts = sub.get("current_period_start"), sub.get("current_period_end")
+        start_dt = datetime.fromtimestamp(start_ts, tz=timezone.utc) if start_ts else None
+        end_dt = datetime.fromtimestamp(end_ts, tz=timezone.utc) if end_ts else None
+
+        # 4. Abonnement qui donne droit à l'accès → on aligne la base.
+        if sub_status in GRANTING_STATUSES and real_tier in ("racer", "team"):
+            changed = (
+                tier != real_tier
+                or status != sub_status
+                or profile.get("stripe_subscription_id") != sub.get("id")
+                or profile.get("stripe_customer_id") != sub.get("customer")
+            )
+            if changed:
+                _update_profile_subscription(
+                    user_id,
+                    stripe_customer_id=sub.get("customer"),
+                    stripe_subscription_id=sub.get("id"),
+                    subscription_tier=real_tier,
+                    billing_period=real_period,
+                    subscription_status=sub_status,
+                    subscription_start_date=start_dt,
+                    subscription_end_date=end_dt,
+                )
+                logger.info("reconcile: user_id=%s aligné sur %s/%s", user_id, real_tier, sub_status)
+            return real_tier, sub_status
+
+        # 5. Abonnement en état terminal (canceled, unpaid, incomplete_expired…) → rookie.
+        if tier in ("racer", "team") or status not in (None, "canceled"):
+            _update_profile_subscription(
+                user_id,
+                subscription_tier="rookie",
+                subscription_status="canceled",
+                stripe_subscription_id=None,
+                subscription_end_date=end_dt or datetime.now(timezone.utc),
+            )
+            logger.info("reconcile: user_id=%s downgraded to rookie (statut Stripe=%s)", user_id, sub_status)
+        return "rookie", "canceled"
+
+    except Exception as e:
+        logger.warning("reconcile_profile_from_stripe failed user_id=%s: %s", user_id, e)
+        return tier, status
+
+
 @router.get("/webhook")
 async def stripe_webhook_verify():
     """Endpoint pour vérifier que le webhook est bien accessible."""
@@ -586,14 +694,25 @@ async def stripe_webhook(request: Request) -> JSONResponse:
             )
             if r.data and len(r.data) > 0:
                 user_id = r.data[0]["id"]
-                _update_profile_subscription(
-                    user_id,
-                    subscription_tier=tier,
-                    billing_period=billing_period,
-                    subscription_status=status,
-                    subscription_start_date=start_dt,
-                    subscription_end_date=end_dt,
-                )
+                # Un abonnement en état terminal (canceled, unpaid…) garde un price,
+                # donc on ne se fie PAS au tier du price : on coupe l'accès.
+                if status in GRANTING_STATUSES:
+                    _update_profile_subscription(
+                        user_id,
+                        subscription_tier=tier,
+                        billing_period=billing_period,
+                        subscription_status=status,
+                        subscription_start_date=start_dt,
+                        subscription_end_date=end_dt,
+                    )
+                else:
+                    _update_profile_subscription(
+                        user_id,
+                        subscription_tier="rookie",
+                        subscription_status="canceled",
+                        stripe_subscription_id=None,
+                        subscription_end_date=end_dt or datetime.now(timezone.utc),
+                    )
                 logger.info("webhook customer.subscription.updated user_id=%s status=%s", user_id, status)
             else:
                 logger.warning("webhook customer.subscription.updated: no profile for subscription_id=%s", subscription_id)
