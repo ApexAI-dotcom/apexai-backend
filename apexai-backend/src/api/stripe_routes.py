@@ -343,6 +343,76 @@ async def stripe_webhook_verify():
     return {"status": "webhook endpoint active", "configuration": "ready" if STRIPE_WEBHOOK_SECRET else "missing_secret"}
 
 
+@router.post("/reconcile")
+async def reconcile_checkout(request: Request, current_user: str = Depends(get_current_user)):
+    """
+    Filet de sécurité INDÉPENDANT du webhook.
+
+    Appelé par le frontend au retour du paiement (avec le session_id de la
+    Checkout Session). Récupère la session côté serveur, vérifie qu'elle
+    appartient bien à l'utilisateur courant (via la metadata user_id), en
+    déduit le tier réel depuis le prix, et met à jour le profil. Garantit
+    l'activation même si le webhook n'est jamais livré.
+    """
+    if not STRIPE_SECRET_KEY:
+        return JSONResponse(status_code=503, content={"error": "Stripe non configuré"})
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    session_id = (body.get("session_id") or "").strip()
+    if not session_id:
+        return JSONResponse(status_code=400, content={"error": "session_id manquant"})
+
+    try:
+        session = stripe.checkout.Session.retrieve(session_id, expand=["subscription"])
+    except Exception as e:
+        logger.warning("reconcile: session retrieve failed: %s", e)
+        return JSONResponse(status_code=404, content={"error": "Session introuvable"})
+
+    # Sécurité : la session doit appartenir à l'utilisateur qui appelle.
+    meta = session.get("metadata") or {}
+    session_user = (meta.get("user_id") or meta.get("supabase_user_id") or "").strip()
+    if session_user and session_user != current_user:
+        logger.warning("reconcile: session user mismatch (%s != %s)", session_user, current_user)
+        return JSONResponse(status_code=403, content={"error": "Cette session ne vous appartient pas."})
+
+    if session.get("payment_status") not in ("paid", "no_payment_required"):
+        return JSONResponse(content={"reconciled": False, "reason": "not_paid"})
+
+    sub = session.get("subscription")
+    if isinstance(sub, str):
+        try:
+            sub = stripe.Subscription.retrieve(sub)
+        except Exception:
+            sub = None
+    if not sub:
+        return JSONResponse(content={"reconciled": False, "reason": "no_subscription"})
+
+    if sub.get("status") not in ("active", "trialing"):
+        return JSONResponse(content={"reconciled": False, "reason": f"sub_{sub.get('status')}"})
+
+    items = (sub.get("items") or {}).get("data") or []
+    price_id = (items[0].get("price") or {}).get("id") if items else None
+    tier, period = _price_id_to_tier_and_period(price_id or "")
+    if tier not in ("racer", "team"):
+        return JSONResponse(content={"reconciled": False, "reason": "unknown_price"})
+
+    start_ts, end_ts = sub.get("current_period_start"), sub.get("current_period_end")
+    _update_profile_subscription(
+        current_user,
+        stripe_customer_id=session.get("customer"),
+        stripe_subscription_id=sub.get("id"),
+        subscription_tier=tier,
+        billing_period=period,
+        subscription_status="active",
+        subscription_start_date=datetime.fromtimestamp(start_ts, tz=timezone.utc) if start_ts else None,
+        subscription_end_date=datetime.fromtimestamp(end_ts, tz=timezone.utc) if end_ts else None,
+    )
+    logger.info("reconcile: user_id=%s upgraded to %s via session %s", current_user, tier, session_id)
+    return JSONResponse(content={"reconciled": True, "tier": tier})
+
+
 @router.post("/webhook")
 async def stripe_webhook(request: Request) -> JSONResponse:
     """
