@@ -372,19 +372,7 @@ def _run_analysis_pipeline_sync(
         analysis_id,
         [f"V{c.get('corner_id')} sort_idx={c.get('_sort_index', '?')}" for c in unique_corner_analysis],
     )
-    logger.info(f"[{analysis_id}] [renumber] Renumbering {len(unique_corner_analysis)} unique corners...")
-    final_id_to_new = {int(c.get("corner_id")): i for i, c in enumerate(unique_corner_analysis, start=1)}
-    for i, c in enumerate(unique_corner_analysis, start=1):
-        c["corner_id"] = i
-        c["corner_number"] = i
-        c["label"] = f"V{i}"
-        c["avg_note"] = "Valeurs sur ce tour" if laps_representative == 1 else f"Valeurs moyennées sur {laps_representative} tours"
-
-    if "corner_id" in df.columns:
-        # Vectorized update for corner_id
-        df["corner_id"] = df["corner_id"].map(lambda x: final_id_to_new.get(int(x), x) if pd.notna(x) else x)
-    
-    logger.info(f"[{analysis_id}] [renumber] Done. Filling apex coordinates...")
+    logger.info(f"[{analysis_id}] [renumber] Filling apex coordinates before numbering...")
     # Remplir apex_lat/apex_lon depuis le df si manquants (pour que trajectoire + heatmap affichent tous les virages)
     lat_col = "latitude_smooth" if "latitude_smooth" in df.columns else "latitude"
     lon_col = "longitude_smooth" if "longitude_smooth" in df.columns else "longitude"
@@ -394,6 +382,36 @@ def _run_analysis_pipeline_sync(
             if idx in df.index and lat_col in df.columns and lon_col in df.columns:
                 c["apex_lat"] = float(df.at[idx, lat_col]) if pd.notna(df.at[idx, lat_col]) else c.get("apex_lat")
                 c["apex_lon"] = float(df.at[idx, lon_col]) if pd.notna(df.at[idx, lon_col]) else c.get("apex_lon")
+
+    # COHÉRENCE : la carte n'affiche qu'un virage possédant des coordonnées
+    # d'apex. On écarte donc AVANT numérotation ceux qui n'en ont pas, sinon un
+    # conseil pourrait citer un « Virage 9 » introuvable sur la carte. Après
+    # cette étape : virages numérotés = virages affichés = virages conseillés.
+    mappable = [c for c in unique_corner_analysis
+                if c.get("apex_lat") is not None and c.get("apex_lon") is not None]
+    if len(mappable) != len(unique_corner_analysis):
+        logger.info(
+            "[%s] [renumber] %d virage(s) sans apex géolocalisé écarté(s) pour garder "
+            "carte et conseils alignés",
+            analysis_id, len(unique_corner_analysis) - len(mappable),
+        )
+    if mappable:
+        unique_corner_analysis = mappable
+
+    logger.info(f"[{analysis_id}] [renumber] Renumbering {len(unique_corner_analysis)} unique corners...")
+    final_id_to_new = {int(c.get("corner_id")): i for i, c in enumerate(unique_corner_analysis, start=1)}
+    for i, c in enumerate(unique_corner_analysis, start=1):
+        c["corner_id"] = i
+        c["corner_number"] = i
+        c["label"] = f"V{i}"
+        c["avg_note"] = "Valeurs sur ce tour" if laps_representative == 1 else f"Valeurs moyennées sur {laps_representative} tours"
+
+    if "corner_id" in df.columns:
+        # Vectorized update for corner_id (les virages écartés perdent leur label)
+        df["corner_id"] = df["corner_id"].map(
+            lambda x: final_id_to_new.get(int(x), np.nan) if pd.notna(x) else x
+        )
+
     corners_detected = len(unique_corner_analysis)
 
     # ── Tour idéal + temps RÉELLEMENT perdu par virage ───────────────────────
