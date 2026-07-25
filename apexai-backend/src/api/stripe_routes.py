@@ -96,6 +96,28 @@ def _price_id_to_tier_and_period(price_id: str) -> tuple[str, str]:
     return "racer", "monthly"
 
 
+def _sub_period(sub) -> tuple[Optional[datetime], Optional[datetime]]:
+    """
+    Retourne (début, fin) de la période courante d'un abonnement.
+
+    Depuis l'API "flexible billing" (versions 2025+/clover), current_period_start
+    et current_period_end ne sont PLUS au niveau de l'abonnement mais sur chaque
+    subscription_item. On lit donc les deux emplacements pour rester compatible
+    avec toutes les versions d'API.
+    """
+    start_ts = sub.get("current_period_start")
+    end_ts = sub.get("current_period_end")
+    if start_ts is None or end_ts is None:
+        items = (sub.get("items") or {}).get("data") or []
+        if items:
+            first = items[0]
+            start_ts = start_ts if start_ts is not None else first.get("current_period_start")
+            end_ts = end_ts if end_ts is not None else first.get("current_period_end")
+    start_dt = datetime.fromtimestamp(start_ts, tz=timezone.utc) if start_ts else None
+    end_dt = datetime.fromtimestamp(end_ts, tz=timezone.utc) if end_ts else None
+    return start_dt, end_dt
+
+
 # ---------------------------------------------------------------------------
 # Modèles
 # ---------------------------------------------------------------------------
@@ -332,6 +354,70 @@ def _update_profile_subscription(
         logger.exception("_update_profile_subscription failed: %s", e)
 
 
+def _find_profile_user_id(
+    *,
+    subscription_id: Optional[str] = None,
+    metadata: Optional[dict] = None,
+    customer_id: Optional[str] = None,
+) -> Optional[str]:
+    """
+    Retrouve l'id du profil concerné par un événement Stripe, de façon robuste :
+    1. par stripe_subscription_id (le plus précis)
+    2. par metadata.user_id/supabase_user_id (fiable, posé à la création)
+    3. par stripe_customer_id (repli)
+
+    Évite qu'un événement soit ignoré si le subscription_id n'a pas encore été
+    stocké (ex. subscription.updated qui arrive avant checkout.session.completed).
+    """
+    if not supabase_client:
+        return None
+    # 1. subscription_id
+    if subscription_id:
+        try:
+            r = (
+                supabase_client.table("profiles")
+                .select("id")
+                .eq("stripe_subscription_id", subscription_id)
+                .limit(1)
+                .execute()
+            )
+            if r.data:
+                return r.data[0]["id"]
+        except Exception as e:
+            logger.warning("_find_profile_user_id by sub failed: %s", e)
+    # 2. metadata.user_id (id Supabase direct)
+    meta = metadata or {}
+    meta_uid = (meta.get("user_id") or meta.get("supabase_user_id") or "").strip()
+    if meta_uid:
+        try:
+            r = (
+                supabase_client.table("profiles")
+                .select("id")
+                .eq("id", meta_uid)
+                .limit(1)
+                .execute()
+            )
+            if r.data:
+                return r.data[0]["id"]
+        except Exception as e:
+            logger.warning("_find_profile_user_id by metadata failed: %s", e)
+    # 3. customer_id
+    if customer_id:
+        try:
+            r = (
+                supabase_client.table("profiles")
+                .select("id")
+                .eq("stripe_customer_id", customer_id)
+                .limit(1)
+                .execute()
+            )
+            if r.data:
+                return r.data[0]["id"]
+        except Exception as e:
+            logger.warning("_find_profile_user_id by customer failed: %s", e)
+    return None
+
+
 def _log_webhook(step: str, **kwargs: object) -> None:
     """Log structuré JSON pour le webhook."""
     logger.info("stripe_webhook %s", json.dumps({"step": step, **kwargs}))
@@ -402,9 +488,7 @@ def reconcile_profile_from_stripe(user_id: str, profile: dict) -> tuple[str, Opt
         items = (sub.get("items") or {}).get("data") or []
         price_id = (items[0].get("price") or {}).get("id") if items else None
         real_tier, real_period = _price_id_to_tier_and_period(price_id or "")
-        start_ts, end_ts = sub.get("current_period_start"), sub.get("current_period_end")
-        start_dt = datetime.fromtimestamp(start_ts, tz=timezone.utc) if start_ts else None
-        end_dt = datetime.fromtimestamp(end_ts, tz=timezone.utc) if end_ts else None
+        start_dt, end_dt = _sub_period(sub)
 
         # 4. Abonnement qui donne droit à l'accès → on aligne la base.
         if sub_status in GRANTING_STATUSES and real_tier in ("racer", "team"):
@@ -506,7 +590,7 @@ async def reconcile_checkout(request: Request, current_user: str = Depends(get_c
     if tier not in ("racer", "team"):
         return JSONResponse(content={"reconciled": False, "reason": "unknown_price"})
 
-    start_ts, end_ts = sub.get("current_period_start"), sub.get("current_period_end")
+    start_dt, end_dt = _sub_period(sub)
     _update_profile_subscription(
         current_user,
         stripe_customer_id=session.get("customer"),
@@ -514,8 +598,8 @@ async def reconcile_checkout(request: Request, current_user: str = Depends(get_c
         subscription_tier=tier,
         billing_period=period,
         subscription_status="active",
-        subscription_start_date=datetime.fromtimestamp(start_ts, tz=timezone.utc) if start_ts else None,
-        subscription_end_date=datetime.fromtimestamp(end_ts, tz=timezone.utc) if end_ts else None,
+        subscription_start_date=start_dt,
+        subscription_end_date=end_dt,
     )
     logger.info("reconcile: user_id=%s upgraded to %s via session %s", current_user, tier, session_id)
     return JSONResponse(content={"reconciled": True, "tier": tier})
@@ -621,10 +705,7 @@ async def stripe_webhook(request: Request) -> JSONResponse:
                                 items_data=data_list,
                                 known_price_ids=list(PRICE_TO_TIER.keys()),
                             )
-                    start_ts = sub.get("current_period_start")
-                    end_ts = sub.get("current_period_end")
-                    start_dt = datetime.fromtimestamp(start_ts, tz=timezone.utc) if start_ts else None
-                    end_dt = datetime.fromtimestamp(end_ts, tz=timezone.utc) if end_ts else None
+                    start_dt, end_dt = _sub_period(sub)
                 except Exception as sub_err:
                     logger.exception(
                         "stripe_webhook subscription retrieve failed: %s (subscription_id=%s)",
@@ -678,22 +759,19 @@ async def stripe_webhook(request: Request) -> JSONResponse:
             if sub.get("items") and sub["items"].get("data"):
                 price_id = sub["items"]["data"][0].get("price", {}).get("id", "")
                 tier, billing_period = _price_id_to_tier_and_period(price_id)
-            start_ts = sub.get("current_period_start")
-            end_ts = sub.get("current_period_end")
-            start_dt = datetime.fromtimestamp(start_ts, tz=timezone.utc) if start_ts else None
-            end_dt = datetime.fromtimestamp(end_ts, tz=timezone.utc) if end_ts else None
+            start_dt, end_dt = _sub_period(sub)
 
             if not supabase_client:
                 return JSONResponse(content={"received": True})
-            r = (
-                supabase_client.table("profiles")
-                .select("id")
-                .eq("stripe_subscription_id", subscription_id)
-                .limit(1)
-                .execute()
+            # Recherche robuste du profil : par subscription_id, sinon par
+            # metadata.user_id, sinon par customer_id (le webhook peut arriver
+            # avant que checkout.session.completed ait stocké le subscription_id).
+            user_id = _find_profile_user_id(
+                subscription_id=subscription_id,
+                metadata=sub.get("metadata") or {},
+                customer_id=customer_id,
             )
-            if r.data and len(r.data) > 0:
-                user_id = r.data[0]["id"]
+            if user_id:
                 # Un abonnement en état terminal (canceled, unpaid…) garde un price,
                 # donc on ne se fie PAS au tier du price : on coupe l'accès.
                 if status in GRANTING_STATUSES:
@@ -722,15 +800,12 @@ async def stripe_webhook(request: Request) -> JSONResponse:
             subscription_id = sub.get("id")
             if not supabase_client:
                 return JSONResponse(content={"received": True})
-            r = (
-                supabase_client.table("profiles")
-                .select("id")
-                .eq("stripe_subscription_id", subscription_id)
-                .limit(1)
-                .execute()
+            user_id = _find_profile_user_id(
+                subscription_id=subscription_id,
+                metadata=sub.get("metadata") or {},
+                customer_id=sub.get("customer"),
             )
-            if r.data and len(r.data) > 0:
-                user_id = r.data[0]["id"]
+            if user_id:
                 _update_profile_subscription(
                     user_id,
                     subscription_status="canceled",
@@ -746,7 +821,10 @@ async def stripe_webhook(request: Request) -> JSONResponse:
     except Exception as e:
         logger.exception("stripe_webhook handler: %s", e)
         _log_webhook("handler_exception", error=str(e))
-        return JSONResponse(content={"received": True})
+        # On renvoie 500 pour qu'un échec inattendu (ex. DB indisponible) soit
+        # RETENTÉ par Stripe et VISIBLE dans le Dashboard, au lieu d'être avalé
+        # en silence. La réconciliation à la lecture reste le filet ultime.
+        return JSONResponse(status_code=500, content={"received": False, "error": "handler_error"})
 
 
 @router.get("/sync")
