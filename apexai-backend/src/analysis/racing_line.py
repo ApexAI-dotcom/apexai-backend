@@ -186,8 +186,8 @@ def _chicane_mask(
     regions: List[np.ndarray],
     kap_ref: np.ndarray,
     n_points: int,
-    max_gap_stations: int = 6,
-    max_region_stations: int = 14,
+    max_gap_stations: int = 10,
+    max_region_stations: int = 16,
 ) -> np.ndarray:
     """
     Repère les chicanes : deux virages consécutifs de sens OPPOSÉS et très
@@ -371,12 +371,16 @@ def build_racing_line(
         # Marge observée de chaque côté, exprimée intérieur / extérieur
         obs_inner = np.where(s > 0, env_hi, -env_lo)
         obs_outer = np.where(s > 0, -env_lo, env_hi)
-        # Marge INTÉRIEURE proportionnelle au rayon : plus le virage est serré,
-        # plus le pilote est déjà collé à la corde (vibreur) et moins il reste de
-        # place vers l'intérieur. Un virage serré n'a quasiment aucune marge.
+        # ── Marge INTÉRIEURE : principe « on ne coupe pas plus qu'un pilote ».
+        # Dans un virage, le pilote monte sur le vibreur : le point le plus
+        # intérieur qu'il a atteint sur l'ensemble de ses tours EST, en pratique,
+        # le bord intérieur de la piste. Aller au-delà, ce serait couper — ce qui
+        # supprime visuellement le virage (cas de la chicane redressée).
+        # On autorise donc au plus : ce qu'il a déjà démontré, ou une marge
+        # minuscule proportionnelle au rayon (un virage serré n'en a aucune).
         radius = 1.0 / np.maximum(np.abs(kap_ref), 1e-4)
-        inner_cap = np.clip(radius / 40.0, 0.3, 2.5)
-        inner_corner = np.minimum(np.maximum(obs_inner, 0.0) + 0.5, inner_cap)
+        inner_cap = np.clip(radius / 50.0, 0.2, 1.2)
+        inner_corner = np.maximum(np.maximum(obs_inner, 0.0), inner_cap)
         # Extérieur : le reste de la piste
         outer_corner = np.clip(np.maximum(obs_outer, 0.0) + 1.0, half_w, track_width_m)
         # Sur les lignes droites, on autorise symétriquement la demi-largeur
