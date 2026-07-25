@@ -57,10 +57,16 @@ def calculate_optimal_apex_position(
         
         max_idx_loc = np.nanargmax(signal.values)
         ideal_idx = valid_indices[max_idx_loc]
-        
-        apex_lat = df.iloc[ideal_idx]['latitude_smooth']
-        apex_lon = df.iloc[ideal_idx]['longitude_smooth']
-        
+
+        # `ideal_idx` est un LABEL d'index (issu de corner_indices), pas une
+        # position : utiliser df.iloc ici lisait un point pris ailleurs sur le
+        # circuit et produisait des erreurs d'apex aberrantes (dizaines de mètres).
+        ideal_row = df.loc[ideal_idx]
+        if hasattr(ideal_row, "iloc") and getattr(ideal_row, "ndim", 1) > 1:
+            ideal_row = ideal_row.iloc[0]
+        apex_lat = ideal_row['latitude_smooth']
+        apex_lon = ideal_row['longitude_smooth']
+
         if pd.isna(apex_lat) or pd.isna(apex_lon):
             return None
         
@@ -356,12 +362,16 @@ def calculate_performance_score(
         for corner in corner_details:
             try:
                 apex_idx = corner.get('apex_index')
-                if apex_idx is None or apex_idx >= len(df):
+                # LABEL d'index, pas une position (cf. calculate_optimal_apex_position)
+                if apex_idx is None or apex_idx not in df.index:
                     continue
-                
-                real_lat = df.iloc[apex_idx]['latitude_smooth']
-                real_lon = df.iloc[apex_idx]['longitude_smooth']
-                
+
+                real_row = df.loc[apex_idx]
+                if hasattr(real_row, "iloc") and getattr(real_row, "ndim", 1) > 1:
+                    real_row = real_row.iloc[0]
+                real_lat = real_row['latitude_smooth']
+                real_lon = real_row['longitude_smooth']
+
                 if pd.isna(real_lat) or pd.isna(real_lon):
                     continue
                 

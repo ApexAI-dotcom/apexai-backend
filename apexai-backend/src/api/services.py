@@ -407,6 +407,7 @@ def _run_analysis_pipeline_sync(
         ideal_lap_data = compute_ideal_lap(df)
         if ideal_lap_data.get("available"):
             losses = ideal_lap_data.get("per_corner_loss_s") or {}
+            per_lap = ideal_lap_data.get("per_corner_laps") or {}
             for c in unique_corner_analysis:
                 cid = c.get("corner_id")
                 # Toutes les valeurs viennent de la mesure : un virage absent du
@@ -415,6 +416,14 @@ def _run_analysis_pipeline_sync(
                 real_loss = losses.get(cid, losses.get(str(cid), 0.0))
                 c["time_lost"] = round(float(real_loss), 3)
                 c["time_lost_source"] = "measured"
+                # Contexte tour-par-tour : sur quel tour le pilote a réussi ce
+                # virage, sur lequel il a perdu, et si le défaut est récurrent.
+                detail = per_lap.get(cid, per_lap.get(str(cid)))
+                if detail:
+                    c["best_lap_here"] = detail.get("best_lap")
+                    c["worst_lap_here"] = detail.get("worst_lap")
+                    c["lap_spread_s"] = detail.get("spread_s")
+                    c["recurring"] = detail.get("recurring")
             logger.info(
                 "[%s] Tour idéal : %.3fs (meilleur réel %.3fs, gain %.3fs, tours %s)",
                 analysis_id, ideal_lap_data["ideal_lap_time_s"],
@@ -455,6 +464,7 @@ def _run_analysis_pipeline_sync(
             track_condition=track_condition,
             track_temperature=track_temperature,
             laps_analyzed=laps_representative,
+            laps_used=(ideal_lap_data or {}).get("laps_used"),
         )
     except Exception as e:
         logger.warning(f"[{analysis_id}] Failed to generate coaching advice: {e}")

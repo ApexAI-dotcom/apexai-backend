@@ -13,6 +13,35 @@ import warnings
 from src.analysis.scoring import KARTING_CONSTANTS, calculate_optimal_apex_position
 from src.analysis.geometry import _haversine_distance
 
+# Largeur de piste karting de compétition (CIK-FIA : minimum 8 m). Sert de borne
+# PHYSIQUE : une erreur d'apex ne peut pas dépasser la largeur de la piste.
+# Au-delà, c'est un artefact de calcul, pas une info exploitable par le pilote.
+TRACK_WIDTH_M = 8.0
+MAX_APEX_ERROR_M = TRACK_WIDTH_M / 2.0
+
+
+def _pos(df, label) -> Optional[int]:
+    """Position entière d'un label d'index.
+
+    `apex_index` / `entry_index` / `exit_index` sont des LABELS d'index
+    (`df.index[...]`), pas des positions. Les confondre (df.iloc[label]) faisait
+    lire un point pris ailleurs sur le circuit — d'où des « apex ratés de 50 m »
+    physiquement impossibles sur une piste de 8 m de large.
+    """
+    if label is None:
+        return None
+    try:
+        p = df.index.get_loc(label)
+        if isinstance(p, slice):
+            return int(p.start or 0)
+        if hasattr(p, "__len__"):
+            import numpy as _np
+            nz = _np.flatnonzero(p)
+            return int(nz[0]) if len(nz) else None
+        return int(p)
+    except Exception:
+        return None
+
 
 def _apex_speeds_per_lap(
     df: pd.DataFrame,
@@ -175,23 +204,27 @@ def calculate_braking_point(
             }
         
         dist = pd.to_numeric(df['cumulative_distance'], errors='coerce').values
-        
-        if apex_idx >= len(dist) or corner_entry_idx >= len(dist):
+
+        # `apex_idx` / `corner_entry_idx` sont des LABELS : il faut leur position
+        # réelle avant d'indexer un tableau numpy.
+        apex_pos = _pos(df, apex_idx)
+        entry_pos = _pos(df, corner_entry_idx)
+        if apex_pos is None or entry_pos is None or apex_pos >= len(dist) or entry_pos >= len(dist):
             return {
                 'braking_point_distance': 0.0,
                 'braking_point_optimal': 0.0,
                 'braking_delta': 0.0
             }
-        
-        apex_dist = dist[apex_idx]
-        entry_dist = dist[corner_entry_idx]
-        
+
+        apex_dist = dist[apex_pos]
+        entry_dist = dist[entry_pos]
+
         # Détecter point de freinage réel (décélération > 0.5g)
         braking_idx = None
-        if 'speed' in df.columns and corner_entry_idx < apex_idx:
+        if 'speed' in df.columns and entry_pos < apex_pos:
             speed = pd.to_numeric(df['speed'], errors='coerce').values
-            
-            for i in range(corner_entry_idx, apex_idx):
+
+            for i in range(entry_pos, apex_pos):
                 if i + 1 < len(speed):
                     delta_v = speed[i+1] - speed[i]
                     if delta_v < -2.0:  # Décélération significative (> 2 km/h)
@@ -249,14 +282,17 @@ def calculate_apex_error(
         Dictionnaire avec distance_error, direction_error
     """
     try:
-        if apex_idx >= len(df):
+        if apex_idx is None or apex_idx not in df.index:
             return {
                 'apex_distance_error': 0.0,
                 'apex_direction_error': None
             }
-        
-        real_lat = df.iloc[apex_idx]['latitude_smooth']
-        real_lon = df.iloc[apex_idx]['longitude_smooth']
+
+        apex_row = df.loc[apex_idx]
+        if hasattr(apex_row, "iloc") and getattr(apex_row, "ndim", 1) > 1:
+            apex_row = apex_row.iloc[0]
+        real_lat = apex_row['latitude_smooth']
+        real_lon = apex_row['longitude_smooth']
         
         if pd.isna(real_lat) or pd.isna(real_lon):
             return {
@@ -296,8 +332,8 @@ def calculate_apex_error(
                 direction = "west"  # Trop à l'est
         
         # Simplifier en left/right si possible
-        if 'corner_type' in df.iloc[apex_idx]:
-            corner_type = df.iloc[apex_idx]['corner_type']
+        if 'corner_type' in apex_row:
+            corner_type = apex_row['corner_type']
             if corner_type == "right":
                 if dlon > 0:
                     direction = "right"  # Trop à droite
@@ -309,6 +345,17 @@ def calculate_apex_error(
                 else:
                     direction = "right"  # Trop à droite
         
+        # Garde-fou physique : sur une piste de 8 m, un apex ne peut pas être
+        # raté de plus d'une demi-largeur. Au-delà, la mesure n'est pas fiable
+        # (apex de référence mal apparié) : on ne l'affiche pas plutôt que
+        # d'annoncer au pilote une erreur impossible.
+        if distance_error > MAX_APEX_ERROR_M:
+            return {
+                'apex_distance_error': 0.0,
+                'apex_direction_error': None,
+                'apex_error_unreliable': True,
+            }
+
         return {
             'apex_distance_error': round(distance_error, 2),
             'apex_direction_error': direction
@@ -464,10 +511,14 @@ def analyze_corner_performance(
         # Point de freinage
         braking_data = calculate_braking_point(df, entry_idx, apex_idx, entry_speed, apex_speed_real)
         
-        # Temps dans virage
-        if 'time' in df.columns and entry_idx < len(df) and exit_idx < len(df):
-            time_entry = pd.to_numeric(df.iloc[entry_idx]['time'], errors='coerce')
-            time_exit = pd.to_numeric(df.iloc[exit_idx]['time'], errors='coerce')
+        # Temps dans virage (entry_idx / exit_idx sont des LABELS)
+        if 'time' in df.columns and entry_idx in df.index and exit_idx in df.index:
+            time_entry = pd.to_numeric(df.loc[entry_idx, 'time'], errors='coerce')
+            time_exit = pd.to_numeric(df.loc[exit_idx, 'time'], errors='coerce')
+            if hasattr(time_entry, "iloc"):
+                time_entry = time_entry.iloc[0]
+            if hasattr(time_exit, "iloc"):
+                time_exit = time_exit.iloc[0]
             if pd.notna(time_entry) and pd.notna(time_exit):
                 time_in_corner = float(time_exit - time_entry)
             else:

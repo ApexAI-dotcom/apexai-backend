@@ -160,6 +160,10 @@ def compute_ideal_lap(
         sectors = []
         ideal_time = 0.0
         per_corner_loss: Dict[int, float] = {}
+        # Temps passé dans chaque virage, TOUR PAR TOUR : permet de dire au
+        # pilote *quand* il a perdu (« ton meilleur passage : tour 3 ») au lieu
+        # d'un conseil hors sol qui ne renvoie à aucun tour précis.
+        corner_lap_times: Dict[int, Dict[int, float]] = {}
         for i in range(n_sectors):
             sector_times = {ln: cum_by_lap[ln][i + 1] - cum_by_lap[ln][i] for ln in lap_profiles}
             from_lap = min(sector_times, key=lambda k: sector_times[k])
@@ -168,8 +172,12 @@ def compute_ideal_lap(
             loss = max(0.0, best_st - ideal_st)
             ideal_time += ideal_st
             cid = corner_for_sector(i)
-            if cid is not None and loss > 0:
-                per_corner_loss[cid] = per_corner_loss.get(cid, 0.0) + loss
+            if cid is not None:
+                if loss > 0:
+                    per_corner_loss[cid] = per_corner_loss.get(cid, 0.0) + loss
+                slot = corner_lap_times.setdefault(cid, {})
+                for ln, st in sector_times.items():
+                    slot[ln] = slot.get(ln, 0.0) + float(st)
             sectors.append({
                 "index": i,
                 "start_m": round(float(edges[i]), 1),
@@ -183,6 +191,28 @@ def compute_ideal_lap(
 
         potential_gain = max(0.0, best_real_time - ideal_time)
 
+        # Synthèse par virage : meilleur tour, tour le plus coûteux, et
+        # régularité (un défaut qui revient à chaque tour ne se corrige pas comme
+        # une erreur isolée sur un seul tour).
+        per_corner_laps: Dict[int, Dict[str, Any]] = {}
+        for cid, by_lap in corner_lap_times.items():
+            if len(by_lap) < 2:
+                continue
+            best_ln_c = min(by_lap, key=lambda k: by_lap[k])
+            worst_ln_c = max(by_lap, key=lambda k: by_lap[k])
+            ref = by_lap[best_ln_c]
+            spread = by_lap[worst_ln_c] - ref
+            losses = {int(ln): round(t - ref, 3) for ln, t in by_lap.items()}
+            n_costly = sum(1 for v in losses.values() if v > 0.03)
+            per_corner_laps[int(cid)] = {
+                "best_lap": int(best_ln_c),
+                "worst_lap": int(worst_ln_c),
+                "spread_s": round(float(spread), 3),
+                "loss_by_lap": losses,
+                # « récurrent » = le pilote perd sur la majorité de ses tours
+                "recurring": bool(n_costly >= max(2, (len(losses) - 1))),
+            }
+
         return {
             "available": True,
             "laps_used": [int(x) for x in lap_profiles.keys()],
@@ -193,6 +223,7 @@ def compute_ideal_lap(
             "ideal_lap_time_s": round(ideal_time, 3),
             "potential_gain_s": round(potential_gain, 3),
             "per_corner_loss_s": {int(k): round(v, 3) for k, v in per_corner_loss.items()},
+            "per_corner_laps": per_corner_laps,
             "sectors": sectors,
         }
 
