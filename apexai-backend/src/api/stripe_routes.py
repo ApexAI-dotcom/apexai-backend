@@ -653,26 +653,16 @@ async def stripe_webhook(request: Request) -> JSONResponse:
             metadata = session.get("metadata") or {}
             _log_webhook("session_metadata", session_id=session_id, metadata=metadata)
 
-            user_id = (metadata.get("user_id") or metadata.get("supabase_user_id") or "").strip()
-            if not user_id:
-                logger.warning(
-                    "stripe_webhook user_id missing from metadata session_id=%s",
-                    session_id,
-                    extra={"step": "user_id_extract", "metadata": metadata},
-                )
-                _log_webhook("user_id_missing", session_id=session_id)
-                return JSONResponse(content={"received": True})
-
-            _log_webhook("user_id_extracted", user_id=user_id, session_id=session_id)
-
             customer_id = session.get("customer")
             subscription_id = session.get("subscription")
             tier, billing_period = "racer", "monthly"
             start_dt, end_dt = None, None
+            sub_metadata = {}
 
             if subscription_id:
                 try:
                     sub = stripe.Subscription.retrieve(subscription_id)
+                    sub_metadata = sub.get("metadata") or {}
                     items_data = sub.get("items") or {}
                     data_list = items_data.get("data") or []
                     _log_webhook(
@@ -713,6 +703,29 @@ async def stripe_webhook(request: Request) -> JSONResponse:
                         subscription_id,
                     )
                     _log_webhook("subscription_retrieve_error", error=str(sub_err), subscription_id=subscription_id)
+
+            # Résolution robuste de l'utilisateur : metadata de session, sinon
+            # metadata de l'abonnement, sinon lookup par subscription_id/customer.
+            # (La metadata de session peut être vide selon le flux de paiement —
+            # c'était la cause du webhook qui répondait 200 sans rien écrire.)
+            user_id = (
+                metadata.get("user_id") or metadata.get("supabase_user_id")
+                or sub_metadata.get("user_id") or sub_metadata.get("supabase_user_id")
+                or ""
+            ).strip()
+            if not user_id:
+                user_id = _find_profile_user_id(
+                    subscription_id=subscription_id,
+                    metadata={**metadata, **sub_metadata},
+                    customer_id=customer_id,
+                ) or ""
+            if not user_id:
+                logger.warning(
+                    "stripe_webhook user_id introuvable session_id=%s customer=%s sub=%s",
+                    session_id, customer_id, subscription_id,
+                )
+                _log_webhook("user_id_missing", session_id=session_id)
+                return JSONResponse(content={"received": True})
 
             _log_webhook("tier_determined", user_id=user_id, tier=tier, billing_period=billing_period)
 
