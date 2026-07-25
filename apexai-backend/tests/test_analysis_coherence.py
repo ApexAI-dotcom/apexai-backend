@@ -102,6 +102,28 @@ def test_ideal_lap_is_reachable(analysis):
     assert ideal["laps_used"], "aucun tour représentatif retenu"
 
 
+def test_no_unmeasured_seconds_are_ever_claimed(analysis):
+    """Sans plusieurs tours exploitables, on ne peut pas MESURER un temps perdu.
+    Dans ce cas l'analyse doit afficher 0 et non une approximation déguisée."""
+    measured = bool((analysis.get("ideal_lap") or {}).get("available"))
+    for c in analysis["corner_analysis"]:
+        source = c.get("time_lost_source")
+        assert source in ("measured", "unavailable"), f"source inconnue : {source}"
+        if not measured:
+            assert float(c.get("time_lost") or 0.0) == 0.0
+
+
+def test_braking_distances_are_physically_sane(analysis):
+    """Les distances de freinage annoncées doivent rester dans le domaine du
+    possible : un écart de 78 m au point de freinage n'est pas un défaut de
+    pilotage mais un défaut de calcul."""
+    for c in analysis["corner_analysis"]:
+        dist = float(c.get("braking_point_distance") or 0.0)
+        delta = float(c.get("braking_delta") or 0.0)
+        assert 0 <= dist <= 300, f"V{c['corner_id']} : freinage à {dist} m de l'apex"
+        assert abs(delta) <= 60, f"V{c['corner_id']} : écart de freinage {delta} m"
+
+
 def test_racing_line_preserves_every_corner(analysis):
     """Le Tour Parfait IA ne supprime jamais un virage (pas de chicane coupée)."""
     rl = analysis.get("racing_line") or {}

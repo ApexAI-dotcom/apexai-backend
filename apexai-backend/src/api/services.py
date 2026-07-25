@@ -456,9 +456,20 @@ def _run_analysis_pipeline_sync(
                 ideal_lap_data["laps_used"],
             )
         else:
+            # Sans plusieurs tours exploitables, on NE PEUT PAS mesurer un temps
+            # perdu. Plutôt que de retomber sur l'ancienne approximation (et
+            # d'annoncer des secondes non mesurées), on l'annule : les conseils
+            # s'appuieront alors uniquement sur des défauts techniques mesurés
+            # (freinage, apex, vitesse).
+            for c in unique_corner_analysis:
+                c["time_lost"] = 0.0
+                c["time_lost_source"] = "unavailable"
             logger.info("[%s] Tour idéal indisponible : %s", analysis_id, ideal_lap_data.get("reason"))
     except Exception as e:
         logger.warning(f"[{analysis_id}] compute_ideal_lap failed: {e}")
+        for c in unique_corner_analysis:
+            c["time_lost"] = 0.0
+            c["time_lost_source"] = "unavailable"
         ideal_lap_data = None
 
     # ── Ligne de course idéale (remplace l'ancien « tour IA » factice) ───────
