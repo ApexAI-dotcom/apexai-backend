@@ -419,8 +419,16 @@ def _find_profile_user_id(
 
 
 def _log_webhook(step: str, **kwargs: object) -> None:
-    """Log structuré JSON pour le webhook."""
-    logger.info("stripe_webhook %s", json.dumps({"step": step, **kwargs}))
+    """Log structuré JSON pour le webhook.
+
+    default=str : les objets Stripe (StripeObject) et datetimes ne sont pas
+    sérialisables nativement — sans ça, json.dumps LÈVE une exception qui, avant,
+    était masquée par un faux 200. C'était la cause du webhook « qui ne faisait rien ».
+    """
+    try:
+        logger.info("stripe_webhook %s", json.dumps({"step": step, **kwargs}, default=str))
+    except Exception:
+        logger.info("stripe_webhook %s (log non sérialisable)", step)
 
 
 # Statuts d'abonnement Stripe qui donnent droit à l'accès premium.
@@ -841,7 +849,20 @@ async def stripe_webhook(request: Request) -> JSONResponse:
         # On renvoie 500 pour qu'un échec inattendu (ex. DB indisponible) soit
         # RETENTÉ par Stripe et VISIBLE dans le Dashboard, au lieu d'être avalé
         # en silence. La réconciliation à la lecture reste le filet ultime.
-        return JSONResponse(status_code=500, content={"received": False, "error": "handler_error"})
+        # Le détail (type + message + étape) est exposé dans le corps pour diagnostic.
+        import traceback
+        tb = traceback.extract_tb(e.__traceback__)
+        last = tb[-1] if tb else None
+        return JSONResponse(
+            status_code=500,
+            content={
+                "received": False,
+                "error": "handler_error",
+                "exception_type": type(e).__name__,
+                "exception_message": str(e)[:300],
+                "at": f"{last.name}:{last.lineno}" if last else None,
+            },
+        )
 
 
 @router.get("/sync")
