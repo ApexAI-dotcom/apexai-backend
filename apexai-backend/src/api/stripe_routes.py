@@ -532,7 +532,11 @@ def reconcile_profile_from_stripe(user_id: str, profile: dict) -> tuple[str, Opt
 @router.get("/webhook")
 async def stripe_webhook_verify():
     """Endpoint pour vérifier que le webhook est bien accessible."""
-    return {"status": "webhook endpoint active", "configuration": "ready" if STRIPE_WEBHOOK_SECRET else "missing_secret"}
+    return {
+        "status": "webhook endpoint active",
+        "configuration": "ready" if STRIPE_WEBHOOK_SECRET else "missing_secret",
+        "build": "reconcile-2026-07-25-checkout-userid-fallback",
+    }
 
 
 @router.post("/reconcile")
