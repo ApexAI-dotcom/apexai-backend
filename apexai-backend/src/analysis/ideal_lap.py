@@ -187,6 +187,14 @@ def compute_ideal_lap(
             best_st = float(sector_times[best_real_lap])
             loss = max(0.0, best_st - ideal_st)
             ideal_time += ideal_st
+            # Les secteurs de DÉBUT et de FIN de tour dépendent de l'endroit
+            # exact où le tour est coupé (ligne de chrono / franchissement GPS),
+            # qui varie légèrement d'un tour à l'autre. L'écart qu'on y mesure
+            # est un artefact de découpage, pas une perte de pilotage : on ne
+            # l'attribue à aucun virage et on ne le colore pas en rouge.
+            is_boundary = (i == 0 or i == n_sectors - 1)
+            if is_boundary:
+                loss = 0.0
             cid = attributed[i]
             is_corner = raw_cids[i] is not None
             if cid is not None:

@@ -1002,15 +1002,26 @@ def detect_corners(
                     
             clusters.append(cluster)
             
-        # 2. Filtrer les faux positifs (virage présent que sur 1 tour sur N)
-        min_laps_to_confirm = max(1, (laps_analyzed or 1) // 3)
+        # 2. Filtrer les faux positifs (virage détecté sur un seul tour = bruit).
+        #
+        # Le seuil est ABSOLU (2 tours), pas proportionnel au nombre de tours.
+        # Avec un seuil en `laps // 3`, plus le pilote roulait de tours, plus le
+        # critère devenait sévère : une session de 10 tours exigeait 3
+        # confirmations et perdait des virages qu'une session de 4 tours
+        # trouvait. Le circuit ne change pas selon la durée de la session — le
+        # nombre de virages détectés ne doit pas en dépendre non plus.
+        min_laps_to_confirm = 2 if (laps_analyzed or 1) >= 2 else 1
         valid_clusters = [c for c in clusters if len(set(a['lap'] for a in c)) >= min_laps_to_confirm]
-        
+
         if not valid_clusters:
             # Fallback si on a tout filtré
             valid_clusters = clusters
-            
-        log.info(f"detect_corners: {len(valid_clusters)} virages physiques confirmés")
+
+        log.info(
+            "detect_corners: %d virages physiques confirmés "
+            "(seuil %d tour(s) sur %s analysés)",
+            len(valid_clusters), min_laps_to_confirm, laps_analyzed,
+        )
         
         # 3. Construire le corner_details = JSON attendu par le front
         

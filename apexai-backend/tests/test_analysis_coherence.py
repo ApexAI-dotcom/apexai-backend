@@ -102,6 +102,37 @@ def test_ideal_lap_is_reachable(analysis):
     assert ideal["laps_used"], "aucun tour représentatif retenu"
 
 
+def test_corner_count_does_not_depend_on_session_length():
+    """Le circuit ne change pas selon la durée de la session : le nombre de
+    virages détectés ne doit pas dépendre du nombre de tours roulés.
+
+    Régression : le seuil de confirmation était `laps // 3`, donc plus le pilote
+    roulait, plus le critère devenait sévère — une session de 10 tours trouvait
+    moins de virages qu'une session de 4.
+    """
+    from src.core.data_loader import robust_load_telemetry
+    from src.core.signal_processing import apply_savgol_filter
+    from src.analysis.geometry import calculate_trajectory_geometry, detect_laps, detect_corners
+
+    with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as tmp:
+        csv_path = tmp.name
+    with gzip.open(FIXTURE, "rb") as f_in, open(csv_path, "wb") as f_out:
+        shutil.copyfileobj(f_in, f_out)
+    try:
+        df = robust_load_telemetry(csv_path)["data"]
+        df = apply_savgol_filter(df)
+        df = calculate_trajectory_geometry(df)
+        df = detect_laps(df)
+        counts = set()
+        for laps in (2, 4, 9, 20):
+            out = detect_corners(df.copy(), laps_analyzed=laps)
+            details = out.attrs.get("corners", {}).get("corner_details", [])
+            counts.add(len({c["id"] for c in details}))
+        assert len(counts) == 1, f"le nombre de virages varie selon la session : {counts}"
+    finally:
+        os.unlink(csv_path)
+
+
 def test_no_unmeasured_seconds_are_ever_claimed(analysis):
     """Sans plusieurs tours exploitables, on ne peut pas MESURER un temps perdu.
     Dans ce cas l'analyse doit afficher 0 et non une approximation déguisée."""
