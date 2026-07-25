@@ -175,6 +175,37 @@ def calculate_optimal_apex_speed_from_laps(
         return 0.0
 
 
+def _session_braking_capability(df) -> float:
+    """
+    Décélération de freinage RÉELLEMENT atteinte par le pilote (m/s²).
+
+    Sert de référence pour juger un point de freinage : « tu peux freiner plus
+    tard » n'a de sens que par rapport à ce que CE kart et CE pilote savent
+    faire. Une constante théorique donnerait un objectif inatteignable pour un
+    Mini et trop tendre pour un KZ.
+    """
+    cached = df.attrs.get("_braking_capability_ms2")
+    if cached:
+        return float(cached)
+    a_ref = 1.0 * KARTING_CONSTANTS['g']
+    try:
+        if 'speed' in df.columns and 'time' in df.columns:
+            v = pd.to_numeric(df['speed'], errors='coerce').values / 3.6
+            t = pd.to_numeric(df['time'], errors='coerce').values
+            ok = np.isfinite(v) & np.isfinite(t)
+            if ok.sum() > 50:
+                d = np.gradient(np.nan_to_num(v), t)
+                braking = -d[np.isfinite(d) & (d < 0)]
+                if braking.size > 20:
+                    a_ref = float(np.percentile(braking, 90))
+    except Exception:
+        pass
+    # Bornes physiques karting (freinage arrière seul : ~0,6 g à 1,6 g)
+    a_ref = float(np.clip(a_ref, 0.6 * KARTING_CONSTANTS['g'], 1.6 * KARTING_CONSTANTS['g']))
+    df.attrs["_braking_capability_ms2"] = a_ref
+    return a_ref
+
+
 def calculate_braking_point(
     df: pd.DataFrame,
     corner_entry_idx: int,
@@ -219,41 +250,109 @@ def calculate_braking_point(
         apex_dist = dist[apex_pos]
         entry_dist = dist[entry_pos]
 
-        # Détecter point de freinage réel (décélération > 0.5g)
+        # Détecter le début de freinage réel.
+        #
+        # IMPORTANT : le seuil est exprimé en DÉCÉLÉRATION PHYSIQUE (g), pas en
+        # écart de vitesse entre deux échantillons. Un seuil par échantillon
+        # dépend de la fréquence de l'appareil : à 25 Hz, une décélération de
+        # 1,2 g ne fait que ~1,8 km/h entre deux points et passait sous un seuil
+        # de 2 km/h — le freinage n'était alors JAMAIS détecté. Exprimé en g, le
+        # critère vaut pour tous les appareils (MyChron, Alfano…) quelle que soit
+        # leur fréquence d'échantillonnage.
         braking_idx = None
         if 'speed' in df.columns and entry_pos < apex_pos:
             speed = pd.to_numeric(df['speed'], errors='coerce').values
+            decel = None
+            if 'time' in df.columns:
+                t = pd.to_numeric(df['time'], errors='coerce').values
+                v_ms = speed / 3.6
+                ok = np.isfinite(t) & np.isfinite(v_ms)
+                if ok.sum() > 10 and np.nanmax(np.diff(t[ok])) > 0:
+                    with np.errstate(invalid='ignore', divide='ignore'):
+                        decel = np.gradient(np.nan_to_num(v_ms), t)  # m/s²
+            if decel is None:
+                # Repli : dérivée par échantillon ramenée à une base temporelle
+                # estimée, pour rester en unités physiques.
+                dt = 0.04
+                decel = np.gradient(np.nan_to_num(speed / 3.6)) / dt
 
-            for i in range(entry_pos, apex_pos):
-                if i + 1 < len(speed):
-                    delta_v = speed[i+1] - speed[i]
-                    if delta_v < -2.0:  # Décélération significative (> 2 km/h)
-                        braking_idx = i
-                        break
+            BRAKING_THRESHOLD_MS2 = -0.30 * KARTING_CONSTANTS['g']  # ~0,3 g
+            for i in range(entry_pos, min(apex_pos, len(decel))):
+                if decel[i] < BRAKING_THRESHOLD_MS2:
+                    braking_idx = i
+                    break
         
+        braking_lat = braking_lon = None
+        # Vitesse AU DÉBUT DU FREINAGE (et non 15 points avant l'apex, qui est
+        # déjà dans le virage) : c'est elle qui détermine la distance de
+        # freinage physiquement nécessaire.
+        v_brake_start = entry_speed
         if braking_idx is not None and braking_idx < len(dist):
             braking_point_real = apex_dist - dist[braking_idx]
+            try:
+                v_bs = float(pd.to_numeric(df['speed'], errors='coerce').values[braking_idx])
+                if np.isfinite(v_bs) and v_bs > 0:
+                    v_brake_start = v_bs
+            except Exception:
+                pass
+            # Position GPS du début de freinage : permet d'afficher sur la carte
+            # un repère que le pilote peut retrouver en piste (« V5, freinage
+            # 32 m avant l'apex »), plutôt qu'un conseil hors sol.
+            for col_lat, col_lon in (("latitude_smooth", "longitude_smooth"), ("latitude", "longitude")):
+                if col_lat in df.columns and col_lon in df.columns:
+                    try:
+                        blat = df[col_lat].values[braking_idx]
+                        blon = df[col_lon].values[braking_idx]
+                        if pd.notna(blat) and pd.notna(blon):
+                            braking_lat, braking_lon = float(blat), float(blon)
+                    except Exception:
+                        pass
+                    break
         else:
             # Estimation : point où vitesse commence à baisser
             braking_point_real = (apex_dist - entry_dist) * 0.6
         
-        # Calculer point de freinage optimal
-        # Distance nécessaire : d = (v_entry² - v_apex²) / (2 * a)
-        v_entry_ms = entry_speed / 3.6
-        v_apex_ms = apex_speed / 3.6
-        decel = KARTING_CONSTANTS['max_braking_decel'] * KARTING_CONSTANTS['g']
-        
-        if decel > 0:
-            braking_distance_optimal = (v_entry_ms ** 2 - v_apex_ms ** 2) / (2 * decel)
+        # Point de freinage optimal : distance nécessaire pour passer de la
+        # vitesse de DÉBUT DE FREINAGE à la vitesse d'apex, avec la capacité de
+        # freinage réellement démontrée par le pilote sur cette session.
+        #   d = (v0² − v_apex²) / (2·a)
+        v0_ms = max(0.0, float(v_brake_start)) / 3.6
+        v_apex_ms = max(0.0, float(apex_speed)) / 3.6
+        decel_ref = _session_braking_capability(df)
+
+        if decel_ref > 0 and v0_ms > v_apex_ms:
+            braking_distance_optimal = (v0_ms ** 2 - v_apex_ms ** 2) / (2 * decel_ref)
         else:
-            braking_distance_optimal = braking_point_real
-        
-        braking_delta = braking_point_real - braking_distance_optimal  # Positif = trop tôt, négatif = trop tard
-        
+            # Pas de vraie phase de décélération ici (virage pris à plat) :
+            # aucun conseil de freinage n'est pertinent.
+            return {
+                'braking_point_distance': round(max(0.0, braking_point_real), 1),
+                'braking_point_optimal': 0.0,
+                'braking_delta': 0.0,
+                'braking_lat': braking_lat,
+                'braking_lon': braking_lon,
+            }
+
+        braking_delta = braking_point_real - braking_distance_optimal  # + = trop tôt, − = trop tard
+
+        # Garde-fou : au-delà de ~60 m d'écart, c'est un mauvais appariement
+        # entrée/apex (virage détecté à cheval sur deux tours) et non une erreur
+        # de pilotage. On préfère ne rien annoncer qu'annoncer un chiffre faux.
+        if braking_point_real <= 0 or braking_point_real > 300 or abs(braking_delta) > 60:
+            return {
+                'braking_point_distance': round(max(0.0, braking_point_real), 1),
+                'braking_point_optimal': round(max(0.0, braking_distance_optimal), 1),
+                'braking_delta': 0.0,
+                'braking_lat': braking_lat,
+                'braking_lon': braking_lon,
+            }
+
         return {
             'braking_point_distance': round(braking_point_real, 1),
             'braking_point_optimal': round(braking_distance_optimal, 1),
-            'braking_delta': round(braking_delta, 1)
+            'braking_delta': round(braking_delta, 1),
+            'braking_lat': braking_lat,
+            'braking_lon': braking_lon,
         }
     
     except Exception as e:
@@ -588,6 +687,8 @@ def analyze_corner_performance(
             'braking_point_distance': braking_data['braking_point_distance'],
             'braking_point_optimal': braking_data['braking_point_optimal'],
             'braking_delta': braking_data['braking_delta'],
+            'braking_lat': braking_data.get('braking_lat'),
+            'braking_lon': braking_data.get('braking_lon'),
             'time_in_corner': round(time_in_corner, 2),
             'time_lost': time_lost
         }

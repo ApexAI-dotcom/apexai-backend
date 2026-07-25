@@ -279,6 +279,13 @@ def _run_analysis_pipeline_sync(
                 "score": float(corner_data.get("score", 50.0) or 50.0),
                 "apex_lat": corner_data.get("apex_lat"),
                 "apex_lon": corner_data.get("apex_lon"),
+                # Repères concrets pour le pilote : où il commence à freiner,
+                # à combien de mètres de l'apex, et l'écart au point optimal.
+                "braking_lat": metrics.get("braking_lat"),
+                "braking_lon": metrics.get("braking_lon"),
+                "braking_point_distance": float(metrics.get("braking_point_distance", 0.0) or 0.0),
+                "braking_point_optimal": float(metrics.get("braking_point_optimal", 0.0) or 0.0),
+                "braking_delta": float(metrics.get("braking_delta", 0.0) or 0.0),
                 "lap": corner_data.get("lap"),
                 "per_lap_data": corner_data.get("per_lap_data", []),
                 "label": f"V{corner_id}",
