@@ -547,6 +547,75 @@ async def stripe_webhook_verify():
     }
 
 
+@router.get("/debug-checkout")
+async def debug_checkout(subscription_id: str, token: str = ""):
+    """
+    TEMPORAIRE — diagnostic. Rejoue la logique de checkout.session.completed pour
+    un abonnement donné, dans l'environnement Railway (vraie clé + Supabase), et
+    RENVOIE le traceback exact de tout ce qui échoue. Protégé par un token simple.
+    À SUPPRIMER une fois le webhook réparé.
+    """
+    import traceback as _tb
+    if token != "apex-diag-7725":
+        raise HTTPException(status_code=403, detail="forbidden")
+    out = {"subscription_id": subscription_id, "steps": {}}
+
+    def run(name, fn):
+        try:
+            out["steps"][name] = {"ok": True, "value": fn()}
+        except Exception as ex:
+            out["steps"][name] = {
+                "ok": False,
+                "type": type(ex).__name__,
+                "msg": str(ex)[:400],
+                "tb": _tb.format_exc()[-1500:],
+            }
+            raise
+
+    try:
+        run("stripe_key_present", lambda: bool(STRIPE_SECRET_KEY))
+        run("supabase_present", lambda: bool(supabase_client))
+        sub = run_val = None
+        try:
+            sub = stripe.Subscription.retrieve(subscription_id)
+            out["steps"]["retrieve"] = {"ok": True, "status": sub.get("status")}
+        except Exception as ex:
+            out["steps"]["retrieve"] = {"ok": False, "type": type(ex).__name__, "msg": str(ex)[:400], "tb": _tb.format_exc()[-1500:]}
+            return JSONResponse(out)
+        sub_metadata = dict(sub.get("metadata") or {})
+        out["steps"]["sub_metadata"] = sub_metadata
+        items = (sub.get("items") or {}).get("data") or []
+        price_id = ((items[0].get("price") or {}).get("id") if items else None)
+        out["steps"]["price_id"] = price_id
+        tier, period = _price_id_to_tier_and_period(price_id or "")
+        out["steps"]["tier"] = tier
+        out["steps"]["known_prices"] = list(PRICE_TO_TIER.keys())
+        start_dt, end_dt = _sub_period(sub)
+        out["steps"]["period"] = [str(start_dt), str(end_dt)]
+        user_id = (sub_metadata.get("user_id") or sub_metadata.get("supabase_user_id") or "")
+        if not user_id:
+            user_id = _find_profile_user_id(subscription_id=subscription_id, metadata=sub_metadata, customer_id=sub.get("customer")) or ""
+        out["steps"]["user_id"] = user_id
+        # Test réel de l'écriture Supabase
+        try:
+            _update_profile_subscription(
+                user_id,
+                stripe_customer_id=sub.get("customer"),
+                stripe_subscription_id=sub.get("id"),
+                subscription_tier=tier,
+                billing_period=period,
+                subscription_status="active",
+                subscription_start_date=start_dt,
+                subscription_end_date=end_dt,
+            )
+            out["steps"]["db_update"] = {"ok": True}
+        except Exception as ex:
+            out["steps"]["db_update"] = {"ok": False, "type": type(ex).__name__, "msg": str(ex)[:400], "tb": _tb.format_exc()[-1500:]}
+    except Exception as ex:
+        out["fatal"] = {"type": type(ex).__name__, "msg": str(ex)[:400], "tb": _tb.format_exc()[-1500:]}
+    return JSONResponse(out)
+
+
 @router.post("/reconcile")
 async def reconcile_checkout(request: Request, current_user: str = Depends(get_current_user)):
     """
