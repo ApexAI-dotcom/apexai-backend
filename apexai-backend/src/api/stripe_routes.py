@@ -83,6 +83,42 @@ def _build_price_to_tier() -> dict:
 
 PRICE_TO_TIER = _build_price_to_tier()
 
+def _as_dict(obj) -> dict:
+    """
+    Convertit un objet Stripe (StripeObject/Resource) en dict Python natif,
+    RÉCURSIVEMENT. Indispensable : selon la version de la lib `stripe`, les
+    objets renvoyés n'exposent pas `.get()` de façon fiable (Attribute: get),
+    ce qui faisait planter TOUT le code qui lisait un objet Stripe. Après cette
+    conversion, `.get()` fonctionne partout car ce sont de vrais dict/list.
+    """
+    if obj is None:
+        return {}
+    if isinstance(obj, dict):
+        return obj
+    # 1. Méthodes natives de la lib si disponibles
+    for attr in ("to_dict_recursive", "to_dict"):
+        fn = getattr(obj, attr, None)
+        if callable(fn):
+            try:
+                d = fn()
+                if isinstance(d, dict):
+                    return d
+            except Exception:
+                pass
+    # 2. Repli universel : la repr str d'un StripeObject est du JSON
+    try:
+        d = json.loads(str(obj))
+        if isinstance(d, dict):
+            return d
+    except Exception:
+        pass
+    # 3. Dernier recours
+    try:
+        return dict(obj)
+    except Exception:
+        return {}
+
+
 def _price_id_to_tier_and_period(price_id: str) -> tuple[str, str]:
     if not price_id:
         return "rookie", "monthly"
@@ -559,6 +595,17 @@ async def debug_checkout(subscription_id: str, token: str = ""):
     if token != "apex-diag-7725":
         raise HTTPException(status_code=403, detail="forbidden")
     out = {"subscription_id": subscription_id, "steps": {}}
+    try:
+        out["stripe_version"] = getattr(stripe, "VERSION", "?")
+        _raw = stripe.Subscription.retrieve(subscription_id)
+        out["stripe_obj_type"] = type(_raw).__name__
+        out["has_get_method"] = callable(getattr(type(_raw), "get", None))
+        # conversion universelle en dict natif
+        _d = _as_dict(_raw)
+        out["as_dict_ok"] = isinstance(_d, dict) and _d.get("status") is not None
+        out["as_dict_status"] = _d.get("status") if isinstance(_d, dict) else None
+    except Exception as ex:
+        out["probe_error"] = {"type": type(ex).__name__, "msg": str(ex)[:300], "tb": _tb.format_exc()[-1200:]}
 
     def run(name, fn):
         try:
