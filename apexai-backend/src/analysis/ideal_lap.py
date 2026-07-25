@@ -157,6 +157,22 @@ def compute_ideal_lap(
             uniq, counts = np.unique(vals.astype(int), return_counts=True)
             return int(uniq[np.argmax(counts)])
 
+        # Virage de rattachement de CHAQUE secteur. Une portion de ligne droite
+        # n'a pas de virage propre : le temps qu'on y perd vient de la sortie du
+        # virage précédent (vitesse emportée). On la rattache donc à ce virage —
+        # c'est la lecture d'un ingénieur, et surtout cela évite d'afficher une
+        # « perte en ligne droite » orpheline que les conseils ignoreraient.
+        raw_cids = [corner_for_sector(i) for i in range(n_sectors)]
+        attributed: List[Optional[int]] = list(raw_cids)
+        last_seen: Optional[int] = None
+        for i in range(n_sectors):
+            if raw_cids[i] is not None:
+                last_seen = raw_cids[i]
+        for i in range(n_sectors):
+            if raw_cids[i] is not None:
+                last_seen = raw_cids[i]
+            attributed[i] = raw_cids[i] if raw_cids[i] is not None else last_seen
+
         sectors = []
         ideal_time = 0.0
         per_corner_loss: Dict[int, float] = {}
@@ -171,7 +187,8 @@ def compute_ideal_lap(
             best_st = float(sector_times[best_real_lap])
             loss = max(0.0, best_st - ideal_st)
             ideal_time += ideal_st
-            cid = corner_for_sector(i)
+            cid = attributed[i]
+            is_corner = raw_cids[i] is not None
             if cid is not None:
                 if loss > 0:
                     per_corner_loss[cid] = per_corner_loss.get(cid, 0.0) + loss
@@ -187,6 +204,9 @@ def compute_ideal_lap(
                 "loss_s": round(loss, 3),
                 "from_lap": int(from_lap),
                 "corner_id": cid,
+                # `in_corner` distingue la partie courbée de la relance qui suit :
+                # la carte n'étiquette que les virages, pas les lignes droites.
+                "in_corner": bool(is_corner),
             })
 
         potential_gain = max(0.0, best_real_time - ideal_time)

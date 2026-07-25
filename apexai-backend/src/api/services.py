@@ -383,23 +383,53 @@ def _run_analysis_pipeline_sync(
     # Remplir apex_lat/apex_lon depuis le df si manquants (pour que trajectoire + heatmap affichent tous les virages)
     lat_col = "latitude_smooth" if "latitude_smooth" in df.columns else "latitude"
     lon_col = "longitude_smooth" if "longitude_smooth" in df.columns else "longitude"
-    for c in unique_corner_analysis:
-        if (c.get("apex_lat") is None or c.get("apex_lon") is None) and c.get("apex_index") is not None:
-            idx = c["apex_index"]
-            if idx in df.index and lat_col in df.columns and lon_col in df.columns:
-                c["apex_lat"] = float(df.at[idx, lat_col]) if pd.notna(df.at[idx, lat_col]) else c.get("apex_lat")
-                c["apex_lon"] = float(df.at[idx, lon_col]) if pd.notna(df.at[idx, lon_col]) else c.get("apex_lon")
+    def _fill_apex_coords(c: dict) -> None:
+        """Garantit des coordonnées d'apex à CHAQUE virage détecté.
 
-    # COHÉRENCE : la carte n'affiche qu'un virage possédant des coordonnées
-    # d'apex. On écarte donc AVANT numérotation ceux qui n'en ont pas, sinon un
-    # conseil pourrait citer un « Virage 9 » introuvable sur la carte. Après
-    # cette étape : virages numérotés = virages affichés = virages conseillés.
+        La carte n'affiche qu'un virage géolocalisé : sans cette garantie, un
+        circuit de 13 virages n'en montrerait que 11, et les conseils ne
+        correspondraient plus à la carte. On tente, dans l'ordre :
+        l'index d'apex, puis le point le plus courbé du segment du virage,
+        puis son milieu géométrique.
+        """
+        if c.get("apex_lat") is not None and c.get("apex_lon") is not None:
+            return
+        if lat_col not in df.columns or lon_col not in df.columns:
+            return
+
+        def _take(label) -> bool:
+            if label is None or label not in df.index:
+                return False
+            la, lo = df.at[label, lat_col], df.at[label, lon_col]
+            if pd.notna(la) and pd.notna(lo):
+                c["apex_lat"], c["apex_lon"] = float(la), float(lo)
+                return True
+            return False
+
+        if _take(c.get("apex_index")):
+            return
+        if "corner_id" in df.columns:
+            seg = df[df["corner_id"] == c.get("corner_id")]
+            if len(seg) > 0:
+                if "curvature" in seg.columns:
+                    k = pd.to_numeric(seg["curvature"], errors="coerce").abs()
+                    if k.notna().any() and _take(k.idxmax()):
+                        return
+                if _take(seg.index[len(seg) // 2]):
+                    return
+
+    for c in unique_corner_analysis:
+        _fill_apex_coords(c)
+
+    # Filet de sécurité : après la garantie ci-dessus, plus aucun virage ne
+    # devrait être écarté. Si l'un l'était malgré tout, on le signale fort —
+    # cela signifierait que carte et conseils peuvent diverger.
     mappable = [c for c in unique_corner_analysis
                 if c.get("apex_lat") is not None and c.get("apex_lon") is not None]
     if len(mappable) != len(unique_corner_analysis):
-        logger.info(
-            "[%s] [renumber] %d virage(s) sans apex géolocalisé écarté(s) pour garder "
-            "carte et conseils alignés",
+        logger.warning(
+            "[%s] [renumber] %d virage(s) restent sans apex géolocalisé et sont écartés "
+            "(carte et conseils resteraient alignés mais le circuit paraîtra incomplet)",
             analysis_id, len(unique_corner_analysis) - len(mappable),
         )
     if mappable:

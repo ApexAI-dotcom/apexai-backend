@@ -1,6 +1,7 @@
 import pytest
 from unittest import mock
-from fastapi.testclient import TestClient
+
+from tests._httpx_compat import make_test_client
 
 # Mock settings BEFORE importing main to avoid side effects
 import os
@@ -8,7 +9,7 @@ os.environ["MON_KART_ENABLED"] = "true"
 
 from src.api.main import app
 
-client = TestClient(app)
+client = make_test_client(app)
 
 # Dummy dependencies
 async def mock_get_current_user():
