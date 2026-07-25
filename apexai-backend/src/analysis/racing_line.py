@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Apex AI — Ligne de course idéale (optimal racing line).
+Apex AI — « Tour parfait IA » (optimal racing line).
+
+⚠️ NOM PRODUIT : côté interface, cette fonctionnalité s'appelle et doit rester
+« Tour parfait IA ». Ne pas la renommer (« ligne idéale » n'est qu'un terme
+technique interne) : c'est le nom qui porte la valeur commerciale.
 
 Objectif : produire une VRAIE ligne de course objective à aller chercher, et non
 un tour « lissé + 3,5 % » cosmétique.
@@ -145,6 +149,76 @@ def _corner_regions(kap: np.ndarray, thresh: float, min_len: int = 3) -> List[np
     return regions
 
 
+def _regions_from_corner_ids(
+    station_cid: Optional[np.ndarray],
+    kap_ref: np.ndarray,
+    thresh: float = CORNER_CURVATURE_THRESHOLD,
+) -> List[np.ndarray]:
+    """
+    Régions de virage issues des virages DÉTECTÉS PAR L'APPLICATION
+    (mêmes numéros que la carte et les graphiques).
+
+    `corner_id` étiquette tout le segment du virage (approche et sortie
+    comprises) : on ne garde que la partie réellement courbée, sinon les
+    « virages » se toucheraient bout à bout et toute la piste passerait pour
+    une enfilade de chicanes.
+    """
+    if station_cid is None:
+        return []
+    cid = np.where(np.isfinite(station_cid), station_cid, -1).astype(int)
+    regions = []
+    for c in sorted(set(cid.tolist())):
+        if c < 0:
+            continue
+        idx = np.where(cid == c)[0]
+        if len(idx) == 0:
+            continue
+        curved = idx[np.abs(kap_ref[idx]) > thresh]
+        if len(curved) < 2:
+            # Virage très ouvert : on retient son point le plus courbé.
+            peak = idx[int(np.argmax(np.abs(kap_ref[idx])))]
+            curved = np.array([peak])
+        regions.append(curved)
+    return regions
+
+
+def _chicane_mask(
+    regions: List[np.ndarray],
+    kap_ref: np.ndarray,
+    n_points: int,
+    max_gap_stations: int = 6,
+    max_region_stations: int = 14,
+) -> np.ndarray:
+    """
+    Repère les chicanes : deux virages consécutifs de sens OPPOSÉS et très
+    rapprochés.
+
+    Dans une chicane, le pilote est déjà au point le plus serré (il monte sur le
+    vibreur) : personne ne prend une chicane large. Autoriser une grande marge
+    latérale reviendrait à la redresser, c'est-à-dire à couper la piste. On
+    verrouille donc la ligne idéale au plus près de la trajectoire réelle.
+    """
+    mask = np.zeros(n_points, dtype=bool)
+    if len(regions) < 2:
+        return mask
+    ordered = sorted(regions, key=lambda r: int(np.min(r)))
+    signs = [float(np.mean(kap_ref[r])) for r in ordered]
+    for i in range(len(ordered)):
+        j = (i + 1) % len(ordered)
+        if signs[i] * signs[j] >= 0:
+            continue  # même sens : ce n'est pas une chicane
+        # Une chicane est un enchaînement COURT : deux virages brefs, collés.
+        if len(ordered[i]) > max_region_stations or len(ordered[j]) > max_region_stations:
+            continue
+        gap = int(np.min(ordered[j])) - int(np.max(ordered[i]))
+        if gap < 0:
+            gap += n_points
+        if 0 <= gap <= max_gap_stations:
+            mask[ordered[i]] = True
+            mask[ordered[j]] = True
+    return mask
+
+
 def _valid_laps(df) -> List[int]:
     """Tours valides : source unique partagée avec le module tour idéal
     (exclut out/in-laps, tours trop lents ET tours partiels)."""
@@ -207,11 +281,18 @@ def build_racing_line(
         rlon = pd.to_numeric(ref[lon_col], errors="coerce").to_numpy(float)
         m = ~(np.isnan(rlat) | np.isnan(rlon))
         rlat, rlon = rlat[m], rlon[m]
+        # On récupère les virages DÉJÀ détectés par l'application, pour que les
+        # numéros de virage de la ligne idéale soient exactement ceux de la carte
+        # et des graphiques (une seule vérité : V1, V2, V3…).
+        rcid = None
+        if "corner_id" in ref.columns:
+            rcid = pd.to_numeric(ref["corner_id"], errors="coerce").to_numpy(float)[m]
         if len(rlat) < 30:
             return {"available": False, "reason": "tour de référence trop court"}
 
         x, y, lat0, lon0, mlat, mlon = _to_local_xy(rlat, rlon)
         Px, Py, track_len = _resample_closed(x, y, n_points)
+
 
         tx, ty = np.gradient(Px), np.gradient(Py)
         tn = np.hypot(tx, ty)
@@ -223,6 +304,11 @@ def build_racing_line(
         tree = cKDTree(np.column_stack([Px, Py]))
         env_lo = np.full(n_points, np.inf)
         env_hi = np.full(n_points, -np.inf)
+        # Virage de rattachement de chaque station, voté sur TOUS les tours
+        # valides : un virage détecté sur d'autres tours que le tour de référence
+        # doit quand même être vérifié, sinon le décompte de virages diffère de
+        # celui affiché sur la carte.
+        votes: Dict[int, List[int]] = {}
         for ln in laps:
             g = df[df["lap_number"] == ln]
             la = pd.to_numeric(g[lat_col], errors="coerce").to_numpy(float)
@@ -230,6 +316,9 @@ def build_racing_line(
             mm = ~(np.isnan(la) | np.isnan(lo))
             if mm.sum() < 20:
                 continue
+            cid_lap = None
+            if "corner_id" in g.columns:
+                cid_lap = pd.to_numeric(g["corner_id"], errors="coerce").to_numpy(float)[mm]
             gx = (lo[mm] - lon0) * mlon
             gy = (la[mm] - lat0) * mlat
             _, idx = tree.query(np.column_stack([gx, gy]))
@@ -237,6 +326,15 @@ def build_racing_line(
             for j, i in enumerate(idx):
                 env_lo[i] = min(env_lo[i], signed[j])
                 env_hi[i] = max(env_hi[i], signed[j])
+                if cid_lap is not None and np.isfinite(cid_lap[j]):
+                    votes.setdefault(int(i), []).append(int(cid_lap[j]))
+
+        station_cid = None
+        if votes:
+            station_cid = np.full(n_points, np.nan)
+            for i, vals in votes.items():
+                u, c = np.unique(np.asarray(vals), return_counts=True)
+                station_cid[i] = float(u[int(np.argmax(c))])
 
         def _fill(arr: np.ndarray) -> np.ndarray:
             a = arr.copy()
@@ -273,14 +371,33 @@ def build_racing_line(
         # Marge observée de chaque côté, exprimée intérieur / extérieur
         obs_inner = np.where(s > 0, env_hi, -env_lo)
         obs_outer = np.where(s > 0, -env_lo, env_hi)
-        # Intérieur : ce que le pilote a déjà osé + 1,5 m, borné à 3 m
-        inner_corner = np.clip(np.maximum(obs_inner, 0.0) + 1.5, 1.0, 3.0)
+        # Marge INTÉRIEURE proportionnelle au rayon : plus le virage est serré,
+        # plus le pilote est déjà collé à la corde (vibreur) et moins il reste de
+        # place vers l'intérieur. Un virage serré n'a quasiment aucune marge.
+        radius = 1.0 / np.maximum(np.abs(kap_ref), 1e-4)
+        inner_cap = np.clip(radius / 40.0, 0.3, 2.5)
+        inner_corner = np.minimum(np.maximum(obs_inner, 0.0) + 0.5, inner_cap)
         # Extérieur : le reste de la piste
         outer_corner = np.clip(np.maximum(obs_outer, 0.0) + 1.0, half_w, track_width_m)
         # Sur les lignes droites, on autorise symétriquement la demi-largeur
         sym = np.maximum(np.maximum(obs_inner, obs_outer), half_w)
         inner_allow = cornerness * inner_corner + (1 - cornerness) * sym
         outer_allow = cornerness * outer_corner + (1 - cornerness) * sym
+
+        # CHICANES : on ne redresse pas une chicane. Le pilote y est déjà au plus
+        # serré ; élargir reviendrait à la couper. On colle à sa trajectoire.
+        regions = _regions_from_corner_ids(station_cid, kap_ref)
+        if not regions:
+            regions = _corner_regions(kap_ref, CORNER_CURVATURE_THRESHOLD)
+        chicane = _chicane_mask(regions, kap_ref, n_points)
+        if chicane.any():
+            inner_allow = np.where(chicane, np.minimum(inner_allow, 0.4), inner_allow)
+            outer_allow = np.where(
+                chicane,
+                np.minimum(outer_allow, np.maximum(obs_outer, 0.0) + 0.8),
+                outer_allow,
+            )
+
         inner_allow = _circular_smooth(inner_allow, 3)
         outer_allow = _circular_smooth(outer_allow, 3)
 
@@ -302,7 +419,6 @@ def build_racing_line(
         ])
         b = np.concatenate([D2 @ Px, D2 @ Py, np.zeros(n_points)])
 
-        regions = _corner_regions(kap_ref, CORNER_CURVATURE_THRESHOLD)
         lo_i, hi_i = off_lo.copy(), off_hi.copy()
         n_off = np.zeros(n_points)
         Lx, Ly = Px.copy(), Py.copy()
@@ -395,6 +511,8 @@ def build_racing_line(
             "max_lateral_shift_m": round(float(np.max(np.abs(n_off))), 2),
             "corners_total": len(regions),
             "corners_preserved": int(preserved),
+            "corners_source": "virages détectés par l'analyse" if station_cid is not None else "pics de courbure",
+            "chicane_stations": int(np.count_nonzero(chicane)),
             "corner_fix_iterations": int(iterations),
             "n_points": n_points,
             "lat": to_lat(Lx, Ly),
