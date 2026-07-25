@@ -505,12 +505,12 @@ def reconcile_profile_from_stripe(user_id: str, profile: dict) -> tuple[str, Opt
         # 1. Abonnement précis connu → on le vérifie directement (le plus fiable).
         if sub_id:
             try:
-                sub = stripe.Subscription.retrieve(sub_id)
+                sub = _as_dict(stripe.Subscription.retrieve(sub_id))
             except Exception:
                 sub = None
         # 2. Sinon on cherche un abonnement vivant sur le client (StoreID stocké only).
         if sub is None and customer_id:
-            lst = stripe.Subscription.list(customer=customer_id, status="all", limit=10)
+            lst = _as_dict(stripe.Subscription.list(customer=customer_id, status="all", limit=10))
             live = [s for s in lst.get("data", []) if (s.get("status") in GRANTING_STATUSES)]
             sub = live[0] if live else None
 
@@ -624,7 +624,7 @@ async def debug_checkout(subscription_id: str, token: str = ""):
         run("supabase_present", lambda: bool(supabase_client))
         sub = run_val = None
         try:
-            sub = stripe.Subscription.retrieve(subscription_id)
+            sub = _as_dict(stripe.Subscription.retrieve(subscription_id))
             out["steps"]["retrieve"] = {"ok": True, "status": sub.get("status")}
         except Exception as ex:
             out["steps"]["retrieve"] = {"ok": False, "type": type(ex).__name__, "msg": str(ex)[:400], "tb": _tb.format_exc()[-1500:]}
@@ -685,7 +685,7 @@ async def reconcile_checkout(request: Request, current_user: str = Depends(get_c
         return JSONResponse(status_code=400, content={"error": "session_id manquant"})
 
     try:
-        session = stripe.checkout.Session.retrieve(session_id, expand=["subscription"])
+        session = _as_dict(stripe.checkout.Session.retrieve(session_id, expand=["subscription"]))
     except Exception as e:
         logger.warning("reconcile: session retrieve failed: %s", e)
         return JSONResponse(status_code=404, content={"error": "Session introuvable"})
@@ -703,9 +703,11 @@ async def reconcile_checkout(request: Request, current_user: str = Depends(get_c
     sub = session.get("subscription")
     if isinstance(sub, str):
         try:
-            sub = stripe.Subscription.retrieve(sub)
+            sub = _as_dict(stripe.Subscription.retrieve(sub))
         except Exception:
             sub = None
+    else:
+        sub = _as_dict(sub) if sub else None
     if not sub:
         return JSONResponse(content={"reconciled": False, "reason": "no_subscription"})
 
@@ -776,7 +778,7 @@ async def stripe_webhook(request: Request) -> JSONResponse:
 
     try:
         if event_type == "checkout.session.completed":
-            session = event["data"]["object"]
+            session = _as_dict(event["data"]["object"])
             session_id = session.get("id", "")
             metadata = session.get("metadata") or {}
             _log_webhook("session_metadata", session_id=session_id, metadata=metadata)
@@ -789,7 +791,7 @@ async def stripe_webhook(request: Request) -> JSONResponse:
 
             if subscription_id:
                 try:
-                    sub = stripe.Subscription.retrieve(subscription_id)
+                    sub = _as_dict(stripe.Subscription.retrieve(subscription_id))
                     sub_metadata = sub.get("metadata") or {}
                     items_data = sub.get("items") or {}
                     data_list = items_data.get("data") or []
@@ -892,7 +894,7 @@ async def stripe_webhook(request: Request) -> JSONResponse:
                 _log_webhook("update_skipped", user_id=user_id, reason="supabase_client_none")
 
         elif event_type == "customer.subscription.updated":
-            sub = event["data"]["object"]
+            sub = _as_dict(event["data"]["object"])
             subscription_id = sub.get("id")
             customer_id = sub.get("customer")
             status = (sub.get("status") or "").strip() or None
@@ -937,7 +939,7 @@ async def stripe_webhook(request: Request) -> JSONResponse:
                 logger.warning("webhook customer.subscription.updated: no profile for subscription_id=%s", subscription_id)
 
         elif event_type == "customer.subscription.deleted":
-            sub = event["data"]["object"]
+            sub = _as_dict(event["data"]["object"])
             subscription_id = sub.get("id")
             if not supabase_client:
                 return JSONResponse(content={"received": True})
@@ -1024,9 +1026,9 @@ async def sync_subscription(
                     email = user_auth.user.email
                     logger.info("sync_subscription: found email=%s on Supabase Auth", email)
                     # Recherche Stripe
-                    customers = stripe.Customer.list(email=email, limit=1)
-                    if customers.data:
-                        customer_id = customers.data[0].id
+                    customers = _as_dict(stripe.Customer.list(email=email, limit=1))
+                    if customers.get("data"):
+                        customer_id = customers["data"][0].get("id")
                         logger.info("sync_subscription: found customer_id=%s on Stripe for email=%s", customer_id, email)
                     else:
                         logger.info("sync_subscription: no customer found on Stripe for email=%s", email)
@@ -1040,9 +1042,9 @@ async def sync_subscription(
         if customer_id:
             logger.info("sync_subscription: retrieving subs for customer_id=%s", customer_id)
             # On regarde active OU trialing
-            stripe_subs = stripe.Subscription.list(customer=customer_id, status="all", limit=10)
+            stripe_subs = _as_dict(stripe.Subscription.list(customer=customer_id, status="all", limit=10))
             # On filtre ceux qui sont 'active' ou 'trialing'
-            subs_list = [s for s in stripe_subs.get("data", []) if s.status in ("active", "trialing")]
+            subs_list = [s for s in stripe_subs.get("data", []) if s.get("status") in ("active", "trialing")]
         
         if not subs_list:
             logger.info("sync_subscription: no active/trialing subscription found for customer_id=%s", customer_id)
