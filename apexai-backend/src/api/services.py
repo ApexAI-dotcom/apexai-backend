@@ -27,6 +27,8 @@ from src.analysis.geometry import (
 from src.analysis.scoring import calculate_performance_score, validate_score_consistency
 from src.analysis.coaching import generate_coaching_advice
 from src.analysis.performance_metrics import analyze_corner_performance
+from src.analysis.ideal_lap import compute_ideal_lap
+from src.analysis.racing_line import build_racing_line
 from src.analysis.track_signature import compute_track_signature
 from src.visualization.visualization import generate_all_plots_base64, generate_plot_data
 
@@ -221,6 +223,19 @@ def _run_analysis_pipeline_sync(
     # We always analyze the full session now, ignoring lap_filter for the initial df reduction
     if "lap_number" in df.columns:
         laps_analyzed = int(df["lap_number"].nunique())
+
+    # Nombre de tours REPRÉSENTATIFS (hors out/in-laps et tours partiels), utilisé
+    # UNIQUEMENT pour l'affichage : annoncer « 6 tours » quand 3 seulement sont
+    # exploitables décrédibilise l'analyse. Surtout ne pas l'injecter dans
+    # detect_corners : le seuil de détection dépend de laps_analyzed, et le
+    # modifier changerait le nombre de virages détectés (carte + graphiques).
+    laps_representative = laps_analyzed
+    if "lap_number" in df.columns:
+        try:
+            from src.analysis.ideal_lap import _valid_lap_numbers
+            laps_representative = len(_valid_lap_numbers(df)) or laps_analyzed
+        except Exception:
+            pass
     
     logger.info(f"[DIAG] Appel detect_corners avec {len(df)} rows, laps_analyzed={laps_analyzed}")
     logger.info(f"[{analysis_id}] Step 4/5: Detecting corners...")
@@ -363,7 +378,7 @@ def _run_analysis_pipeline_sync(
         c["corner_id"] = i
         c["corner_number"] = i
         c["label"] = f"V{i}"
-        c["avg_note"] = "Valeurs sur ce tour" if laps_analyzed == 1 else f"Valeurs moyennées sur {laps_analyzed} tours"
+        c["avg_note"] = "Valeurs sur ce tour" if laps_representative == 1 else f"Valeurs moyennées sur {laps_representative} tours"
 
     if "corner_id" in df.columns:
         # Vectorized update for corner_id
@@ -381,6 +396,55 @@ def _run_analysis_pipeline_sync(
                 c["apex_lon"] = float(df.at[idx, lon_col]) if pd.notna(df.at[idx, lon_col]) else c.get("apex_lon")
     corners_detected = len(unique_corner_analysis)
 
+    # ── Tour idéal + temps RÉELLEMENT perdu par virage ───────────────────────
+    # Calculé après la renumérotation des virages pour que les corner_id
+    # correspondent exactement à ceux de la carte et des graphiques.
+    # Le temps perdu mesuré (écart de chrono réel par mini-secteur) remplace
+    # l'ancienne approximation basée sur la seule vitesse d'apex : les conseils
+    # générés juste après héritent donc de secondes crédibles.
+    ideal_lap_data = None
+    try:
+        ideal_lap_data = compute_ideal_lap(df)
+        if ideal_lap_data.get("available"):
+            losses = ideal_lap_data.get("per_corner_loss_s") or {}
+            for c in unique_corner_analysis:
+                cid = c.get("corner_id")
+                # Toutes les valeurs viennent de la mesure : un virage absent du
+                # relevé n'a simplement rien perdu (0 s). On ne mélange jamais
+                # mesure et approximation dans un même affichage.
+                real_loss = losses.get(cid, losses.get(str(cid), 0.0))
+                c["time_lost"] = round(float(real_loss), 3)
+                c["time_lost_source"] = "measured"
+            logger.info(
+                "[%s] Tour idéal : %.3fs (meilleur réel %.3fs, gain %.3fs, tours %s)",
+                analysis_id, ideal_lap_data["ideal_lap_time_s"],
+                ideal_lap_data["best_real_lap_time_s"], ideal_lap_data["potential_gain_s"],
+                ideal_lap_data["laps_used"],
+            )
+        else:
+            logger.info("[%s] Tour idéal indisponible : %s", analysis_id, ideal_lap_data.get("reason"))
+    except Exception as e:
+        logger.warning(f"[{analysis_id}] compute_ideal_lap failed: {e}")
+        ideal_lap_data = None
+
+    # ── Ligne de course idéale (remplace l'ancien « tour IA » factice) ───────
+    racing_line_data = None
+    try:
+        racing_line_data = build_racing_line(df)
+        if racing_line_data.get("available"):
+            df.attrs["racing_line"] = racing_line_data
+            logger.info(
+                "[%s] Ligne idéale : %.3fs, μ=%.2f, %d/%d virages préservés",
+                analysis_id, racing_line_data["optimal_lap_time_s"],
+                racing_line_data["mu_calibrated"], racing_line_data["corners_preserved"],
+                racing_line_data["corners_total"],
+            )
+        else:
+            logger.info("[%s] Ligne idéale indisponible : %s", analysis_id, racing_line_data.get("reason"))
+    except Exception as e:
+        logger.warning(f"[{analysis_id}] build_racing_line failed: {e}")
+        racing_line_data = None
+
     # Une seule source de vérité : overall_score = sum(breakdown) depuis calculate_performance_score
     validate_score_consistency(score_data)
 
@@ -390,7 +454,7 @@ def _run_analysis_pipeline_sync(
             df, corner_details, score_data, unique_corner_analysis,
             track_condition=track_condition,
             track_temperature=track_temperature,
-            laps_analyzed=laps_analyzed,
+            laps_analyzed=laps_representative,
         )
     except Exception as e:
         logger.warning(f"[{analysis_id}] Failed to generate coaching advice: {e}")
@@ -434,19 +498,28 @@ def _run_analysis_pipeline_sync(
     consistency_gap: Optional[float] = None
     improvement_gap: Optional[float] = None
 
-    # Calculate lap times (excluding lap 0 outliers if possible)
+    # Temps par tour — on ne retient que les tours COMPLETS et représentatifs.
+    # Sans ce filtre, un tour de rentrée partiel (ex. 9,96 s) était présenté
+    # comme « meilleur tour », ce qui fausse tout l'affichage.
     valid_laps_dict = {}
     if "lap_number" in df.columns and "time" in df.columns:
+        try:
+            from src.analysis.ideal_lap import _valid_lap_numbers
+            representative = set(_valid_lap_numbers(df))
+        except Exception:
+            representative = set()
         for lap in sorted(df["lap_number"].dropna().unique().astype(int).tolist()):
+            if representative and lap not in representative:
+                continue
             grp = df[df["lap_number"] == lap]["time"].dropna()
             if len(grp) >= 2:
                 valid_laps_dict[lap] = round(float(grp.max() - grp.min()), 3)
-    
+
     if valid_laps_dict:
         # Ignore lap 0 if it exists
         if len(valid_laps_dict) > 1 and 0 in valid_laps_dict:
             del valid_laps_dict[0]
-            
+
         lap_times = list(valid_laps_dict.values())
         best_lap_time = min(lap_times)
         
@@ -574,6 +647,8 @@ def _run_analysis_pipeline_sync(
             circuit_name=circuit_name,
         ),
         track_features=TrackFeatures(**track_signature) if track_signature else None,
+        ideal_lap=ideal_lap_data if (ideal_lap_data or {}).get("available") else None,
+        racing_line=racing_line_data if (racing_line_data or {}).get("available") else None,
         import_diagnostics=import_diagnostics,
     )
     return response.dict(exclude_none=True)

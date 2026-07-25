@@ -393,12 +393,15 @@ def _build_differentiated_corner_advice(
     apex_opt = float(corner.get('apex_speed_optimal') or metrics.get('apex_speed_optimal') or apex_speed)
     entry_speed = float(corner.get('entry_speed') or metrics.get('entry_speed') or 0.0)
     apex_error = float(corner.get('apex_distance_error') or metrics.get('apex_distance_error') or 0.0)
+    # `time_lost` est la perte RÉELLE mesurée sur ce virage (écart de chrono
+    # entre le meilleur tour et le tour idéal, par mini-secteur). On l'affiche
+    # telle quelle, par tour : pas de multiplication par le nombre de tours
+    # (qui gonflait l'annonce), pas de valeur inventée quand la perte est nulle.
     time_lost = float(corner.get('time_lost') or 0.0)
-    gain = time_lost * max(1, laps_analyzed)
     delta_speed = max(0.0, apex_opt - apex_speed)
     variant = n % 3
-    impact_seconds = round(gain, 2) if time_lost >= 0.01 else round((100 - score) * 0.003, 2)
-    gain_str = f" Gain estimé : {gain:.2f}s sur la session." if (time_lost * laps_analyzed) > 0.05 else ""
+    impact_seconds = round(time_lost, 3)
+    gain_str = f" Gain mesuré : {time_lost:.2f}s par tour." if time_lost > 0.02 else ""
 
     if score > 80:
         return {
@@ -453,7 +456,8 @@ def _generate_global_advice(
 
         corners_valid = [c for c in corner_analysis if c.get('corner_id') in valid_corner_ids]
         corners_under_80 = [c for c in corners_valid if float(c.get('score', 100)) < 80]
-        time_lost_key = lambda c: float(c.get('time_lost') or 0) * max(1, laps_analyzed)
+        # Priorité au temps réellement perdu (mesuré), le plus coûteux d'abord.
+        time_lost_key = lambda c: float(c.get('time_lost') or 0)
         sorted_corners = sorted(corners_under_80, key=time_lost_key, reverse=True)
 
         for corner in sorted_corners:

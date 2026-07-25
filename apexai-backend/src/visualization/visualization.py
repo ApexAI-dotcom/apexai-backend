@@ -1150,9 +1150,36 @@ def generate_plot_data(df: pd.DataFrame) -> Dict[str, Any]:
                              "apex_speed": round(float(c.get('apex_speed_real', 0) or 0), 1)
                          })
 
-            # Create the AI Perfect Lap from the best lap
-            best_lap = next((l for l in traj_laps if l.get("is_best")), None)
-            if not best_lap and len(traj_laps) > 0:
+            # ── Tour idéal : VRAIE ligne de course calculée ──────────────────
+            # Auparavant on fabriquait un faux « tour parfait » (meilleur tour
+            # lissé, vitesse × 1,035) : purement cosmétique. On utilise désormais
+            # la ligne de course optimisée (courbure minimale dans les limites de
+            # piste, vitesses calibrées sur le grip réel, aucun virage supprimé).
+            racing_line = df.attrs.get("racing_line") or {}
+            if racing_line.get("available") and len(racing_line.get("lat", [])) > 20:
+                traj_laps.append({
+                    "lap_number": -1,
+                    "is_best": False,
+                    "is_synthetic": True,
+                    "lat": list(racing_line["lat"]),
+                    "lon": list(racing_line["lon"]),
+                    "speed_kmh": list(racing_line["speed_kmh"]),
+                })
+                plot_data["racing_line_meta"] = {
+                    k: racing_line.get(k) for k in (
+                        "optimal_lap_time_s", "mu_calibrated", "track_width_m",
+                        "track_width_source", "curvature_reduction_pct",
+                        "corners_total", "corners_preserved", "reference_lap",
+                        "laps_used",
+                    )
+                }
+                plot_data["track_edges"] = racing_line.get("track_edges")
+                plot_data["trajectory_2d"] = {"laps": traj_laps, "corners": traj_corners}
+                # Ligne réelle disponible : on n'ajoute AUCUN tour factice.
+                best_lap = None
+            else:
+                best_lap = next((l for l in traj_laps if l.get("is_best")), None)
+            if not best_lap and not racing_line.get("available") and len(traj_laps) > 0:
                 # Fallback: DO NOT pick lap 0 (out-lap). Pick the lap with highest max speed.
                 valid_laps = [l for l in traj_laps if l.get("lap_number", 0) > 0]
                 if valid_laps:
