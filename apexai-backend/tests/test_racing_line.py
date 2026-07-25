@@ -49,6 +49,28 @@ def test_racing_line_is_credible(adria_df):
     assert len(out["lat"]) == len(out["lon"]) == len(out["speed_kmh"]) == out["n_points"]
 
 
+def test_racing_line_never_deletes_a_corner(adria_df):
+    """GARANTIE MÉTIER : la ligne idéale ne doit jamais gommer un virage
+    (sinon elle couperait la piste — cas de la chicane raccourcie)."""
+    out = build_racing_line(adria_df)
+    assert out["available"] is True
+    assert out["corners_total"] >= 5, "détection de virages anormalement faible"
+    assert out["corners_preserved"] == out["corners_total"], (
+        f"{out['corners_total'] - out['corners_preserved']} virage(s) supprimé(s) "
+        "par l'optimisation"
+    )
+
+
+def test_track_width_is_regulation_based(adria_df):
+    """La largeur de piste vient de la réglementation karting (généralisable à
+    tous les circuits), pas d'un calage sur un tracé particulier."""
+    out = build_racing_line(adria_df)
+    assert out["track_width_m"] == 8.0
+    assert "CIK-FIA" in out["track_width_source"]
+    edges = out["track_edges"]
+    assert len(edges["left"]["lat"]) == len(edges["right"]["lat"]) == out["n_points"]
+
+
 def test_racing_line_safe_without_gps():
     import pandas as pd
     df = pd.DataFrame({"lap_number": [1, 1, 1], "speed": [40, 50, 60]})
