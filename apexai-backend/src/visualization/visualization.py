@@ -1072,11 +1072,12 @@ def generate_plot_data(df: pd.DataFrame) -> Dict[str, Any]:
             breakdown = df.attrs['score_data'].get('breakdown', {})
             plot_data["performance_radar"] = {
                 "axes": ["Précision Apex", "Régularité", "Vitesse Apex", "Secteurs"],
+                # float natifs : les float64 numpy ne sont pas sérialisables en JSON
                 "values": [
-                    round(breakdown.get('apex_precision', 0), 1),
-                    round(breakdown.get('trajectory_consistency', 0), 1),
-                    round(breakdown.get('apex_speed', 0), 1),
-                    round(breakdown.get('sector_times', 0), 1)
+                    round(float(breakdown.get('apex_precision', 0) or 0), 1),
+                    round(float(breakdown.get('trajectory_consistency', 0) or 0), 1),
+                    round(float(breakdown.get('apex_speed', 0) or 0), 1),
+                    round(float(breakdown.get('sector_times', 0) or 0), 1)
                 ],
                 "max_values": [30, 25, 25, 20]
             }

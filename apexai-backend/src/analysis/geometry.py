@@ -1136,7 +1136,8 @@ def detect_corners(
                 df_result.at[df_result.index[a['peak_idx']], 'is_apex'] = True
                 
                 per_lap_data.append({
-                    'lap': a['lap'],
+                    # int natif : un int64 numpy n'est pas sérialisable en JSON
+                    'lap': int(a['lap']),
                     'apex_lat': lat,
                     'apex_lon': lon,
                     'entry_index': int(df_result.index[a['start_idx']]),

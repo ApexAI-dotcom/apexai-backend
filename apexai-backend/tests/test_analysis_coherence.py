@@ -155,6 +155,44 @@ def test_braking_distances_are_physically_sane(analysis):
         assert abs(delta) <= 60, f"V{c['corner_id']} : écart de freinage {delta} m"
 
 
+def test_response_is_json_serializable(analysis):
+    """La réponse ne doit contenir aucun type numpy : un int64/float64 casse la
+    sérialisation JSON et peut faire disparaître des champs côté application."""
+    import json
+    import numpy as np
+
+    offenders = []
+
+    def scan(obj, path=""):
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                scan(v, f"{path}.{k}")
+        elif isinstance(obj, (list, tuple)):
+            for v in obj[:5]:
+                scan(v, f"{path}[]")
+        elif isinstance(obj, (np.integer, np.floating, np.bool_, np.ndarray)):
+            offenders.append(f"{path} ({type(obj).__name__})")
+
+    scan(analysis)
+    assert not offenders, f"types numpy dans la réponse : {offenders}"
+    json.dumps(analysis, default=str)
+
+
+def test_braking_reference_points_are_produced(analysis):
+    """Les repères de freinage sont LE repère concret du pilote en piste : sans
+    eux, la carte reste abstraite. Ils doivent exister sur la majorité des
+    virages et rester à une distance de freinage plausible en karting."""
+    corners = analysis["corner_analysis"]
+    with_braking = [c for c in corners if c.get("braking_lat") is not None]
+    assert len(with_braking) >= len(corners) // 2, (
+        f"seulement {len(with_braking)}/{len(corners)} virages ont un repère de freinage"
+    )
+    for c in with_braking:
+        d = float(c["braking_point_distance"])
+        assert 0 < d <= 95, f"V{c['corner_id']} : freinage à {d} m de l'apex (implausible)"
+        assert c.get("braking_lon") is not None
+
+
 def test_racing_line_preserves_every_corner(analysis):
     """Le Tour Parfait IA ne supprime jamais un virage (pas de chicane coupée)."""
     rl = analysis.get("racing_line") or {}

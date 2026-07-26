@@ -19,6 +19,14 @@ from src.analysis.geometry import _haversine_distance
 TRACK_WIDTH_M = 8.0
 MAX_APEX_ERROR_M = TRACK_WIDTH_M / 2.0
 
+# Fenêtre de recherche du début de freinage en amont de l'apex. Large (≈ 8 s à
+# 25 Hz) pour couvrir une longue ligne droite, bornée pour ne pas remonter au
+# virage précédent.
+MAX_BRAKING_SEARCH_SAMPLES = 200
+# Distance de freinage maximale plausible en karting (freins arrière seuls).
+# Au-delà, on capterait la décélération d'un autre virage.
+MAX_BRAKING_DISTANCE_M = 90.0
+
 
 def _pos(df, label) -> Optional[int]:
     """Position entière d'un label d'index.
@@ -260,7 +268,7 @@ def calculate_braking_point(
         # critère vaut pour tous les appareils (MyChron, Alfano…) quelle que soit
         # leur fréquence d'échantillonnage.
         braking_idx = None
-        if 'speed' in df.columns and entry_pos < apex_pos:
+        if 'speed' in df.columns and apex_pos > 0:
             speed = pd.to_numeric(df['speed'], errors='coerce').values
             decel = None
             if 'time' in df.columns:
@@ -276,11 +284,32 @@ def calculate_braking_point(
                 dt = 0.04
                 decel = np.gradient(np.nan_to_num(speed / 3.6)) / dt
 
-            BRAKING_THRESHOLD_MS2 = -0.30 * KARTING_CONSTANTS['g']  # ~0,3 g
-            for i in range(entry_pos, min(apex_pos, len(decel))):
+            # On REMONTE depuis l'apex plutôt que d'avancer depuis l'entrée du
+            # virage : après déduplication, l'index d'entrée et celui de l'apex
+            # peuvent provenir de tours différents (entrée « après » l'apex),
+            # et la recherche vers l'avant ne trouvait alors jamais rien —
+            # aucun repère de freinage n'était produit.
+            BRAKING_THRESHOLD_MS2 = -0.30 * KARTING_CONSTANTS['g']   # ~0,3 g : vrai freinage
+            STILL_BRAKING_MS2 = -0.20 * KARTING_CONSTANTS['g']       # phase de freinage franche
+            search_start = max(0, apex_pos - MAX_BRAKING_SEARCH_SAMPLES)
+            # Ne jamais remonter au-delà d'une distance de freinage plausible en
+            # karting : au-delà, on capterait la décélération d'un autre virage.
+            if apex_pos < len(dist):
+                for i in range(apex_pos, search_start - 1, -1):
+                    if np.isfinite(dist[i]) and (apex_dist - dist[i]) > MAX_BRAKING_DISTANCE_M:
+                        search_start = max(search_start, i)
+                        break
+            hit = None
+            for i in range(min(apex_pos, len(decel)) - 1, search_start - 1, -1):
                 if decel[i] < BRAKING_THRESHOLD_MS2:
-                    braking_idx = i
+                    hit = i
                     break
+            if hit is not None:
+                # Remonter jusqu'au tout début de la phase de freinage.
+                j = hit
+                while j > search_start and decel[j - 1] < STILL_BRAKING_MS2:
+                    j -= 1
+                braking_idx = j
         
         braking_lat = braking_lon = None
         # Vitesse AU DÉBUT DU FREINAGE (et non 15 points avant l'apex, qui est
