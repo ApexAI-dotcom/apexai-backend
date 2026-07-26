@@ -997,12 +997,10 @@ def generate_all_plots_base64(df: pd.DataFrame) -> Dict[str, Optional[str]]:
     return plots
 
 
-# Seuil d'accélération longitudinale séparant les phases de pilotage (en g).
-# En dessous, le kart n'est ni vraiment freiné ni vraiment relancé : c'est une
-# phase de transition. Choisi à partir de la distribution réelle mesurée sur
-# piste (freinage jusqu'à -1,1 g, relance jusqu'à +0,85 g) ; ±0,10 g donne une
-# répartition conforme à ce qu'on observe en karting (peu de roue libre).
-PHASE_THRESHOLD_G = 0.10
+# Les seuils de phase viennent du module d'analyse : la bande rouge de la carte
+# et le repère de début de freinage DOIVENT être définis par le même critère,
+# sinon ils se contredisent à l'écran.
+from src.analysis.performance_metrics import BRAKING_PHASE_G, ACCELERATION_PHASE_G
 
 
 def _driving_phases(lap_df) -> list:
@@ -1024,9 +1022,10 @@ def _driving_phases(lap_df) -> list:
         if len(v) < 3 or not np.isfinite(t).any():
             return []
         acc_g = np.gradient(np.nan_to_num(v), t) / 9.81
-        thr = PHASE_THRESHOLD_G
         return [
-            "braking" if a < -thr else "acceleration" if a > thr else "coasting"
+            "braking" if a < -BRAKING_PHASE_G
+            else "acceleration" if a > ACCELERATION_PHASE_G
+            else "coasting"
             for a in acc_g
         ]
     except Exception:
