@@ -26,6 +26,11 @@ MAX_BRAKING_SEARCH_SAMPLES = 200
 # Distance de freinage maximale plausible en karting (freins arrière seuls).
 # Au-delà, on capterait la décélération d'un autre virage.
 MAX_BRAKING_DISTANCE_M = 90.0
+# Chute de vitesse minimale pour qu'une phase de ralentissement mérite un
+# repère : en deçà, c'est du bruit de mesure, pas une action de pilotage.
+MIN_DECEL_FOR_MARKER_KMH = 8.0
+# Tolérance pour considérer que la vitesse est encore "au plateau" (km/h).
+PLATEAU_TOLERANCE_KMH = 1.5
 
 
 def _pos(df, label) -> Optional[int]:
@@ -290,7 +295,6 @@ def calculate_braking_point(
             # et la recherche vers l'avant ne trouvait alors jamais rien —
             # aucun repère de freinage n'était produit.
             BRAKING_THRESHOLD_MS2 = -0.30 * KARTING_CONSTANTS['g']   # ~0,3 g : vrai freinage
-            STILL_BRAKING_MS2 = -0.20 * KARTING_CONSTANTS['g']       # phase de freinage franche
             search_start = max(0, apex_pos - MAX_BRAKING_SEARCH_SAMPLES)
             # Ne jamais remonter au-delà d'une distance de freinage plausible en
             # karting : au-delà, on capterait la décélération d'un autre virage.
@@ -299,17 +303,49 @@ def calculate_braking_point(
                     if np.isfinite(dist[i]) and (apex_dist - dist[i]) > MAX_BRAKING_DISTANCE_M:
                         search_start = max(search_start, i)
                         break
-            hit = None
-            for i in range(min(apex_pos, len(decel)) - 1, search_start - 1, -1):
-                if decel[i] < BRAKING_THRESHOLD_MS2:
-                    hit = i
-                    break
-            if hit is not None:
-                # Remonter jusqu'au tout début de la phase de freinage.
-                j = hit
-                while j > search_start and decel[j - 1] < STILL_BRAKING_MS2:
-                    j -= 1
-                braking_idx = j
+
+            # Le début du freinage, c'est le PIC DE VITESSE qui précède l'apex.
+            #
+            # Chercher à rebours le dernier échantillon dépassant un seuil de
+            # décélération donnait un point bien trop tardif : dans un virage
+            # réel, le pilote relâche progressivement les freins en entrant
+            # (trail braking), et la remontée s'arrêtait à ce relâchement — au
+            # milieu de la zone de freinage. Le pic de vitesse, lui, marque sans
+            # ambiguïté l'instant où le pilote cesse d'accélérer et commence à
+            # ralentir : c'est le repère que le pilote voit en piste, et c'est
+            # aussi là que démarre la bande de freinage affichée sur la carte.
+            window_end = min(apex_pos, len(decel))
+            if window_end > search_start + 2:
+                seg_speed = speed[search_start:window_end]
+                seg_decel = decel[search_start:window_end]
+                finite = np.isfinite(seg_speed)
+                if finite.any():
+                    peak_rel = int(np.nanargmax(np.where(finite, seg_speed, -np.inf)))
+                    peak_pos = search_start + peak_rel
+                    # Le critère est la CHUTE DE VITESSE réelle, pas un seuil de
+                    # décélération : beaucoup de virages rapides se négocient au
+                    # simple lever de pied, sans jamais atteindre 0,3 g. Exiger
+                    # un freinage franc y supprimait le repère alors que la carte
+                    # affiche bien une phase de ralentissement — les deux se
+                    # contredisaient à nouveau.
+                    if (
+                        peak_pos < apex_pos
+                        and np.isfinite(speed[peak_pos])
+                        and np.isfinite(speed[apex_pos])
+                        and (speed[peak_pos] - speed[apex_pos]) > MIN_DECEL_FOR_MARKER_KMH
+                    ):
+                        # Sur une longue ligne droite, la vitesse plafonne : le
+                        # maximum peut tomber n'importe où dans ce plateau. Le
+                        # vrai début du ralentissement est la FIN du plateau,
+                        # c'est-à-dire le dernier point encore à pleine vitesse.
+                        peak_speed = float(speed[peak_pos])
+                        onset = peak_pos
+                        for i in range(peak_pos, apex_pos):
+                            if np.isfinite(speed[i]) and speed[i] >= peak_speed - PLATEAU_TOLERANCE_KMH:
+                                onset = i
+                            else:
+                                break
+                        braking_idx = onset
         
         braking_lat = braking_lon = None
         # Vitesse AU DÉBUT DU FREINAGE (et non 15 points avant l'apex, qui est
