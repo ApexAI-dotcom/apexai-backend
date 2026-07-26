@@ -296,6 +296,23 @@ def calculate_braking_point(
             # aucun repère de freinage n'était produit.
             BRAKING_THRESHOLD_MS2 = -0.30 * KARTING_CONSTANTS['g']   # ~0,3 g : vrai freinage
             search_start = max(0, apex_pos - MAX_BRAKING_SEARCH_SAMPLES)
+
+            # CONTRAINTE PHYSIQUE : une zone de freinage appartient au segment
+            # compris entre le virage PRÉCÉDENT et celui-ci. On ne peut pas
+            # commencer à freiner pour le virage 8 avant d'avoir passé le 7.
+            # Sans cette borne, la fenêtre de recherche traversait le virage
+            # amont et le repère se retrouvait en amont de celui-ci — l'ordre des
+            # pastilles sur la carte devenait incohérent.
+            if 'corner_id' in df.columns:
+                cid_arr = pd.to_numeric(df['corner_id'], errors='coerce').values
+                my_cid = cid_arr[apex_pos] if apex_pos < len(cid_arr) else np.nan
+                for i in range(apex_pos - 1, search_start - 1, -1):
+                    c = cid_arr[i]
+                    if np.isfinite(c) and (not np.isfinite(my_cid) or int(c) != int(my_cid)):
+                        # Dernier point du virage amont : le freinage commence après.
+                        search_start = max(search_start, i + 1)
+                        break
+
             # Ne jamais remonter au-delà d'une distance de freinage plausible en
             # karting : au-delà, on capterait la décélération d'un autre virage.
             if apex_pos < len(dist):

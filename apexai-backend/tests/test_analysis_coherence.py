@@ -255,6 +255,46 @@ def test_driving_phases_are_physical_and_match_the_markers(analysis):
         assert misplaced == 0, f"{misplaced}/{checked} repères hors de leur phase de freinage"
 
 
+def test_braking_markers_follow_the_track_order(analysis):
+    """Un repère de freinage appartient au segment compris entre le virage
+    PRÉCÉDENT et le sien.
+
+    Régression : la fenêtre de recherche (90 m en amont de l'apex) pouvait
+    traverser le virage amont, si bien que le repère du virage 8 se retrouvait
+    AVANT le virage 7 sur la carte — un ordre physiquement impossible.
+    """
+    import numpy as np
+
+    laps = [
+        l for l in (analysis.get("plot_data") or {}).get("trajectory_2d", {}).get("laps", [])
+        if not l.get("is_synthetic") and (l.get("lap_number") or 0) >= 1 and l.get("lat")
+    ]
+    if not laps:
+        pytest.skip("aucun tour exploitable")
+    lap = max(laps, key=lambda l: len(l["lat"]))
+    lat = np.asarray(lap["lat"], dtype=float)
+    lon = np.asarray(lap["lon"], dtype=float)
+
+    def index_of(la, lo):
+        dx = (lon - lo) * np.cos(np.radians(la))
+        dy = lat - la
+        return int(np.nanargmin(dx * dx + dy * dy))
+
+    previous_apex = None
+    for c in analysis["corner_analysis"]:
+        apex_i = index_of(c["apex_lat"], c["apex_lon"])
+        if c.get("braking_lat") is not None:
+            brake_i = index_of(c["braking_lat"], c["braking_lon"])
+            assert brake_i <= apex_i, (
+                f"V{c['corner_id']} : repère de freinage APRÈS son propre apex"
+            )
+            if previous_apex is not None:
+                assert brake_i >= previous_apex, (
+                    f"V{c['corner_id']} : repère de freinage situé avant le virage précédent"
+                )
+        previous_apex = apex_i
+
+
 def test_racing_line_preserves_every_corner(analysis):
     """Le Tour Parfait IA ne supprime jamais un virage (pas de chicane coupée)."""
     rl = analysis.get("racing_line") or {}
