@@ -788,6 +788,87 @@ def _resample_adaptive(
     return cum_rs, lateral_g_rs, speed_rs, time_rs, curvature_rs, orig_iloc_rs, strategy, n_rs
 
 
+def _canonical_corners(df_result: pd.DataFrame) -> List[Dict[str, Any]]:
+    """
+    Détermine les virages du CIRCUIT, une fois pour toutes.
+
+    Le problème résolu ici : détecter les virages tour par tour puis regrouper
+    les apex donne un nombre qui varie avec la session (nombre de tours, densité
+    d'échantillonnage après décimation, bruit GPS). Or un circuit ne change pas.
+
+    On raisonne donc sur la GÉOMÉTRIE, à résolution SPATIALE fixe (un point tous
+    les 2 m) : la courbure est rééchantillonnée sur cette grille, puis chaque
+    virage est un pic de courbure suffisamment proéminent. À 11 Hz comme à 26 Hz,
+    la même piste donne exactement les mêmes virages.
+
+    Retourne une liste de {lat, lon, kappa, direction}, dans l'ordre du tour.
+    """
+    from scipy.signal import find_peaks
+
+    STEP_M = 2.0            # résolution spatiale de travail
+    SMOOTH_M = 10.0         # lissage : ignore le bruit GPS, garde la forme
+    MIN_GAP_M = 12.0        # deux apex distincts sont séparés d'au moins 12 m
+    MAX_RADIUS_M = 100.0    # au-delà, c'est une courbe, pas un virage
+    MIN_PROMINENCE = 0.004  # le pic doit ressortir du fond
+
+    if 'lap_number' not in df_result.columns or 'curvature' not in df_result.columns:
+        return []
+    lat_col = 'latitude_smooth' if 'latitude_smooth' in df_result.columns else 'latitude'
+    lon_col = 'longitude_smooth' if 'longitude_smooth' in df_result.columns else 'longitude'
+    if lat_col not in df_result.columns or 'cumulative_distance' not in df_result.columns:
+        return []
+
+    # Tour de référence : le plus rapide parmi les tours complets.
+    best_ln, best_t = None, float('inf')
+    for ln, g in df_result.groupby('lap_number'):
+        if int(ln) < 1 or len(g) < 30:
+            continue
+        t = pd.to_numeric(g['time'], errors='coerce').dropna() if 'time' in g else []
+        if len(t) >= 2:
+            dur = float(t.max() - t.min())
+            if 15.0 < dur < best_t:
+                best_t, best_ln = dur, int(ln)
+    if best_ln is None:
+        return []
+
+    g = df_result[df_result['lap_number'] == best_ln]
+    k = np.nan_to_num(pd.to_numeric(g['curvature'], errors='coerce').to_numpy(float))
+    d = pd.to_numeric(g['cumulative_distance'], errors='coerce').to_numpy(float)
+    la = pd.to_numeric(g[lat_col], errors='coerce').to_numpy(float)
+    lo = pd.to_numeric(g[lon_col], errors='coerce').to_numpy(float)
+    ok = np.isfinite(d) & np.isfinite(la) & np.isfinite(lo)
+    k, d, la, lo = k[ok], d[ok], la[ok], lo[ok]
+    if len(d) < 30:
+        return []
+    d = d - d[0]
+    if d[-1] < 100:
+        return []
+
+    grid = np.arange(0.0, float(d[-1]), STEP_M)
+    kg_signed = np.interp(grid, d, k)
+    kg = np.abs(kg_signed)
+    w = max(3, int(SMOOTH_M / STEP_M) | 1)
+    kg = np.convolve(kg, np.ones(w) / w, mode='same')
+
+    peaks, _ = find_peaks(
+        kg,
+        height=1.0 / MAX_RADIUS_M,
+        prominence=MIN_PROMINENCE,
+        distance=max(1, int(MIN_GAP_M / STEP_M)),
+    )
+    out = []
+    for p in peaks:
+        s = float(grid[p])
+        out.append({
+            'lat': float(np.interp(s, d, la)),
+            'lon': float(np.interp(s, d, lo)),
+            'kappa': float(kg[p]),
+            'direction': 'left' if np.interp(s, d, k) > 0 else 'right',
+            'station_m': s,
+        })
+    return out
+
+
 def detect_corners(
     df: pd.DataFrame,
     min_lateral_g: float = 0.65,
@@ -973,23 +1054,91 @@ def detect_corners(
             df_result.attrs['corners'] = {'total_corners': 0, 'corner_details': []}
             return df_result
             
-        # 1. Regrouper les apex réels proches spatialement
-        # Rayon de base standard pour grouper les passages d'un même virage sur plusieurs tours
-        coherence_radius_m = min_distance_between_corners * 2.0
+        # 1. Regroupement des apex par virage physique.
+        #
+        # On s'appuie d'abord sur les virages CANONIQUES du circuit (géométrie à
+        # résolution spatiale fixe) : le nombre de virages ne dépend alors ni du
+        # nombre de tours, ni de la densité d'échantillonnage. Chaque apex
+        # réellement détecté est rattaché au virage canonique le plus proche.
+        canonical = _canonical_corners(df_result)
         clusters = []
+        lat_col_g = 'latitude_smooth' if 'latitude_smooth' in df_result.columns else 'latitude'
+        lon_col_g = 'longitude_smooth' if 'longitude_smooth' in df_result.columns else 'longitude'
+        if canonical:
+            ASSIGN_RADIUS_M = 30.0
+            buckets: List[List[Dict[str, Any]]] = [[] for _ in canonical]
+            for a in valid_apexes:
+                alat, alon = _get_apex_gps(df_result, [a['peak_idx']])
+                if alat is None:
+                    continue
+                best_i, best_d = None, ASSIGN_RADIUS_M
+                for i, c in enumerate(canonical):
+                    dd = _haversine_distance(alat, alon, c['lat'], c['lon'])
+                    if dd < best_d:
+                        best_i, best_d = i, dd
+                if best_i is not None:
+                    buckets[best_i].append(a)
+
+            # Un virage du circuit dont AUCUN apex n'a été capté par la détection
+            # dynamique (virage très ouvert, échantillonnage trop lâche) existe
+            # quand même : on le mesure directement, tour par tour, au point le
+            # plus proche de sa position. Sans cela, le circuit paraît amputé
+            # d'un virage selon la qualité de la session.
+            lat_all = pd.to_numeric(
+                df_result[lat_col_g], errors='coerce').to_numpy(float)
+            lon_all = pd.to_numeric(
+                df_result[lon_col_g], errors='coerce').to_numpy(float)
+            lap_all = pd.to_numeric(
+                df_result['lap_number'], errors='coerce').to_numpy(float)
+            for i, c in enumerate(canonical):
+                if buckets[i]:
+                    continue
+                for ln in sorted({int(v) for v in lap_all if np.isfinite(v) and v >= 1}):
+                    pos = np.where(lap_all == ln)[0]
+                    if len(pos) < 10:
+                        continue
+                    dd = np.hypot(
+                        (lat_all[pos] - c['lat']) * 111_132.0,
+                        (lon_all[pos] - c['lon']) * 111_320.0 * np.cos(np.radians(c['lat'])),
+                    )
+                    j = int(np.nanargmin(dd))
+                    if not np.isfinite(dd[j]) or dd[j] > ASSIGN_RADIUS_M:
+                        continue
+                    p = int(pos[j])
+                    half = max(3, len(pos) // 60)  # ≈ ±10 m autour de l'apex
+                    buckets[i].append({
+                        'lap': ln,
+                        'peak_idx': p,
+                        'start_idx': max(int(pos[0]), p - half),
+                        'end_idx': min(int(pos[-1]), p + half),
+                    })
+
+            clusters = [b for b in buckets if b]
+            log.info(
+                "detect_corners: %d virages canoniques (géométrie du circuit), "
+                "%d alimentés par des apex mesurés",
+                len(canonical), len(clusters),
+            )
+
+        # Repli : regroupement spatial historique si la géométrie n'a rien donné.
+        coherence_radius_m = min_distance_between_corners * 2.0
         used = [False] * len(valid_apexes)
+        if clusters:
+            valid_apexes_iter = []
+        else:
+            valid_apexes_iter = valid_apexes
         
-        for i, a1 in enumerate(valid_apexes):
+        for i, a1 in enumerate(valid_apexes_iter):
             if used[i]:
                 continue
-            
+
             lat1, lon1 = _get_apex_gps(df_result, [a1['peak_idx']])
             if lat1 is None:
                 continue
-                
+
             cluster = [a1]
             used[i] = True
-            
+
             for j in range(i + 1, len(valid_apexes)):
                 if used[j]:
                     continue
@@ -1010,12 +1159,19 @@ def detect_corners(
         # confirmations et perdait des virages qu'une session de 4 tours
         # trouvait. Le circuit ne change pas selon la durée de la session — le
         # nombre de virages détectés ne doit pas en dépendre non plus.
-        min_laps_to_confirm = 2 if (laps_analyzed or 1) >= 2 else 1
-        valid_clusters = [c for c in clusters if len(set(a['lap'] for a in c)) >= min_laps_to_confirm]
-
-        if not valid_clusters:
-            # Fallback si on a tout filtré
+        # Quand les virages viennent de la géométrie du circuit, ils sont déjà
+        # distincts et confirmés par construction : filtrer davantage ne ferait
+        # qu'en supprimer arbitrairement selon la session.
+        if canonical:
             valid_clusters = clusters
+            min_laps_to_confirm = 1
+        else:
+            min_laps_to_confirm = 2 if (laps_analyzed or 1) >= 2 else 1
+            valid_clusters = [c for c in clusters
+                              if len(set(a['lap'] for a in c)) >= min_laps_to_confirm]
+            if not valid_clusters:
+                # Fallback si on a tout filtré
+                valid_clusters = clusters
 
         log.info(
             "detect_corners: %d virages physiques confirmés "
@@ -1082,7 +1238,9 @@ def detect_corners(
                 agree += 1
             return agree > 0
 
-        merged = True
+        # Fusion inutile (et risquée) quand les virages viennent de la géométrie :
+        # deux pics distincts y sont déjà, par construction, deux virages.
+        merged = not canonical
         while merged and len(valid_clusters) > 1:
             merged = False
             for i in range(len(valid_clusters)):
