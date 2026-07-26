@@ -223,6 +223,14 @@ try:
 except ImportError as e:
     logger.warning("⚠ Paddock Pass routes not loaded: %s", e)
 
+# Calendrier du pilote (courses, entraînements, coaching, échéances)
+try:
+    from .calendar_routes import router as calendar_router
+    app.include_router(calendar_router)
+    logger.info("✓ Calendar routes loaded (/api/calendar)")
+except ImportError as e:
+    logger.warning("⚠ Calendar routes not loaded: %s", e)
+
 # Analytics de navigation (parcours utilisateurs)
 try:
     from .analytics_routes import router as analytics_router
