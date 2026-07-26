@@ -1336,6 +1336,24 @@ def detect_corners(
                 'per_lap_data': per_lap_data
             })
 
+        # 3bis. Garantir à chaque virage un noyau de points qui lui appartient.
+        #
+        # Les plages [start_idx, end_idx] de deux virages voisins peuvent se
+        # chevaucher : le virage écrit en dernier efface alors complètement son
+        # voisin, qui se retrouve sans aucune ligne dans le DataFrame et donc
+        # sans aucune mesure (vitesse d'apex à 0, virage vide sur la carte).
+        # On repasse après coup pour ré-estampiller l'apex de chaque virage.
+        CORE_HALF = 2  # ± 2 points autour de l'apex : toujours au virage lui-même
+        for physical_id, cluster in enumerate(valid_clusters, start=1):
+            for a in cluster:
+                p = int(a['peak_idx'])
+                lo = max(0, p - CORE_HALF)
+                hi = min(len(df_result) - 1, p + CORE_HALF)
+                if hi < lo:
+                    continue
+                df_result.iloc[lo:hi + 1, df_result.columns.get_loc('is_corner')] = True
+                df_result.iloc[lo:hi + 1, df_result.columns.get_loc('corner_id')] = physical_id
+
         # 4. Trier physiquement (Re-numbering)
         # On va utiliser le _renumber_corners_by_entry_index (qui existe déjà et est propre)
         old_to_new = _renumber_corners_by_entry_index(corner_details, df_result)
