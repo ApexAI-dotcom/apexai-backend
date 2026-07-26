@@ -1022,6 +1022,80 @@ def detect_corners(
             "(seuil %d tour(s) sur %s analysés)",
             len(valid_clusters), min_laps_to_confirm, laps_analyzed,
         )
+
+        # 2bis. Fusionner les apex qui appartiennent AU MÊME virage réel.
+        #
+        # Un virage long, ou pris en double apex, produit deux pics de courbure
+        # distants de plus de 16 m : le regroupement spatial les sépare et la
+        # carte affiche « V2 » et « V3 » à l'intérieur d'un seul et même virage.
+        # Le critère de fusion est physique : deux apex forment un seul virage si
+        # le volant n'est JAMAIS redressé entre eux (la courbure garde le même
+        # sens et ne retombe pas). Une chicane, elle, change de sens : elle n'est
+        # donc jamais fusionnée.
+        # Longueur maximale plausible d'un seul virage de karting (approche et
+        # sortie exclues) : au-delà, deux apex sont forcément deux virages.
+        MAX_SINGLE_CORNER_LENGTH_M = 45.0
+        curv_arr = None
+        if 'curvature' in df_result.columns:
+            curv_arr = pd.to_numeric(df_result['curvature'], errors='coerce').values
+        dist_arr = None
+        if 'cumulative_distance' in df_result.columns:
+            dist_arr = pd.to_numeric(df_result['cumulative_distance'], errors='coerce').values
+
+        def _one_corner(c1, c2) -> bool:
+            if curv_arr is None:
+                return False
+            laps1 = {a['lap']: a for a in c1}
+            laps2 = {a['lap']: a for a in c2}
+            common = sorted(set(laps1) & set(laps2))
+            if not common:
+                return False
+            agree = 0
+            for lap in common:
+                a1, a2 = laps1[lap], laps2[lap]
+                i1, i2 = a1['peak_idx'], a2['peak_idx']
+                lo, hi = (i1, i2) if i1 <= i2 else (i2, i1)
+                if hi <= lo or hi >= len(curv_arr):
+                    continue
+                # Au-delà d'une longueur de virage plausible, ce sont forcément
+                # deux virages distincts, même sans redressement franc.
+                if dist_arr is not None and hi < len(dist_arr) and lo < len(dist_arr):
+                    gap_m = abs(float(dist_arr[hi]) - float(dist_arr[lo]))
+                    if np.isfinite(gap_m) and gap_m > MAX_SINGLE_CORNER_LENGTH_M:
+                        return False
+                k1, k2 = curv_arr[i1], curv_arr[i2]
+                if not (np.isfinite(k1) and np.isfinite(k2)) or np.sign(k1) != np.sign(k2):
+                    return False  # sens opposés → chicane, on ne fusionne jamais
+                seg = curv_arr[lo:hi + 1]
+                seg = seg[np.isfinite(seg)]
+                if seg.size == 0:
+                    continue
+                # Le volant se redresse-t-il entre les deux ? On regarde le 10e
+                # percentile et non le minimum absolu : un creux d'un seul point
+                # vient du bruit GPS, pas d'un vrai redressement de volant.
+                if np.percentile(np.abs(seg), 10) < 0.40 * min(abs(k1), abs(k2)):
+                    return False
+                # Le sens s'inverse-t-il durablement entre les deux ?
+                nz = seg[np.abs(seg) > 1e-6]
+                if nz.size and (np.mean(np.sign(nz) != np.sign(k1)) > 0.10):
+                    return False
+                agree += 1
+            return agree > 0
+
+        merged = True
+        while merged and len(valid_clusters) > 1:
+            merged = False
+            for i in range(len(valid_clusters)):
+                for j in range(i + 1, len(valid_clusters)):
+                    if _one_corner(valid_clusters[i], valid_clusters[j]):
+                        valid_clusters[i] = valid_clusters[i] + valid_clusters[j]
+                        valid_clusters.pop(j)
+                        merged = True
+                        break
+                if merged:
+                    break
+        log.info("detect_corners: %d virages après fusion des apex d'un même virage",
+                 len(valid_clusters))
         
         # 3. Construire le corner_details = JSON attendu par le front
         
