@@ -216,6 +216,45 @@ def test_braking_advice_matches_the_map_marker(analysis):
         pytest.skip("aucun conseil de freinage sur cette fixture")
 
 
+def test_driving_phases_are_physical_and_match_the_markers(analysis):
+    """Les phases (freinage / accélération / transition) viennent de
+    l'accélération longitudinale mesurée, et le repère de freinage doit tomber
+    au tout début de la phase de freinage : sinon la bande et la pastille se
+    contredisent sur la carte."""
+    import numpy as np
+
+    laps = [
+        l for l in (analysis.get("plot_data") or {}).get("trajectory_2d", {}).get("laps", [])
+        if not l.get("is_synthetic") and l.get("phase") and (l.get("lap_number") or 0) >= 1
+    ]
+    if not laps:
+        pytest.skip("aucun tour avec phases")
+    lap = max(laps, key=lambda l: len(l.get("lat") or []))
+    assert len(lap["phase"]) == len(lap["lat"]), "phases et points désalignés"
+
+    lat = np.asarray(lap["lat"], dtype=float)
+    lon = np.asarray(lap["lon"], dtype=float)
+    phases = lap["phase"]
+    assert set(phases) <= {"braking", "acceleration", "coasting"}
+    # Un tour de karting n'est presque jamais en roue libre.
+    coasting = phases.count("coasting") / len(phases)
+    assert coasting < 0.45, f"{coasting:.0%} du tour en transition : seuil de phase suspect"
+
+    checked = misplaced = 0
+    for c in analysis["corner_analysis"]:
+        if c.get("braking_lat") is None:
+            continue
+        checked += 1
+        dx = (lon - c["braking_lon"]) * np.cos(np.radians(c["braking_lat"]))
+        dy = lat - c["braking_lat"]
+        i = int(np.nanargmin(dx * dx + dy * dy))
+        window = phases[max(0, i - 2):min(len(phases), i + 5)]
+        if "braking" not in window:
+            misplaced += 1
+    if checked:
+        assert misplaced == 0, f"{misplaced}/{checked} repères hors de leur phase de freinage"
+
+
 def test_racing_line_preserves_every_corner(analysis):
     """Le Tour Parfait IA ne supprime jamais un virage (pas de chicane coupée)."""
     rl = analysis.get("racing_line") or {}

@@ -997,6 +997,42 @@ def generate_all_plots_base64(df: pd.DataFrame) -> Dict[str, Optional[str]]:
     return plots
 
 
+# Seuil d'accélération longitudinale séparant les phases de pilotage (en g).
+# En dessous, le kart n'est ni vraiment freiné ni vraiment relancé : c'est une
+# phase de transition. Choisi à partir de la distribution réelle mesurée sur
+# piste (freinage jusqu'à -1,1 g, relance jusqu'à +0,85 g) ; ±0,10 g donne une
+# répartition conforme à ce qu'on observe en karting (peu de roue libre).
+PHASE_THRESHOLD_G = 0.10
+
+
+def _driving_phases(lap_df) -> list:
+    """
+    Phase de pilotage en chaque point : « braking », « acceleration » ou
+    « coasting ».
+
+    Calculée à partir de l'accélération longitudinale RÉELLE (dérivée de la
+    vitesse par rapport au TEMPS, exprimée en g). L'ancien calcul comparait la
+    vitesse entre deux échantillons successifs : ce critère dépend de la
+    fréquence de l'appareil, si bien qu'une même conduite donnait des phases
+    différentes selon le fichier — d'où des bandes de transition incohérentes.
+    """
+    try:
+        if 'speed' not in lap_df.columns or 'time' not in lap_df.columns:
+            return []
+        v = pd.to_numeric(lap_df['speed'], errors='coerce').to_numpy(float) / 3.6
+        t = pd.to_numeric(lap_df['time'], errors='coerce').to_numpy(float)
+        if len(v) < 3 or not np.isfinite(t).any():
+            return []
+        acc_g = np.gradient(np.nan_to_num(v), t) / 9.81
+        thr = PHASE_THRESHOLD_G
+        return [
+            "braking" if a < -thr else "acceleration" if a > thr else "coasting"
+            for a in acc_g
+        ]
+    except Exception:
+        return []
+
+
 def generate_plot_data(df: pd.DataFrame) -> Dict[str, Any]:
     """
     Génère les données brutes JSON/Dict pour les graphiques interactifs (Recharts) du frontend.
@@ -1128,13 +1164,17 @@ def generate_plot_data(df: pd.DataFrame) -> Dict[str, Any]:
                             "is_synthetic": int(lap) == -1,
                             "lat": downsample_array([float(l) for l in lap_df['latitude_smooth'].values]),
                             "lon": downsample_array([float(l) for l in lap_df['longitude_smooth'].values]),
-                            "speed_kmh": downsample_array([round(float(s), 1) for s in lap_df['speed'].values])
+                            "speed_kmh": downsample_array([round(float(s), 1) for s in lap_df['speed'].values]),
+                            # Phases calculées côté serveur, en unités physiques :
+                            # l'affichage n'a plus à les deviner.
+                            "phase": downsample_array(_driving_phases(lap_df)),
                         })
             else:
                  traj_laps.append({
                     "lat": downsample_array([float(l) for l in df['latitude_smooth'].values]), 
                     "lon": downsample_array([float(l) for l in df['longitude_smooth'].values]),
-                    "speed_kmh": downsample_array([round(float(s), 1) for s in df['speed'].values])
+                    "speed_kmh": downsample_array([round(float(s), 1) for s in df['speed'].values]),
+                    "phase": downsample_array(_driving_phases(df)),
                 })
                  
             traj_corners = []
