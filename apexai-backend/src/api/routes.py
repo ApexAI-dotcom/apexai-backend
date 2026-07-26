@@ -140,7 +140,11 @@ async def analyze_telemetry(
     Returns:
         AnalysisResponse avec résultats complets
     """
-    analysis_id = str(uuid.uuid4())[:8]
+    # UUID complet : l'identifiant sert de clé primaire des analyses, partagée
+    # par tous les pilotes. Tronqué à 8 caractères, deux pilotes pouvaient
+    # obtenir le même identifiant — le second écrasait alors la ligne du premier
+    # (ou se voyait refuser l'écriture par la sécurité au niveau ligne).
+    analysis_id = str(uuid.uuid4())
     logger.info(f"🏁 New analysis request: {analysis_id} - {file.filename}")
 
     user_id = _get_user_id_from_authorization(authorization)

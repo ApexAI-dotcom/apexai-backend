@@ -193,6 +193,29 @@ def test_braking_reference_points_are_produced(analysis):
         assert c.get("braking_lon") is not None
 
 
+def test_braking_advice_matches_the_map_marker(analysis):
+    """Un conseil de freinage et la pastille de la carte doivent provenir de la
+    MÊME mesure : si les deux écrans annoncent des mètres différents, le pilote
+    cesse de faire confiance à l'outil."""
+    import re
+
+    by_id = {c["corner_id"]: c for c in analysis["corner_analysis"]}
+    checked = 0
+    for a in analysis["coaching_advice"]:
+        if a.get("category") != "braking" or a.get("corner") is None:
+            continue
+        m = re.search(r"(\d+[.,]\d+)\s*m", a["message"])
+        assert m, f"conseil de freinage sans distance chiffrée : {a['message']}"
+        said = float(m.group(1).replace(",", "."))
+        measured = abs(float(by_id[a["corner"]]["braking_delta"]))
+        assert said == pytest.approx(measured, abs=0.05), (
+            f"V{a['corner']} : le conseil annonce {said} m, la carte {measured} m"
+        )
+        checked += 1
+    if checked == 0:
+        pytest.skip("aucun conseil de freinage sur cette fixture")
+
+
 def test_racing_line_preserves_every_corner(analysis):
     """Le Tour Parfait IA ne supprime jamais un virage (pas de chicane coupée)."""
     rl = analysis.get("racing_line") or {}
