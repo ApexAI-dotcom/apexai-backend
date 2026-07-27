@@ -229,210 +229,42 @@ def calculate_braking_point(
     corner_entry_idx: int,
     apex_idx: int,
     entry_speed: float,
-    apex_speed: float
+    apex_speed: float,
+    corner_id: Optional[int] = None,
 ) -> Dict[str, float]:
     """
-    Calcule le point de freinage optimal et réel.
-    
-    Args:
-        df: DataFrame complet
-        corner_entry_idx: Index du point d'entrée du virage
-        apex_idx: Index de l'apex
-        entry_speed: Vitesse à l'entrée (km/h)
-        apex_speed: Vitesse à l'apex (km/h)
-    
-    Returns:
-        Dictionnaire avec braking_point_real, braking_point_optimal, braking_delta
+    Repère de freinage d'un virage.
+
+    Ne calcule plus rien : lit le résultat de `src.analysis.braking`, qui est la
+    source unique. La carte, les chiffres et les conseils y puisent tous, si
+    bien qu'aucun affichage ne peut en contredire un autre.
+
+    Un virage pris à plat ne renvoie pas de repère plutôt qu'un repère faux.
     """
+    empty = {
+        'braking_point_distance': 0.0,
+        'braking_point_optimal': 0.0,
+        'braking_delta': 0.0,
+        'braking_lat': None,
+        'braking_lon': None,
+    }
+    if corner_id is None:
+        return empty
     try:
-        if 'cumulative_distance' not in df.columns:
-            return {
-                'braking_point_distance': 0.0,
-                'braking_point_optimal': 0.0,
-                'braking_delta': 0.0
-            }
-        
-        dist = pd.to_numeric(df['cumulative_distance'], errors='coerce').values
-
-        # `apex_idx` / `corner_entry_idx` sont des LABELS : il faut leur position
-        # réelle avant d'indexer un tableau numpy.
-        apex_pos = _pos(df, apex_idx)
-        entry_pos = _pos(df, corner_entry_idx)
-        if apex_pos is None or entry_pos is None or apex_pos >= len(dist) or entry_pos >= len(dist):
-            return {
-                'braking_point_distance': 0.0,
-                'braking_point_optimal': 0.0,
-                'braking_delta': 0.0
-            }
-
-        apex_dist = dist[apex_pos]
-        entry_dist = dist[entry_pos]
-
-        # Détecter le début de freinage réel.
-        #
-        # IMPORTANT : le seuil est exprimé en DÉCÉLÉRATION PHYSIQUE (g), pas en
-        # écart de vitesse entre deux échantillons. Un seuil par échantillon
-        # dépend de la fréquence de l'appareil : à 25 Hz, une décélération de
-        # 1,2 g ne fait que ~1,8 km/h entre deux points et passait sous un seuil
-        # de 2 km/h — le freinage n'était alors JAMAIS détecté. Exprimé en g, le
-        # critère vaut pour tous les appareils (MyChron, Alfano…) quelle que soit
-        # leur fréquence d'échantillonnage.
-        braking_idx = None
-        if 'speed' in df.columns and apex_pos > 0:
-            speed = pd.to_numeric(df['speed'], errors='coerce').values
-            decel = None
-            if 'time' in df.columns:
-                t = pd.to_numeric(df['time'], errors='coerce').values
-                v_ms = speed / 3.6
-                ok = np.isfinite(t) & np.isfinite(v_ms)
-                if ok.sum() > 10 and np.nanmax(np.diff(t[ok])) > 0:
-                    with np.errstate(invalid='ignore', divide='ignore'):
-                        decel = np.gradient(np.nan_to_num(v_ms), t)  # m/s²
-            if decel is None:
-                # Repli : dérivée par échantillon ramenée à une base temporelle
-                # estimée, pour rester en unités physiques.
-                dt = 0.04
-                decel = np.gradient(np.nan_to_num(speed / 3.6)) / dt
-
-            # On REMONTE depuis l'apex plutôt que d'avancer depuis l'entrée du
-            # virage : après déduplication, l'index d'entrée et celui de l'apex
-            # peuvent provenir de tours différents (entrée « après » l'apex),
-            # et la recherche vers l'avant ne trouvait alors jamais rien —
-            # aucun repère de freinage n'était produit.
-            # Déclencheur : il faut un freinage franc quelque part dans la zone
-            # pour qu'elle compte comme telle. On remonte ensuite jusqu'au début
-            # de la phase, définie par le seuil partagé avec la carte.
-            BRAKING_THRESHOLD_MS2 = -0.30 * KARTING_CONSTANTS['g']
-            SUSTAINED_BRAKING_MS2 = -BRAKING_PHASE_G * KARTING_CONSTANTS['g']
-            search_start = max(0, apex_pos - MAX_BRAKING_SEARCH_SAMPLES)
-
-            # CONTRAINTE PHYSIQUE : une zone de freinage appartient au segment
-            # compris entre le virage PRÉCÉDENT et celui-ci. On ne peut pas
-            # commencer à freiner pour le virage 8 avant d'avoir passé le 7.
-            # Sans cette borne, la fenêtre de recherche traversait le virage
-            # amont et le repère se retrouvait en amont de celui-ci — l'ordre des
-            # pastilles sur la carte devenait incohérent.
-            if 'corner_id' in df.columns:
-                cid_arr = pd.to_numeric(df['corner_id'], errors='coerce').values
-                my_cid = cid_arr[apex_pos] if apex_pos < len(cid_arr) else np.nan
-                for i in range(apex_pos - 1, search_start - 1, -1):
-                    c = cid_arr[i]
-                    if np.isfinite(c) and (not np.isfinite(my_cid) or int(c) != int(my_cid)):
-                        # Dernier point du virage amont : le freinage commence après.
-                        search_start = max(search_start, i + 1)
-                        break
-
-            # Ne jamais remonter au-delà d'une distance de freinage plausible en
-            # karting : au-delà, on capterait la décélération d'un autre virage.
-            if apex_pos < len(dist):
-                for i in range(apex_pos, search_start - 1, -1):
-                    if np.isfinite(dist[i]) and (apex_dist - dist[i]) > MAX_BRAKING_DISTANCE_M:
-                        search_start = max(search_start, i)
-                        break
-
-            # Début de freinage = début de la phase où le pilote freine
-            # RÉELLEMENT.
-            #
-            # On remonte depuis l'apex jusqu'au premier échantillon dépassant le
-            # seuil de freinage franc, puis on continue tant que la décélération
-            # reste soutenue : on obtient le premier point de la phase de
-            # freinage. C'est ce repère qui alimente les conseils de coaching —
-            # « tu freines X mètres trop tôt » se lit par rapport à lui.
-            #
-            # Le MÊME seuil (BRAKING_PHASE_G) définit la bande rouge de la carte :
-            # le repère se pose donc exactement au début de cette bande, sans
-            # aucun recalage d'affichage.
-            hit = None
-            for i in range(min(apex_pos, len(decel)) - 1, search_start - 1, -1):
-                if decel[i] < BRAKING_THRESHOLD_MS2:
-                    hit = i
-                    break
-            if hit is not None:
-                j = hit
-                while j > search_start and decel[j - 1] < SUSTAINED_BRAKING_MS2:
-                    j -= 1
-                braking_idx = j
-        
-        braking_lat = braking_lon = None
-        # Vitesse AU DÉBUT DU FREINAGE (et non 15 points avant l'apex, qui est
-        # déjà dans le virage) : c'est elle qui détermine la distance de
-        # freinage physiquement nécessaire.
-        v_brake_start = entry_speed
-        if braking_idx is not None and braking_idx < len(dist):
-            braking_point_real = apex_dist - dist[braking_idx]
-            try:
-                v_bs = float(pd.to_numeric(df['speed'], errors='coerce').values[braking_idx])
-                if np.isfinite(v_bs) and v_bs > 0:
-                    v_brake_start = v_bs
-            except Exception:
-                pass
-            # Position GPS du début de freinage : permet d'afficher sur la carte
-            # un repère que le pilote peut retrouver en piste (« V5, freinage
-            # 32 m avant l'apex »), plutôt qu'un conseil hors sol.
-            for col_lat, col_lon in (("latitude_smooth", "longitude_smooth"), ("latitude", "longitude")):
-                if col_lat in df.columns and col_lon in df.columns:
-                    try:
-                        blat = df[col_lat].values[braking_idx]
-                        blon = df[col_lon].values[braking_idx]
-                        if pd.notna(blat) and pd.notna(blon):
-                            braking_lat, braking_lon = float(blat), float(blon)
-                    except Exception:
-                        pass
-                    break
-        else:
-            # Estimation : point où vitesse commence à baisser
-            braking_point_real = (apex_dist - entry_dist) * 0.6
-        
-        # Point de freinage optimal : distance nécessaire pour passer de la
-        # vitesse de DÉBUT DE FREINAGE à la vitesse d'apex, avec la capacité de
-        # freinage réellement démontrée par le pilote sur cette session.
-        #   d = (v0² − v_apex²) / (2·a)
-        v0_ms = max(0.0, float(v_brake_start)) / 3.6
-        v_apex_ms = max(0.0, float(apex_speed)) / 3.6
-        decel_ref = _session_braking_capability(df)
-
-        if decel_ref > 0 and v0_ms > v_apex_ms:
-            braking_distance_optimal = (v0_ms ** 2 - v_apex_ms ** 2) / (2 * decel_ref)
-        else:
-            # Pas de vraie phase de décélération ici (virage pris à plat) :
-            # aucun conseil de freinage n'est pertinent.
-            return {
-                'braking_point_distance': round(max(0.0, braking_point_real), 1),
-                'braking_point_optimal': 0.0,
-                'braking_delta': 0.0,
-                'braking_lat': braking_lat,
-                'braking_lon': braking_lon,
-            }
-
-        braking_delta = braking_point_real - braking_distance_optimal  # + = trop tôt, − = trop tard
-
-        # Garde-fou : au-delà de ~60 m d'écart, c'est un mauvais appariement
-        # entrée/apex (virage détecté à cheval sur deux tours) et non une erreur
-        # de pilotage. On préfère ne rien annoncer qu'annoncer un chiffre faux.
-        if braking_point_real <= 0 or braking_point_real > 300 or abs(braking_delta) > 60:
-            return {
-                'braking_point_distance': round(max(0.0, braking_point_real), 1),
-                'braking_point_optimal': round(max(0.0, braking_distance_optimal), 1),
-                'braking_delta': 0.0,
-                'braking_lat': braking_lat,
-                'braking_lon': braking_lon,
-            }
-
+        from src.analysis.braking import get_braking_analysis
+        info = get_braking_analysis(df).get("by_corner", {}).get(int(corner_id))
+        if not info:
+            return empty
         return {
-            'braking_point_distance': round(braking_point_real, 1),
-            'braking_point_optimal': round(braking_distance_optimal, 1),
-            'braking_delta': round(braking_delta, 1),
-            'braking_lat': braking_lat,
-            'braking_lon': braking_lon,
+            'braking_point_distance': info.get('braking_point_distance', 0.0),
+            'braking_point_optimal': info.get('braking_point_optimal', 0.0),
+            'braking_delta': info.get('braking_delta', 0.0),
+            'braking_lat': info.get('braking_lat'),
+            'braking_lon': info.get('braking_lon'),
         }
-    
     except Exception as e:
-        warnings.warn(f"Error calculating braking point: {str(e)}")
-        return {
-            'braking_point_distance': 0.0,
-            'braking_point_optimal': 0.0,
-            'braking_delta': 0.0
-        }
+        warnings.warn(f"calculate_braking_point: {e}")
+        return empty
 
 
 def calculate_apex_error(
@@ -678,8 +510,12 @@ def analyze_corner_performance(
         else:
             lateral_g_optimal = max_lateral_g
         
-        # Point de freinage
-        braking_data = calculate_braking_point(df, entry_idx, apex_idx, entry_speed, apex_speed_real)
+        # Point de freinage — lu dans l'analyse de freinage, jamais recalculé.
+        # Deux calculs indépendants du même repère finissent toujours par
+        # diverger ; c'est ce qui faisait apparaître une pastille ailleurs que
+        # sa bande sur la carte.
+        braking_data = calculate_braking_point(df, entry_idx, apex_idx, entry_speed,
+                                               apex_speed_real, corner_id=corner_id)
         
         # Temps dans virage (entry_idx / exit_idx sont des LABELS)
         if 'time' in df.columns and entry_idx in df.index and exit_idx in df.index:

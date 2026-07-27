@@ -27,6 +27,7 @@ from src.analysis.geometry import (
 from src.analysis.scoring import calculate_performance_score, validate_score_consistency
 from src.analysis.coaching import generate_coaching_advice
 from src.analysis.performance_metrics import analyze_corner_performance
+from src.analysis.braking import get_braking_analysis
 from src.analysis.ideal_lap import compute_ideal_lap
 from src.analysis.racing_line import build_racing_line
 from src.analysis.track_signature import compute_track_signature
@@ -250,9 +251,24 @@ def _run_analysis_pipeline_sync(
     if len(corner_details) == 0:
         raise ValueError("Données inexploitables: aucun virage détecté. La trace GPS est peut-être tronquée ou a une résolution insuffisante.")
 
-    # Previously we filtered down to selected laps here. 
+    # Previously we filtered down to selected laps here.
     # Now we keep the FULL session in df so that the frontend can overlay whichever laps it wants.
     pass
+
+    # ── Analyse de freinage : SOURCE UNIQUE ──────────────────────────────────
+    # Calculée ici, une seule fois, avant l'analyse des virages. Le repère posé
+    # sur la carte, la bande colorée qui le prolonge, les chiffres du panneau
+    # « Freinages » et les conseils de coaching lisent tous ce même résultat :
+    # aucun des quatre ne peut plus contredire les autres.
+    braking_data: Dict[str, Any] = {"by_corner": {}, "by_lap": {}, "capability_g": 0.0}
+    try:
+        braking_data = get_braking_analysis(df, corner_details)
+        logger.info(
+            "[%s] Freinage : %d zones, capacité démontrée %.2f g",
+            analysis_id, len(braking_data.get("by_corner", {})), braking_data.get("capability_g", 0.0),
+        )
+    except Exception as e:
+        logger.warning(f"[{analysis_id}] analyse de freinage indisponible: {e}")
 
     df = calculate_optimal_trajectory(df)
     logger.info(f"[{analysis_id}] Step 5/5: Calculating score and coaching...")
@@ -435,6 +451,23 @@ def _run_analysis_pipeline_sync(
     if mappable:
         unique_corner_analysis = mappable
 
+    # Chiffres de freinage attachés à chaque virage AVANT la renumérotation :
+    # ils voyagent ensuite avec le virage, donc les identifiants restent alignés
+    # sur ceux de la carte.
+    for c in unique_corner_analysis:
+        b = braking_data.get("by_corner", {}).get(int(c.get("corner_id", 0) or 0))
+        if b:
+            c.update({k: v for k, v in b.items() if k != "corner_id"})
+            c["has_braking_zone"] = True
+        else:
+            # Virage pris à plat : on n'invente pas de repère de freinage.
+            c["has_braking_zone"] = False
+            for k in ("braking_lat", "braking_lon"):
+                c[k] = None
+            for k in ("braking_point_distance", "braking_point_optimal", "braking_delta",
+                      "braking_time_lost", "coasting_s"):
+                c[k] = 0.0
+
     logger.info(f"[{analysis_id}] [renumber] Renumbering {len(unique_corner_analysis)} unique corners...")
     final_id_to_new = {int(c.get("corner_id")): i for i, c in enumerate(unique_corner_analysis, start=1)}
     for i, c in enumerate(unique_corner_analysis, start=1):
@@ -448,6 +481,29 @@ def _run_analysis_pipeline_sync(
         df["corner_id"] = df["corner_id"].map(
             lambda x: final_id_to_new.get(int(x), np.nan) if pd.notna(x) else x
         )
+
+    # Les zones dessinées sur la carte suivent la même renumérotation ; celles
+    # dont le virage a été écarté disparaissent avec lui.
+    try:
+        remapped: Dict[int, Any] = {}
+        for lap, zones in (braking_data.get("by_lap") or {}).items():
+            kept = []
+            for z in zones:
+                new_id = final_id_to_new.get(int(z.get("corner_id", 0)))
+                if new_id is None:
+                    continue
+                z["corner_id"] = new_id
+                kept.append(z)
+            if kept:
+                remapped[int(lap)] = sorted(kept, key=lambda x: x["corner_id"])
+        braking_data["by_lap"] = remapped
+        braking_data["by_corner"] = {
+            final_id_to_new[k]: v for k, v in (braking_data.get("by_corner") or {}).items()
+            if k in final_id_to_new
+        }
+        df.attrs["braking"] = braking_data
+    except Exception as e:
+        logger.warning(f"[{analysis_id}] remap zones de freinage: {e}")
 
     corners_detected = len(unique_corner_analysis)
 

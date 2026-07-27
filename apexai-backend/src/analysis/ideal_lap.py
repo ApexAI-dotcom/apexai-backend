@@ -182,8 +182,22 @@ def compute_ideal_lap(
         corner_lap_times: Dict[int, Dict[int, float]] = {}
         for i in range(n_sectors):
             sector_times = {ln: cum_by_lap[ln][i + 1] - cum_by_lap[ln][i] for ln in lap_profiles}
-            from_lap = min(sector_times, key=lambda k: sector_times[k])
-            ideal_st = float(sector_times[from_lap])
+            # ── Garde-fou statistique sur le tour donneur ────────────────────
+            # Un mini-secteur fait 25 m : d'un tour à l'autre le temps qu'on y
+            # passe varie peu. Un tour nettement sous la distribution ne roule
+            # pas plus vite, il est mal recalé (la ligne de chrono ne tombe pas
+            # exactement au même point). Sans ce filtre, un seul tour aberrant
+            # « donne » un secteur impossible et le tour idéal promet des
+            # secondes que le pilote ne retrouvera jamais en piste.
+            vals = np.array(list(sector_times.values()), dtype=float)
+            med = float(np.median(vals))
+            mad = float(np.median(np.abs(vals - med)))
+            floor = max(0.70 * med, med - 3.0 * 1.4826 * mad) if med > 0 else 0.0
+            eligible = {ln: t for ln, t in sector_times.items() if t >= floor}
+            if not eligible:
+                eligible = sector_times
+            from_lap = min(eligible, key=lambda k: eligible[k])
+            ideal_st = float(eligible[from_lap])
             best_st = float(sector_times[best_real_lap])
             loss = max(0.0, best_st - ideal_st)
             ideal_time += ideal_st

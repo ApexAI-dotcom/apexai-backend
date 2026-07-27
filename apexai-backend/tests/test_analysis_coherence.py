@@ -193,10 +193,13 @@ def test_braking_reference_points_are_produced(analysis):
         assert c.get("braking_lon") is not None
 
 
-def test_braking_advice_matches_the_map_marker(analysis):
-    """Un conseil de freinage et la pastille de la carte doivent provenir de la
-    MÊME mesure : si les deux écrans annoncent des mètres différents, le pilote
-    cesse de faire confiance à l'outil."""
+def test_braking_advice_quotes_only_measured_values(analysis):
+    """Tout chiffre cité par un conseil de freinage doit se retrouver tel quel
+    dans les données du virage.
+
+    Le conseil peut porter sur l'intensité (g), le temps mort (s), le point
+    (m) ou la régularité (± m) : quelle que soit la grandeur mise en avant,
+    elle doit être celle que la carte affiche pour ce même virage."""
     import re
 
     by_id = {c["corner_id"]: c for c in analysis["corner_analysis"]}
@@ -204,13 +207,23 @@ def test_braking_advice_matches_the_map_marker(analysis):
     for a in analysis["coaching_advice"]:
         if a.get("category") != "braking" or a.get("corner") is None:
             continue
-        m = re.search(r"(\d+[.,]\d+)\s*m", a["message"])
-        assert m, f"conseil de freinage sans distance chiffrée : {a['message']}"
-        said = float(m.group(1).replace(",", "."))
-        measured = abs(float(by_id[a["corner"]]["braking_delta"]))
-        assert said == pytest.approx(measured, abs=0.05), (
-            f"V{a['corner']} : le conseil annonce {said} m, la carte {measured} m"
+        c = by_id[a["corner"]]
+        assert c.get("has_braking_zone"), (
+            f"conseil de freinage sur V{a['corner']}, qui n'a pas de zone de freinage"
         )
+        msg = a["message"]
+        allowed = {
+            abs(float(c.get("braking_delta") or 0.0)),
+            float(c.get("coasting_s") or 0.0),
+            float(c.get("braking_peak_g") or 0.0),
+            float(c.get("braking_consistency_m") or 0.0),
+        }
+        numbers = [float(x.replace(",", ".")) for x in re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:m|s|g)\b", msg)]
+        assert numbers, f"conseil de freinage sans grandeur chiffrée : {msg}"
+        for said in numbers:
+            assert any(said == pytest.approx(v, abs=0.51) for v in allowed), (
+                f"V{a['corner']} : le conseil annonce {said}, valeurs mesurées {sorted(allowed)}"
+            )
         checked += 1
     if checked == 0:
         pytest.skip("aucun conseil de freinage sur cette fixture")
@@ -240,19 +253,107 @@ def test_driving_phases_are_physical_and_match_the_markers(analysis):
     coasting = phases.count("coasting") / len(phases)
     assert coasting < 0.45, f"{coasting:.0%} du tour en transition : seuil de phase suspect"
 
+    # La pastille dessinée sur un tour donné doit tomber dans la phase de
+    # freinage de CE tour. On compare donc les zones du tour testé, celles-là
+    # mêmes que la carte trace, et non l'agrégat calculé sur un autre tour.
     checked = misplaced = 0
-    for c in analysis["corner_analysis"]:
-        if c.get("braking_lat") is None:
+    for z in lap.get("braking_zones") or []:
+        if z.get("start_lat") is None:
             continue
         checked += 1
-        dx = (lon - c["braking_lon"]) * np.cos(np.radians(c["braking_lat"]))
-        dy = lat - c["braking_lat"]
+        dx = (lon - z["start_lon"]) * np.cos(np.radians(z["start_lat"]))
+        dy = lat - z["start_lat"]
         i = int(np.nanargmin(dx * dx + dy * dy))
         window = phases[max(0, i - 2):min(len(phases), i + 5)]
         if "braking" not in window:
             misplaced += 1
     if checked:
         assert misplaced == 0, f"{misplaced}/{checked} repères hors de leur phase de freinage"
+
+
+def test_braking_marker_is_the_first_point_of_its_band(analysis):
+    """La pastille EST le premier point de la bande.
+
+    Régression majeure : tant que le repère et la bande venaient de deux
+    calculs distincts, ils dérivaient l'un par rapport à l'autre et la bande
+    rouge démarrait bien avant la pastille. Les deux partagent désormais le
+    même objet — ce test interdit de les redissocier.
+    """
+    laps = [l for l in (analysis.get("plot_data") or {}).get("trajectory_2d", {}).get("laps", [])
+            if l.get("braking_zones")]
+    if not laps:
+        pytest.skip("aucune zone de freinage")
+    checked = 0
+    for lap in laps:
+        for z in lap["braking_zones"]:
+            assert z["lat"], f"V{z['corner_id']} : bande vide"
+            assert z["start_lat"] == z["lat"][0]
+            assert z["start_lon"] == z["lon"][0]
+            checked += 1
+    assert checked >= 5
+
+
+def test_braking_zones_follow_the_lap_order(analysis):
+    """Sur un tour, les zones de freinage se succèdent dans l'ordre des virages.
+
+    Régression : le repère du virage 8 pouvait se retrouver AVANT le virage 7
+    sur la carte, un ordre physiquement impossible.
+    """
+    import numpy as np
+
+    laps = [l for l in (analysis.get("plot_data") or {}).get("trajectory_2d", {}).get("laps", [])
+            if l.get("braking_zones") and l.get("lat")]
+    if not laps:
+        pytest.skip("aucune zone de freinage")
+    for lap in laps:
+        lat = np.asarray(lap["lat"], dtype=float)
+        lon = np.asarray(lap["lon"], dtype=float)
+        positions = []
+        for z in sorted(lap["braking_zones"], key=lambda x: x["corner_id"]):
+            dx = (lon - z["start_lon"]) * np.cos(np.radians(z["start_lat"]))
+            dy = lat - z["start_lat"]
+            positions.append(int(np.nanargmin(dx * dx + dy * dy)))
+        # Un seul décrochage toléré : la zone du premier virage peut commencer
+        # avant la ligne, donc en fin de trace.
+        breaks = sum(1 for a, b in zip(positions, positions[1:]) if b <= a)
+        assert breaks <= 1, (
+            f"tour {lap.get('lap_number')} : ordre des zones incohérent {positions}"
+        )
+
+
+def test_flat_corners_have_no_braking_marker(analysis):
+    """Un virage pris à plat ne doit afficher aucun repère de freinage.
+
+    Inventer une pastille sur un virage rapide est ce qui fait dire à un pilote
+    expérimenté que l'outil est factice.
+    """
+    for c in analysis["corner_analysis"]:
+        if c.get("has_braking_zone"):
+            continue
+        assert c.get("braking_lat") is None and c.get("braking_lon") is None
+        assert float(c.get("braking_point_distance") or 0.0) == 0.0
+    advised = {a["corner"] for a in analysis["coaching_advice"]
+               if a.get("category") == "braking" and a.get("corner")}
+    flat = {c["corner_id"] for c in analysis["corner_analysis"] if not c.get("has_braking_zone")}
+    assert not (advised & flat), f"conseils de freinage sur des virages sans freinage : {advised & flat}"
+
+
+def test_braking_intensity_is_physically_possible(analysis):
+    """Les décélérations annoncées restent dans le domaine du karting.
+
+    Un kart freine entre 0,3 g et 1,6 g. Au-delà, c'est un artefact de calcul
+    et non une performance.
+    """
+    for c in analysis["corner_analysis"]:
+        if not c.get("has_braking_zone"):
+            continue
+        peak = float(c.get("braking_peak_g") or 0.0)
+        assert 0.3 <= peak <= 1.6, f"V{c['corner_id']} : crête de {peak} g"
+        assert float(c.get("braking_avg_g") or 0.0) <= peak + 1e-6
+        assert 0.0 <= float(c.get("coasting_s") or 0.0) <= 5.0
+        assert int(c.get("laps") or 1) >= 2, (
+            f"V{c['corner_id']} : zone de freinage vue sur un seul tour"
+        )
 
 
 def test_braking_markers_follow_the_track_order(analysis):

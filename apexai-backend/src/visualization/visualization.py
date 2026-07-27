@@ -997,37 +997,18 @@ def generate_all_plots_base64(df: pd.DataFrame) -> Dict[str, Optional[str]]:
     return plots
 
 
-# Les seuils de phase viennent du module d'analyse : la bande rouge de la carte
-# et le repère de début de freinage DOIVENT être définis par le même critère,
-# sinon ils se contredisent à l'écran.
-from src.analysis.performance_metrics import BRAKING_PHASE_G, ACCELERATION_PHASE_G
+# La coloration de la trace vient des MÊMES zones que les bandes de freinage :
+# un seul objet calculé une seule fois, donc rien à réconcilier à l'affichage.
+from src.analysis.braking import phase_labels as _phase_labels
 
 
-def _driving_phases(lap_df) -> list:
+def _driving_phases(lap_df, analysis=None) -> list:
     """
     Phase de pilotage en chaque point : « braking », « acceleration » ou
-    « coasting ».
-
-    Calculée à partir de l'accélération longitudinale RÉELLE (dérivée de la
-    vitesse par rapport au TEMPS, exprimée en g). L'ancien calcul comparait la
-    vitesse entre deux échantillons successifs : ce critère dépend de la
-    fréquence de l'appareil, si bien qu'une même conduite donnait des phases
-    différentes selon le fichier — d'où des bandes de transition incohérentes.
+    « coasting », découpée sur les zones de freinage détectées.
     """
     try:
-        if 'speed' not in lap_df.columns or 'time' not in lap_df.columns:
-            return []
-        v = pd.to_numeric(lap_df['speed'], errors='coerce').to_numpy(float) / 3.6
-        t = pd.to_numeric(lap_df['time'], errors='coerce').to_numpy(float)
-        if len(v) < 3 or not np.isfinite(t).any():
-            return []
-        acc_g = np.gradient(np.nan_to_num(v), t) / 9.81
-        return [
-            "braking" if a < -BRAKING_PHASE_G
-            else "acceleration" if a > ACCELERATION_PHASE_G
-            else "coasting"
-            for a in acc_g
-        ]
+        return _phase_labels(lap_df, analysis)
     except Exception:
         return []
 
@@ -1151,6 +1132,8 @@ def generate_plot_data(df: pd.DataFrame) -> Dict[str, Any]:
         # --- 5. Trajectory 2D ---
         if 'latitude_smooth' in df.columns and 'longitude_smooth' in df.columns and 'speed' in df.columns:
             traj_laps = []
+            braking = df.attrs.get('braking') or {}
+            braking_by_lap = braking.get('by_lap') or {}
             if 'lap_number' in df.columns:
                 best_lap_num = df.attrs.get('best_lap_number')
                 for lap, lap_df in df.groupby('lap_number'):
@@ -1166,14 +1149,20 @@ def generate_plot_data(df: pd.DataFrame) -> Dict[str, Any]:
                             "speed_kmh": downsample_array([round(float(s), 1) for s in lap_df['speed'].values]),
                             # Phases calculées côté serveur, en unités physiques :
                             # l'affichage n'a plus à les deviner.
-                            "phase": downsample_array(_driving_phases(lap_df)),
+                            "phase": downsample_array(_driving_phases(lap_df, braking)),
+                            # Zones de freinage de CE tour, en coordonnées GPS.
+                            # Elles se dessinent telles quelles : la carte n'a
+                            # aucun seuil à réappliquer, donc aucun moyen de
+                            # placer une bande ailleurs que sa pastille.
+                            "braking_zones": braking_by_lap.get(int(lap), []),
                         })
             else:
                  traj_laps.append({
-                    "lat": downsample_array([float(l) for l in df['latitude_smooth'].values]), 
+                    "lat": downsample_array([float(l) for l in df['latitude_smooth'].values]),
                     "lon": downsample_array([float(l) for l in df['longitude_smooth'].values]),
                     "speed_kmh": downsample_array([round(float(s), 1) for s in df['speed'].values]),
-                    "phase": downsample_array(_driving_phases(df)),
+                    "phase": downsample_array(_driving_phases(df, braking)),
+                    "braking_zones": [],
                 })
                  
             traj_corners = []
@@ -1287,6 +1276,13 @@ def generate_plot_data(df: pd.DataFrame) -> Dict[str, Any]:
                     })
 
             plot_data["trajectory_2d"] = {"laps": traj_laps, "corners": traj_corners}
+
+            # --- 5b. Freinages : le détail chiffré, virage par virage ---
+            if braking.get("by_corner"):
+                plot_data["braking"] = {
+                    "capability_g": braking.get("capability_g", 0.0),
+                    "corners": [braking["by_corner"][k] for k in sorted(braking["by_corner"])],
+                }
 
         # --- 6. Time Delta (per-lap vs best lap) ---
         if 'cumulative_distance' in df.columns and 'time' in df.columns and 'lap_number' in df.columns:

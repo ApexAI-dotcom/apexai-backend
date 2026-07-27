@@ -136,69 +136,6 @@ def generate_coaching_advice(
         return []
 
 
-def _generate_braking_advice(
-    corner_analysis: List[Dict[str, Any]],
-    is_wet: bool = False,
-    braking_threshold_m: float = 2.0,
-) -> List[Dict[str, Any]]:
-    """Génère conseils sur le freinage. Seuil plus élevé en damp (5m) pour éviter conseils trop agressifs."""
-    advice = []
-    for corner in corner_analysis:
-        try:
-            metrics = corner.get('metrics', {})
-            braking_delta = metrics.get('braking_delta', 0.0)
-            corner_id = corner.get('corner_id')
-            if abs(braking_delta) < braking_threshold_m:
-                continue
-
-            # En wet/rain : ne pas conseiller de freiner plus tard (braking_delta < 0 = trop tard déjà)
-            if is_wet and braking_delta < 0:
-                continue  # Skip "tu freines trop tard" en conditions mouillées
-
-            impact_seconds = abs(braking_delta) * 0.05  # Approximation : 1m = 0.05s
-            if is_wet:
-                impact_seconds *= 0.5  # Réduire l'impact affiché (moins agressif)
-            label = corner.get('label', f"Virage {corner_id}")
-
-            if braking_delta > 0:
-                message = f"{label} — Tu freines {braking_delta:.1f}m trop tôt"
-                target_entry = corner.get('target_entry_speed') or metrics.get('entry_speed')
-                speed_cible = f" Vitesse d'entrée cible : {float(target_entry):.1f} km/h." if target_entry is not None and float(target_entry) > 0 else ""
-                explanation = (
-                    f"Point de freinage actuel : {metrics.get('braking_point_distance', 0):.1f}m avant l'apex. "
-                    f"Point optimal : {metrics.get('braking_point_optimal', 0):.1f}m. "
-                    f"En retardant le freinage de {braking_delta:.1f}m, tu gagneras environ {impact_seconds:.2f}s sur la session. "
-                    f"Repère un marqueur visuel {braking_delta:.0f}m plus proche de l'apex (bottes de paille, ligne blanche) "
-                    f"pour déclencher le freinage.{speed_cible}"
-                )
-                difficulty = "facile"
-            else:
-                message = f"{label} — Tu freines {abs(braking_delta):.1f}m trop tard"
-                explanation = (
-                    f"Point de freinage actuel : {metrics.get('braking_point_distance', 0):.1f}m avant l'apex. "
-                    f"Point optimal : {metrics.get('braking_point_optimal', 0):.1f}m. "
-                    f"Tu entres trop vite dans ce virage, ce qui te force à corriger en plein apex. "
-                    f"Anticipe le freinage de {abs(braking_delta):.1f}m pour stabiliser la trajectoire. "
-                    f"Perte estimée : {impact_seconds:.2f}s sur la session."
-                )
-                difficulty = "moyen"
-
-            advice.append({
-                'priority': len(advice) + 1,
-                'category': 'braking',
-                'impact_seconds': round(impact_seconds, 2),
-                'corner': corner_id,
-                'message': message,
-                'explanation': explanation,
-                'difficulty': difficulty,
-            })
-
-        except Exception:
-            continue
-
-    return advice
-
-
 def _generate_apex_advice(corner_analysis: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Génère conseils sur la position des apex."""
     advice = []
@@ -441,6 +378,122 @@ def _lap_context(corner: Dict[str, Any]) -> str:
     return f" Ton meilleur passage ici : tour {best}."
 
 
+def _braking_advice(
+    corner: Dict[str, Any],
+    head: str,
+    gain_str: str,
+    lap_str: str,
+    impact_seconds: float,
+) -> Optional[Dict[str, Any]]:
+    """
+    Conseil de freinage, si et seulement si le virage se freine vraiment.
+
+    L'ordre des tests suit celui d'un ingénieur de piste : on ne demande pas à
+    quelqu'un de freiner plus tard tant qu'il n'appuie pas assez fort. Chaque
+    conseil cite le tour de référence — un passage que le pilote a signé
+    lui-même, donc reproductible, et vérifiable sur la carte.
+    """
+    if not corner.get("has_braking_zone"):
+        return None
+
+    def _f(key, default=0.0):
+        v = corner.get(key)
+        return float(v) if v is not None else float(default)
+
+    verdict = corner.get("braking_verdict") or "optimal"
+    point = _f("braking_point_distance")
+    best_point = _f("braking_best_point_m")
+    best_lap = corner.get("braking_best_lap")
+    delta = _f("braking_delta")
+    peak = _f("braking_peak_g")
+    capability = _f("braking_capability_g")
+    coasting = _f("coasting_s")
+    spread = _f("braking_consistency_m")
+    entry = _f("braking_entry_speed")
+    v_min = _f("braking_min_speed")
+    theo = _f("braking_theoretical_min_m")
+    window_loss = _f("braking_time_lost")
+    # Le gain annoncé reste la perte chronométrée DU VIRAGE, celle qu'affiche
+    # l'étiquette de la carte. Le temps perdu sur la seule zone de freinage en
+    # est une décomposition, citée dans le texte et jamais additionnée.
+    impact = impact_seconds
+    share = (f" Sur la seule zone de freinage, l'écart chronométré est de "
+             f"{window_loss:.2f} s." if 0.02 < window_loss <= max(impact_seconds, 0.0) + 1e-9 else "")
+    ref = f" (référence : ton tour {best_lap})" if best_lap else ""
+
+    # 1. Intensité insuffisante : la crête, pas le point, est le vrai défaut.
+    if verdict == "soft" and capability > 0:
+        return {
+            "message": f"{head} — Freinage trop mou : {peak:.2f} g",
+            "explanation": (
+                f"Tu ne dépasses pas {peak:.2f} g ici alors que tu as démontré {capability:.2f} g "
+                f"ailleurs sur la session. À {entry:.0f} km/h, la physique autorise {theo:.0f} m "
+                f"pour descendre à {v_min:.0f} km/h ; tu en utilises {point:.0f}. "
+                f"Attaque la pédale plus franchement dès le premier appui : c'est ce qui te "
+                f"permettra ensuite de retarder le point.{share}{gain_str}{lap_str}"
+            ),
+            "difficulty": "moyen", "impact_seconds": impact, "category": "braking",
+        }
+
+    # 2. Temps mort : ni frein ni gaz, du temps perdu pur.
+    if verdict == "coasting":
+        best_coast = _f("coasting_best_s")
+        excess = _f("coasting_excess_s")
+        return {
+            "message": f"{head} — {coasting:.2f} s sans frein ni gaz",
+            "explanation": (
+                f"Entre le relâcher de frein et la remise des gaz, tu roules {coasting:.2f} s "
+                f"en roue libre, contre {best_coast:.2f} s sur ton passage le plus rapide ici"
+                f"{ref} : {excess:.2f} s de plus, chaque tour. Un kart n'a pas de transfert de "
+                f"masse à attendre — enchaîne frein puis gaz sans palier, quitte à relâcher le "
+                f"frein plus progressivement à l'inscription.{share}{gain_str}{lap_str}"
+            ),
+            "difficulty": "moyen", "impact_seconds": impact, "category": "braking",
+        }
+
+    # 3. Point de freinage, comparé à SON meilleur passage sur ce virage.
+    if verdict == "brake_later":
+        return {
+            "message": f"{head} — Tu freines {delta:.0f} m plus tôt que ton meilleur tour",
+            "explanation": (
+                f"Ici tu déclenches à {point:.0f} m de l'apex, alors que tu as déjà freiné à "
+                f"{best_point:.0f} m{ref} en gardant la même vitesse de passage "
+                f"({v_min:.0f} km/h). Ce n'est donc pas une prise de risque : tu l'as déjà fait. "
+                f"Prends un repère fixe au bord de piste et avance-le de {delta:.0f} m."
+                f"{share}{gain_str}{lap_str}"
+            ),
+            "difficulty": "facile", "impact_seconds": impact, "category": "braking",
+        }
+
+    if verdict == "brake_earlier":
+        return {
+            "message": f"{head} — Ton meilleur passage freinait {abs(delta):.0f} m plus tôt",
+            "explanation": (
+                f"Tu déclenches à {point:.0f} m de l'apex, mais ton passage le plus rapide ici "
+                f"freinait à {best_point:.0f} m{ref} — plus tôt, et pourtant plus rapide sur la "
+                f"portion. Anticiper te laisse le temps de rendre les freins avant l'inscription : "
+                f"tu ressors mieux placé, et c'est la sortie qui paie sur la ligne droite suivante. "
+                f"Essaie de reproduire ce repère.{share}{gain_str}{lap_str}"
+            ),
+            "difficulty": "moyen", "impact_seconds": impact, "category": "braking",
+        }
+
+    # 4. Régularité : à niveau égal, c'est ce qui sépare deux pilotes.
+    if verdict == "inconsistent":
+        return {
+            "message": f"{head} — Point de freinage instable (± {spread:.0f} m)",
+            "explanation": (
+                f"D'un tour à l'autre, ton déclenchement varie de {spread:.0f} m. Un pilote "
+                f"confirmé tient 2 à 3 m. Cette dispersion t'oblige à corriger différemment à "
+                f"chaque passage, et rend le virage imprévisible. Choisis UN repère visuel fixe "
+                f"et n'en change plus de la session.{share}{gain_str}{lap_str}"
+            ),
+            "difficulty": "facile", "impact_seconds": impact, "category": "braking",
+        }
+
+    return None
+
+
 def _build_differentiated_corner_advice(
     corner: Dict[str, Any],
     laps_analyzed: int,
@@ -484,28 +537,12 @@ def _build_differentiated_corner_advice(
     speed_gap_significant = apex_speed > 0 and delta_speed >= max(1.5, 0.025 * apex_speed)
 
     # ── Cause dominante ──────────────────────────────────────────────────────
-    # 1. Freinage : l'écart au point de freinage optimal est le plus actionnable.
-    if abs(braking_delta) >= 2.0:
-        if braking_delta > 0:
-            return {
-                "message": f"{head} — Tu freines {braking_delta:.1f} m trop tôt",
-                "explanation": (
-                    f"Ton freinage débute {braking_delta:.1f} m avant le point optimal calculé "
-                    f"pour ta vitesse d'arrivée ({entry_speed:.0f} km/h). Repère un marqueur fixe "
-                    f"(panneau, bordure, changement de revêtement) {braking_delta:.0f} m plus loin "
-                    f"et retarde progressivement, tour après tour.{gain_str}{lap_str}"
-                ),
-                "difficulty": "facile", "impact_seconds": impact_seconds, "category": "braking",
-            }
-        return {
-            "message": f"{head} — Tu freines {abs(braking_delta):.1f} m trop tard",
-            "explanation": (
-                f"Tu arrives à {entry_speed:.0f} km/h et attaques le freinage {abs(braking_delta):.1f} m "
-                f"après le point optimal : tu dois corriger dans le virage, ce qui casse la relance. "
-                f"Anticipe et relâche plus progressivement pour garder l'avant posé.{gain_str}{lap_str}"
-            ),
-            "difficulty": "moyen", "impact_seconds": impact_seconds, "category": "braking",
-        }
+    # 1. Freinage. Toutes les valeurs viennent de `src.analysis.braking`, la même
+    # source que la pastille et la bande de la carte : le pilote peut aller
+    # vérifier chaque chiffre à l'écran.
+    brk = _braking_advice(corner, head, gain_str, lap_str, impact_seconds)
+    if brk:
+        return brk
 
     # 2. Placement d'apex (mesure bornée par la largeur de piste).
     if apex_error >= 1.0:
@@ -595,9 +632,16 @@ def _generate_global_advice(
         # Candidats : perte de temps mesurée, ou défaut technique caractérisé.
         def _has_technical_flaw(c):
             metrics = c.get('metrics') or {}
-            braking = abs(float(c.get('braking_delta') or metrics.get('braking_delta') or 0))
             apex_err = float(c.get('apex_distance_error') or metrics.get('apex_distance_error') or 0)
-            return braking >= 2.0 or apex_err >= 1.0
+            if apex_err >= 1.0:
+                return True
+            if not c.get('has_braking_zone'):
+                return False
+            # Les défauts de freinage que l'analyse sait mesurer : intensité,
+            # temps mort, point de déclenchement, régularité.
+            return c.get('braking_verdict') in (
+                "soft", "coasting", "brake_later", "brake_earlier", "inconsistent"
+            )
 
         candidates = [c for c in corners_valid if _loss(c) > 0.02 or _has_technical_flaw(c)]
         sorted_corners = sorted(candidates, key=_loss, reverse=True)
