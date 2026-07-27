@@ -19,25 +19,6 @@ from src.analysis.geometry import _haversine_distance
 TRACK_WIDTH_M = 8.0
 MAX_APEX_ERROR_M = TRACK_WIDTH_M / 2.0
 
-# Fenêtre de recherche du début de freinage en amont de l'apex. Large (≈ 8 s à
-# 25 Hz) pour couvrir une longue ligne droite, bornée pour ne pas remonter au
-# virage précédent.
-MAX_BRAKING_SEARCH_SAMPLES = 200
-# Distance de freinage maximale plausible en karting (freins arrière seuls).
-# Au-delà, on capterait la décélération d'un autre virage.
-MAX_BRAKING_DISTANCE_M = 90.0
-# ─── Seuils de PHASE (source unique pour la carte et pour les repères) ───
-# Ces deux constantes définissent à la fois la bande rouge « freinage » tracée
-# sur la carte et le repère de début de freinage. Les faire diverger, c'est
-# garantir que la pastille et la bande se contredisent à l'écran.
-#
-# Valeurs choisies sur la distribution réelle mesurée en piste (freinage
-# jusqu'à -1,1 g, relance jusqu'à +0,85 g) : en deçà de 0,20 g le kart n'est
-# pas vraiment freiné, il décélère seulement.
-BRAKING_PHASE_G = 0.20
-ACCELERATION_PHASE_G = 0.10
-
-
 def _pos(df, label) -> Optional[int]:
     """Position entière d'un label d'index.
 
@@ -191,37 +172,6 @@ def calculate_optimal_apex_speed_from_laps(
     except Exception as e:
         warnings.warn(f"Erreur calculate_optimal_apex_speed_from_laps: {e}")
         return 0.0
-
-
-def _session_braking_capability(df) -> float:
-    """
-    Décélération de freinage RÉELLEMENT atteinte par le pilote (m/s²).
-
-    Sert de référence pour juger un point de freinage : « tu peux freiner plus
-    tard » n'a de sens que par rapport à ce que CE kart et CE pilote savent
-    faire. Une constante théorique donnerait un objectif inatteignable pour un
-    Mini et trop tendre pour un KZ.
-    """
-    cached = df.attrs.get("_braking_capability_ms2")
-    if cached:
-        return float(cached)
-    a_ref = 1.0 * KARTING_CONSTANTS['g']
-    try:
-        if 'speed' in df.columns and 'time' in df.columns:
-            v = pd.to_numeric(df['speed'], errors='coerce').values / 3.6
-            t = pd.to_numeric(df['time'], errors='coerce').values
-            ok = np.isfinite(v) & np.isfinite(t)
-            if ok.sum() > 50:
-                d = np.gradient(np.nan_to_num(v), t)
-                braking = -d[np.isfinite(d) & (d < 0)]
-                if braking.size > 20:
-                    a_ref = float(np.percentile(braking, 90))
-    except Exception:
-        pass
-    # Bornes physiques karting (freinage arrière seul : ~0,6 g à 1,6 g)
-    a_ref = float(np.clip(a_ref, 0.6 * KARTING_CONSTANTS['g'], 1.6 * KARTING_CONSTANTS['g']))
-    df.attrs["_braking_capability_ms2"] = a_ref
-    return a_ref
 
 
 def calculate_braking_point(
