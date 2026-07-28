@@ -106,6 +106,14 @@ class SessionConditions(BaseModel):
     track_condition: str = Field(default="dry", description="dry | damp | wet | rain")
     track_temperature: Optional[float] = Field(default=None, description="Température piste en °C")
     circuit_name: Optional[str] = Field(default=None, description="Nom du circuit extrait du header télémétrie (Venue)")
+    resolved: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Conditions résolues en paramètres physiques (μ de référence, "
+                    "bornes de freinage, ce qui est conseillable). Voir analysis/conditions.py",
+    )
+
+    class Config:
+        extra = "allow"
 
 
 class TrackFeatures(BaseModel):

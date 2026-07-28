@@ -18,12 +18,17 @@ Méthode — celle qu'applique un ingénieur de piste sur MoTeC ou AiM :
 3. Accélération longitudinale par la règle de la chaîne : a = v·dv/ds. Sur une
    grille régulière en distance c'est plus stable numériquement que dv/dt.
 4. Segmentation par HYSTÉRÉSIS (déclencheur de Schmitt) : on entre en freinage
-   à 0,18 g, on n'en sort qu'en remontant au-dessus de 0,06 g. C'est ce qui
-   empêche une zone de se fragmenter en plusieurs bandes quand la décélération
-   oscille autour d'un seuil unique — le défaut des bandes précédentes.
-5. Validation physique : un freinage doit atteindre 0,30 g crête, retirer au
+   à 0,25 g, on n'en sort qu'en remontant au-dessus de 0,15 g. Deux seuils
+   distincts empêchent une zone de se fragmenter quand la décélération oscille
+   — le défaut des bandes précédentes — et le seuil bas reste au-dessus de la
+   traînée naturelle du kart (0,05 à 0,12 g pied levé), sans quoi la bande
+   avalerait la ligne droite.
+5. Validation physique : un freinage doit atteindre 0,35 g crête, retirer au
    moins 6 km/h et durer au moins 4 m. Une levée de pied en ligne droite n'est
    donc plus affichée comme un freinage.
+
+Les bornes de capacité suivent les CONDITIONS DE PISTE (`conditions.py`) : sous
+la pluie un freinage à 0,55 g est bon, au sec il est mou.
 
 Le temps perdu n'est pas une constante inventée. Pour chaque zone on compare le
 temps RÉELLEMENT mis à parcourir la fenêtre « début de freinage → remise des
@@ -332,19 +337,27 @@ def _detect_events(grid: Dict[str, np.ndarray]) -> List[Dict[str, Any]]:
 # Capacité de freinage démontrée
 # ════════════════════════════════════════════════════════════════════════════
 
-def _capability_g(events: List[Dict[str, Any]]) -> float:
+def _capability_g(events: List[Dict[str, Any]], conditions=None) -> float:
     """
     Décélération que le pilote a RÉELLEMENT démontrée (en g).
 
     Référence honnête : on ne lui demande jamais de faire mieux que son propre
     meilleur freinage. Une constante théorique donnerait un objectif inatteignable
     en Mini et beaucoup trop tendre en KZ.
+
+    Les bornes suivent les conditions de piste : un plancher « sec » de 0,60 g
+    appliqué à une séance sous la pluie ferait passer un freinage correct pour
+    un freinage mou.
     """
+    lo = conditions.braking_min_g if conditions is not None else MIN_CAPABILITY_G
+    # Le PLAFOND reste la limite physique du karting, jamais l'attente liée à la
+    # météo : si le pilote a réellement freiné à 1,2 g, on ne va pas lui
+    # répondre que la pluie l'en empêchait. La mesure prime sur la déclaration.
+    hi = MAX_CAPABILITY_G
     peaks = [e["peak_g"] for e in events if np.isfinite(e["peak_g"])]
     if len(peaks) < 3:
-        return 0.9
-    return float(np.clip(np.percentile(peaks, CAPABILITY_PERCENTILE),
-                         MIN_CAPABILITY_G, MAX_CAPABILITY_G))
+        return float(np.clip(0.9, lo, hi))
+    return float(np.clip(np.percentile(peaks, CAPABILITY_PERCENTILE), lo, hi))
 
 
 def _theoretical_min_distance(v0_kmh: float, v1_kmh: float, a_ref_g: float) -> float:
@@ -645,7 +658,9 @@ def analyze_braking(
         if not events:
             return empty
 
-        a_ref = _capability_g(events)
+        from src.analysis.conditions import get_conditions
+        conditions = get_conditions(df)
+        a_ref = _capability_g(events, conditions)
 
         # Un seul freinage principal par (tour, virage) : celui qui retire le
         # plus de vitesse. Les autres sont des retouches de frein — une info

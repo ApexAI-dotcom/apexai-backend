@@ -157,9 +157,14 @@ def calculate_optimal_apex_speed_from_laps(
             return 0.0 # Ligne droite
             
         radius = 1.0 / curvature_mean
-        
-        # V_opt = sqrt(R * g * mu)
-        mu = 1.1 # Grip coefficient for slicks
+
+        # V_opt = sqrt(R · g · μ)
+        #
+        # μ vient des CONDITIONS DE PISTE. Il était figé à 1,1 (slick au sec) :
+        # une séance sous la pluie se voyait donc assigner des vitesses de
+        # passage impossibles à tenir, puis reprocher de ne pas les tenir.
+        from src.analysis.conditions import get_conditions
+        mu = get_conditions(df).mu_reference
         v_opt_ms = np.sqrt(radius * KARTING_CONSTANTS['g'] * mu)
         
         v_opt_kmh = v_opt_ms * 3.6

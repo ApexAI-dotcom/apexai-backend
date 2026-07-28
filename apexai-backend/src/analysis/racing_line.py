@@ -456,7 +456,16 @@ def build_racing_line(
                 hi_i[ext] *= 0.5
 
         # ── Vitesses : μ calibré sur le grip réellement atteint ──────────────
-        mu = 1.3
+        # Les BORNES viennent des conditions de piste. Elles étaient figées à
+        # [1,00 ; 1,55] : sous la pluie, un grip mesuré à 0,75 g était remonté
+        # de force à 1,00, et la ligne idéale proposait des vitesses que le kart
+        # ne pouvait pas tenir. Le μ reste mesuré sur les données du pilote ;
+        # seule la plage dans laquelle on l'autorise suit la météo.
+        from src.analysis.conditions import get_conditions
+        cond = get_conditions(df)
+        mu_min = min(cond.mu_min, MU_MIN)
+        mu = cond.mu_reference
+        conditions_mismatch = False
         if "speed" in df.columns and "curvature" in df.columns:
             gg = df[df["lap_number"].isin(laps)] if "lap_number" in df.columns else df
             v = pd.to_numeric(gg["speed"], errors="coerce").to_numpy(float) / 3.6
@@ -466,29 +475,67 @@ def build_racing_line(
                 lat_grip = (v[ok] ** 2 * kappa[ok]) / G
                 # 85e percentile : la courbure GPS a des pics de bruit qui
                 # gonflent le grip apparent. On veut un μ robuste, pas le maximum.
-                mu = float(np.clip(np.percentile(lat_grip, 85), MU_MIN, MU_MAX))
+                measured = float(np.percentile(lat_grip, 85))
+                mu = float(np.clip(measured, mu_min, min(cond.mu_max, MU_MAX)))
 
         kap_final = np.abs(_curvature(Lx, Ly))
         kap_final[kap_final < 1e-4] = 1e-4
-        v_grip = np.sqrt(mu * G / kap_final)
         v_cap = 45.0
         if "speed" in df.columns:
             c = np.nanpercentile(pd.to_numeric(df["speed"], errors="coerce"), 99) / 3.6
             if np.isfinite(c) and c > 10:
                 v_cap = float(c)
-        v_prof = np.minimum(v_grip, v_cap * 1.02)
 
         ds = np.hypot(np.diff(Lx, append=Lx[0]), np.diff(Ly, append=Ly[0]))
         ds[ds < 1e-3] = 1e-3
-        for _ in range(3):
-            for i in range(n_points):
-                j = (i - 1) % n_points
-                v_prof[i] = min(v_prof[i], np.sqrt(v_prof[j] ** 2 + 2 * A_ACCEL * ds[j]))
-            for i in range(n_points - 1, -1, -1):
-                j = (i + 1) % n_points
-                v_prof[i] = min(v_prof[i], np.sqrt(v_prof[j] ** 2 + 2 * A_BRAKE * ds[i]))
 
-        optimal_time = float(np.sum(ds / np.maximum(v_prof, 1.0)))
+        def _lap_time_for(mu_value: float):
+            """Profil de vitesse et chrono pour une adhérence donnée."""
+            prof = np.minimum(np.sqrt(mu_value * G / kap_final), v_cap * 1.02)
+            for _ in range(3):
+                for i in range(n_points):
+                    j = (i - 1) % n_points
+                    prof[i] = min(prof[i], np.sqrt(prof[j] ** 2 + 2 * A_ACCEL * ds[j]))
+                for i in range(n_points - 1, -1, -1):
+                    j = (i + 1) % n_points
+                    prof[i] = min(prof[i], np.sqrt(prof[j] ** 2 + 2 * A_BRAKE * ds[i]))
+            return prof, float(np.sum(ds / np.maximum(prof, 1.0)))
+
+        v_prof, optimal_time = _lap_time_for(mu)
+
+        # ── Contrôle de cohérence conditions ↔ données ───────────────────────
+        # Une « ligne idéale » plus LENTE que le meilleur tour réel du pilote est
+        # une absurdité : elle signifie que l'état de piste déclaré ne correspond
+        # pas à ce que la télémétrie montre (case cochée par erreur, ou piste
+        # séchée en cours de séance). On ne corrige pas en silence : on remonte
+        # l'adhérence jusqu'à retrouver un objectif atteignable, et on le signale.
+        #
+        # Ce test porte sur un CHRONO, pas sur le μ mesuré : la courbure GPS est
+        # bruitée et son 85e percentile peut dépasser 1,5 g sur un simple artefact,
+        # alors qu'un temps au tour ne ment pas.
+        best_real = None
+        try:
+            if "lap_number" in df.columns and "time" in df.columns:
+                t = pd.to_numeric(df["time"], errors="coerce")
+                sub = t[df["lap_number"] == best_ln].dropna()
+                if len(sub) > 20:
+                    best_real = float(sub.max() - sub.min())
+        except Exception:
+            best_real = None
+
+        if best_real and optimal_time > best_real and mu < MU_MAX:
+            conditions_mismatch = True
+            lo, hi = mu, MU_MAX
+            # Dichotomie : la plus petite adhérence qui rend l'objectif atteignable.
+            for _ in range(12):
+                mid = 0.5 * (lo + hi)
+                _, t_mid = _lap_time_for(mid)
+                if t_mid > best_real:
+                    lo = mid
+                else:
+                    hi = mid
+            mu = hi
+            v_prof, optimal_time = _lap_time_for(mu)
 
         # ── Bords de piste (mêmes que la contrainte d'optimisation) ──────────
         to_lat = lambda X, Y: [round(float(v), 7) for v in ((Y / mlat) + lat0)]
@@ -507,6 +554,10 @@ def build_racing_line(
             "track_length_m": round(float(track_len), 1),
             "optimal_lap_time_s": round(optimal_time, 3),
             "mu_calibrated": round(mu, 3),
+            # Le grip mesuré dément l'état de piste déclaré : à signaler plutôt
+            # qu'à corriger en silence, c'est souvent une case cochée par erreur.
+            "conditions_mismatch": bool(conditions_mismatch),
+            "conditions_label": cond.label,
             "track_width_m": round(float(track_width_m), 1),
             "track_width_source": "CIK-FIA (largeur minimale réglementaire karting)",
             "observed_width_m": round(observed_width, 2),

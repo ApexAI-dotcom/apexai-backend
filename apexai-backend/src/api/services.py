@@ -28,6 +28,7 @@ from src.analysis.scoring import calculate_performance_score, validate_score_con
 from src.analysis.coaching import generate_coaching_advice
 from src.analysis.performance_metrics import analyze_corner_performance
 from src.analysis.braking import get_braking_analysis
+from src.analysis.conditions import attach_conditions
 from src.analysis.ideal_lap import compute_ideal_lap
 from src.analysis.racing_line import build_racing_line
 from src.analysis.track_signature import compute_track_signature
@@ -198,6 +199,19 @@ def _run_analysis_pipeline_sync(
 
     if beacon_markers:
         df.attrs["beacon_markers"] = beacon_markers
+
+    # ── Conditions de piste : attachées AVANT tout calcul ────────────────────
+    # Elles ne sont pas une étiquette d'affichage : elles fixent l'adhérence de
+    # référence, donc les vitesses de passage optimales, la ligne de course et
+    # la capacité de freinage attendue. Un module qui raisonnerait « au sec »
+    # sous la pluie assignerait au pilote des objectifs inatteignables.
+    conditions = attach_conditions(df, track_condition, track_temperature)
+    logger.info(
+        "[%s] Conditions : %s%s — μ de référence %.2f g, freinage %.2f–%.2f g",
+        analysis_id, conditions.label,
+        f" {track_temperature:.0f}°C" if track_temperature is not None else "",
+        conditions.mu_reference, conditions.braking_min_g, conditions.braking_max_g,
+    )
 
     logger.info(f"[{analysis_id}] Step 2/5: Filtering GPS...")
     df = apply_savgol_filter(df)
@@ -592,6 +606,27 @@ def _run_analysis_pipeline_sync(
         logger.warning(f"[{analysis_id}] Failed to generate coaching advice: {e}")
         coaching_advice_list = []
 
+    # L'état de piste déclaré contredit la télémétrie : on le dit au pilote au
+    # lieu de le corriger en silence. C'est presque toujours une case cochée par
+    # erreur, et il doit pouvoir relancer l'analyse avec la bonne.
+    if (racing_line_data or {}).get("conditions_mismatch"):
+        coaching_advice_list.insert(0, {
+            "priority": 0,
+            "category": "info",
+            "impact_seconds": 0.0,
+            "corner": None,
+            "message": f"Conditions déclarées « {conditions.label} » : la télémétrie ne le confirme pas",
+            "explanation": (
+                f"Le grip latéral et les vitesses relevés dans ce fichier correspondent à une "
+                f"piste nettement plus adhérente que « {conditions.label.lower()} ». L'objectif a "
+                f"été recalé sur ce que tes tours démontrent, faute de quoi le « tour parfait » "
+                f"aurait été plus lent que ton meilleur tour réel. Si la séance s'est bien "
+                f"déroulée dans ces conditions, ignore ce message ; sinon relance l'analyse avec "
+                f"le bon état de piste, les objectifs seront plus justes."
+            ),
+            "difficulty": "facile",
+        })
+
     logger.info(f"[{analysis_id}] Generating plots (PNG)...")
     df.attrs["corner_analysis"] = unique_corner_analysis
     df.attrs["score_data"] = score_data
@@ -777,6 +812,10 @@ def _run_analysis_pipeline_sync(
             track_condition=track_condition,
             track_temperature=track_temperature,
             circuit_name=circuit_name,
+            # Ce que les conditions ont CHANGÉ au calcul, pas seulement ce que
+            # le pilote a déclaré. Sans ces valeurs à l'écran, rien ne prouve
+            # que cocher « pluie » sert à quelque chose.
+            resolved=conditions.to_dict(),
         ),
         track_features=TrackFeatures(**track_signature) if track_signature else None,
         ideal_lap=ideal_lap_data if (ideal_lap_data or {}).get("available") else None,

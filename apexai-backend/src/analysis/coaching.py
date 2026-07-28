@@ -26,6 +26,13 @@ def generate_coaching_advice(
     track_condition et track_temperature adaptent messages et seuils (damp, wet, rain, froid/chaud).
     """
     advice_list = []
+    # Source unique : les mêmes conditions servent au calcul (μ, capacité de
+    # freinage) et au discours. Sans ça, le rapport pouvait afficher « pluie »
+    # tout en jugeant la séance avec des références de piste sèche.
+    from src.analysis.conditions import get_conditions, resolve_conditions
+    conditions = get_conditions(df)
+    if conditions.condition != (track_condition or "dry").lower():
+        conditions = resolve_conditions(track_condition, track_temperature)
     cond = (track_condition or "dry").lower()
     is_wet = cond in ("wet", "rain")
     is_rain = cond == "rain"
@@ -51,7 +58,8 @@ def generate_coaching_advice(
         "explanation": (
             f"Les tours de sortie et de rentrée des stands, ainsi que les tours ralentis "
             f"(trafic, drapeau), sont écartés : ils fausseraient la comparaison. "
-            f"Les temps perdus annoncés sont mesurés sur ces {laps_analyzed} tour(s)."
+            f"Les temps perdus annoncés sont mesurés sur ces {laps_analyzed} tour(s). "
+            f"{conditions.summary()}"
         ),
         "difficulty": "facile",
     })
@@ -125,7 +133,10 @@ def generate_coaching_advice(
             for a in rest_ordered:
                 a["impact_seconds"] = round(a.get("impact_seconds", 0) * impact_mult, 2)
 
-        if is_rain:
+        # Sous la pluie, une vitesse de passage « cible » n'a pas de sens : le
+        # grip varie d'un tour à l'autre et d'un point à l'autre de la piste.
+        # On garde le freinage, la trajectoire et la régularité.
+        if not conditions.allow_speed_push:
             rest_ordered = [a for a in rest_ordered if a.get("category") != "speed"]
 
         info_items = [a for a in advice_list if a.get("category") == "info"]
@@ -384,6 +395,7 @@ def _braking_advice(
     gain_str: str,
     lap_str: str,
     impact_seconds: float,
+    conditions=None,
 ) -> Optional[Dict[str, Any]]:
     """
     Conseil de freinage, si et seulement si le virage se freine vraiment.
@@ -395,6 +407,11 @@ def _braking_advice(
     """
     if not corner.get("has_braking_zone"):
         return None
+
+    # Piste mouillée : retarder ou durcir un freinage envoie le kart tout droit.
+    # On ne transforme pas un conseil de performance en prise de risque — il
+    # reste le temps mort et la régularité, qui paient autant et sans danger.
+    allow_attack = True if conditions is None else bool(conditions.allow_brake_later)
 
     def _f(key, default=0.0):
         v = corner.get(key)
@@ -422,7 +439,7 @@ def _braking_advice(
     ref = f" (référence : ton tour {best_lap})" if best_lap else ""
 
     # 1. Intensité insuffisante : la crête, pas le point, est le vrai défaut.
-    if verdict == "soft" and capability > 0:
+    if verdict == "soft" and capability > 0 and allow_attack:
         return {
             "message": f"{head} — Freinage trop mou : {peak:.2f} g",
             "explanation": (
@@ -452,7 +469,7 @@ def _braking_advice(
         }
 
     # 3. Point de freinage, comparé à SON meilleur passage sur ce virage.
-    if verdict == "brake_later":
+    if verdict == "brake_later" and allow_attack:
         return {
             "message": f"{head} — Tu freines {delta:.0f} m plus tôt que ton meilleur tour",
             "explanation": (
@@ -498,6 +515,7 @@ def _build_differentiated_corner_advice(
     corner: Dict[str, Any],
     laps_analyzed: int,
     speed_ctx: Optional[Dict[str, float]] = None,
+    conditions=None,
 ) -> Optional[Dict[str, Any]]:
     """
     Un virage = UN conseil, bâti sur la CAUSE DOMINANTE réellement mesurée.
@@ -506,7 +524,8 @@ def _build_differentiated_corner_advice(
     mesurée (chrono par mini-secteur), écart de point de freinage, erreur de
     placement d'apex (bornée par la largeur de piste), marge de vitesse.
     Aucun chiffre n'est inventé, et les seuils sont RELATIFS au potentiel du
-    kart pour rester valables du Mini au KZ.
+    kart pour rester valables du Mini au KZ — et aux CONDITIONS DE PISTE, pour
+    rester valables du sec à la pluie battante.
     """
     n = corner.get('corner_id', 0) or 0
     virage_label = f"Virage {n}"
@@ -540,7 +559,7 @@ def _build_differentiated_corner_advice(
     # 1. Freinage. Toutes les valeurs viennent de `src.analysis.braking`, la même
     # source que la pastille et la bande de la carte : le pilote peut aller
     # vérifier chaque chiffre à l'écran.
-    brk = _braking_advice(corner, head, gain_str, lap_str, impact_seconds)
+    brk = _braking_advice(corner, head, gain_str, lap_str, impact_seconds, conditions)
     if brk:
         return brk
 
@@ -624,6 +643,10 @@ def _generate_global_advice(
 
     try:
         speed_ctx = _speed_context(df)
+        # Conditions de piste : elles décident de ce qu'on a le droit de
+        # conseiller. Lues sur la session, pas redéclarées ici.
+        from src.analysis.conditions import get_conditions
+        conditions = get_conditions(df)
         corners_valid = [c for c in corner_analysis if c.get('corner_id') in valid_corner_ids]
 
         def _loss(c):
@@ -647,7 +670,7 @@ def _generate_global_advice(
         sorted_corners = sorted(candidates, key=_loss, reverse=True)
 
         for corner in sorted_corners:
-            built = _build_differentiated_corner_advice(corner, laps_analyzed, speed_ctx)
+            built = _build_differentiated_corner_advice(corner, laps_analyzed, speed_ctx, conditions)
             if not built:
                 continue
             advice.append({
