@@ -787,9 +787,14 @@ def _run_analysis_pipeline_sync(
         corner_analysis=[
             CornerAnalysis(**c) for c in unique_corner_analysis if c
         ],
+        # Les encarts d'information ne consomment plus le quota : avec trois
+        # encarts (pluie + température), la troncature à 5 ne laissait passer
+        # que deux vrais conseils.
         coaching_advice=[
-            CoachingAdvice(**a) for a in coaching_advice_list[:5]
-            if a and isinstance(a, dict)
+            CoachingAdvice(**a) for a in (
+                [a for a in coaching_advice_list if isinstance(a, dict) and a.get("category") == "info"]
+                + [a for a in coaching_advice_list if isinstance(a, dict) and a.get("category") != "info"][:4]
+            ) if a
         ],
         plots=PlotUrls(**plots_urls),
         plot_data=plot_data,

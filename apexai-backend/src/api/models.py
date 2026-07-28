@@ -16,6 +16,13 @@ class ScoreBreakdown(BaseModel):
     trajectory_consistency: float = Field(description="Score régularité /25")
     apex_speed: float = Field(description="Score vitesse apex /25")
     sector_times: float = Field(description="Score temps secteurs /20")
+    # Bonus lié aux conditions : il ENTRE dans le score global. L'omettre ici le
+    # faisait disparaître de la réponse, et le détail affiché (71,2) ne
+    # correspondait plus au score annoncé (76) — de quoi faire douter de tout
+    # le reste du rapport.
+    conditions_bonus: Optional[float] = Field(
+        default=None, description="Bonus conditions difficiles (mouillé +5, pluie +10)"
+    )
 
 
 class PerformanceScore(BaseModel):

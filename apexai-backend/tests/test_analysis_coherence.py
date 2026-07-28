@@ -404,3 +404,71 @@ def test_racing_line_preserves_every_corner(analysis):
     assert rl["corners_preserved"] == rl["corners_total"]
     assert rl["track_width_m"] == TRACK_WIDTH_M
     assert rl.get("track_edges"), "bords de piste absents (ruban non traçable)"
+
+
+def test_score_breakdown_sums_to_the_displayed_score(analysis):
+    """Le détail du score doit totaliser le score affiché.
+
+    Régression : le bonus « conditions difficiles » entrait dans le score global
+    mais était absent du modèle de réponse. Le rapport affichait 76/100 avec un
+    détail totalisant 71,2 — de quoi faire douter de tous les autres chiffres.
+    """
+    ps = analysis["performance_score"]
+    bd = ps["breakdown"]
+    total = sum(float(v) for v in bd.values() if v is not None)
+    assert total == pytest.approx(float(ps["overall_score"]), abs=0.15), (
+        f"détail {total:.1f} ≠ score affiché {ps['overall_score']}"
+    )
+
+
+def test_information_notes_never_crowd_out_real_advice(analysis):
+    """Les encarts d'information ne consomment pas le quota de conseils.
+
+    Régression : trois encarts (conditions + température) suffisaient à faire
+    tomber la liste tronquée à deux conseils réellement exploitables.
+    """
+    real = [a for a in analysis["coaching_advice"] if a.get("category") != "info"]
+    assert len(real) >= 3, f"seulement {len(real)} conseils exploitables"
+
+
+def test_trail_braking_is_a_discriminating_measure(analysis):
+    """Le trail braking doit distinguer les virages, pas afficher 100 % partout.
+
+    Régression : le seuil était absolu (0,4 g latéral), atteint à 100 km/h avec
+    un rayon de 200 m — donc sur presque toute la piste. Tous les virages
+    affichaient « trail braking 100 % », ce qui ne voulait plus rien dire.
+    """
+    ratios = [
+        float(c["trail_braking_ratio"])
+        for c in analysis["corner_analysis"]
+        if c.get("has_braking_zone") and c.get("trail_braking_ratio") is not None
+    ]
+    if len(ratios) < 3:
+        pytest.skip("pas assez de zones de freinage")
+    assert all(0.0 <= r <= 1.0 for r in ratios)
+    assert len(set(round(r, 1) for r in ratios)) > 1, f"valeur unique partout : {ratios}"
+    assert sum(1 for r in ratios if r >= 0.99) < len(ratios), "100 % sur tous les virages"
+
+
+def test_no_long_unlabelled_stretch_in_driving_phases(analysis):
+    """Aucune longue portion du tour ne doit rester sans phase identifiée.
+
+    Régression : tout ce qui précédait le premier freinage du tour — la ligne
+    droite de départ, pleins gaz — restait étiqueté « ni frein ni gaz » et
+    s'affichait en gris sur la carte, sans explication.
+    """
+    laps = [
+        l for l in (analysis.get("plot_data") or {}).get("trajectory_2d", {}).get("laps", [])
+        if not l.get("is_synthetic") and l.get("phase") and (l.get("lap_number") or 0) >= 1
+    ]
+    if not laps:
+        pytest.skip("aucun tour avec phases")
+    lap = max(laps, key=lambda l: len(l.get("phase") or []))
+    phases = lap["phase"]
+    longest = current = 0
+    for p in phases:
+        current = current + 1 if p == "coasting" else 0
+        longest = max(longest, current)
+    assert longest < len(phases) * 0.2, (
+        f"{longest}/{len(phases)} points consécutifs sans phase identifiée"
+    )

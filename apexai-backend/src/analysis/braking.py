@@ -83,9 +83,15 @@ MIN_CAPABILITY_G = 0.60
 MAX_CAPABILITY_G = 1.60
 CAPABILITY_PERCENTILE = 90
 
-# Au-delà de 0,4 g latéral on considère que le kart est inscrit : le freinage
-# qui continue est du trail braking, pas du freinage en ligne droite.
-TRAIL_LATERAL_G = 0.40
+# Inscription du kart : fraction de l'accélération latérale MAXIMALE du virage
+# à partir de laquelle on considère qu'il est braqué.
+#
+# Un seuil absolu ne marche pas : à 100 km/h, 0,4 g latéral s'obtient avec un
+# rayon de 200 m, c'est-à-dire une ligne droite à peine courbe. Tout freinage
+# était donc classé « trail braking 100 % », ce qui ne voulait plus rien dire.
+# Rapporté à la charge latérale du virage lui-même, le critère redevient
+# discriminant et vaut pour une épingle comme pour une courbe rapide.
+TRAIL_TURN_IN_RATIO = 0.50
 
 # Temps de transfert pied-frein → pied-gaz incompressible : en dessous, le
 # « temps mort » n'en est pas un.
@@ -274,6 +280,46 @@ def _polyline(lat: np.ndarray, lon: np.ndarray, a: int, b: int) -> Dict[str, Lis
 # Événements
 # ════════════════════════════════════════════════════════════════════════════
 
+def _trail_ratio(grid: Dict[str, np.ndarray], event: Dict[str, Any]) -> float:
+    """
+    Part du freinage réalisée kart DÉJÀ INSCRIT (trail braking), en distance.
+
+    On repère l'inscription au moment où la charge latérale atteint la moitié
+    de celle du virage, puis on mesure quelle fraction de la zone de freinage se
+    situe après ce point. Un pilote qui freine tout droit et rend les freins
+    avant de tourner obtient 0 % ; celui qui garde le frein jusqu'à l'apex
+    approche 100 %. C'est une mesure relative au virage, donc valable d'une
+    épingle à une courbe rapide.
+    """
+    ay, s_grid = grid["ay"], grid["s"]
+    a, b = event["i_start"], event["i_end"]
+    if b <= a or not np.isfinite(ay[a:b + 1]).any():
+        return 0.0
+    # Charge latérale de référence : celle du virage, mesurée jusqu'à l'apex.
+    apex_s = event.get("apex_s")
+    end = int(np.searchsorted(s_grid, apex_s + 10.0)) if apex_s is not None else b
+    end = int(np.clip(end, b, len(ay) - 1))
+    peak = float(np.nanmax(np.abs(ay[a:end + 1])))
+    if peak < 0.3 * G:
+        return 0.0  # virage trop peu chargé pour parler d'inscription
+    seg = np.abs(ay[a:b + 1])
+    # Le seuil se mesure à partir de la charge latérale DÉJÀ présente au début
+    # du freinage : une « ligne droite » de circuit n'est jamais parfaitement
+    # droite, et compter cette courbure résiduelle comme de l'inscription
+    # classait tous les freinages à 100 % de trail braking.
+    base = float(seg[0]) if np.isfinite(seg[0]) else 0.0
+    if peak <= base:
+        return 0.0
+    hit = np.flatnonzero(seg >= base + TRAIL_TURN_IN_RATIO * (peak - base))
+    if hit.size == 0:
+        return 0.0  # freinage entièrement en ligne droite
+    turn_in = a + int(hit[0])
+    total = float(s_grid[b] - s_grid[a])
+    if total <= 0:
+        return 0.0
+    return float(np.clip((s_grid[b] - s_grid[turn_in]) / total, 0.0, 1.0))
+
+
 def _detect_events(grid: Dict[str, np.ndarray]) -> List[Dict[str, Any]]:
     s, v, t, ax, ay = grid["s"], grid["v"], grid["t"], grid["ax"], grid["ay"]
     lat, lon, lap = grid["lat"], grid["lon"], grid["lap"]
@@ -296,9 +342,6 @@ def _detect_events(grid: Dict[str, np.ndarray]) -> List[Dict[str, Any]]:
         thr = _throttle_on(ax, b)
         peak_pos = a + int(np.argmin(seg))
 
-        # Part du freinage réalisée kart déjà inscrit (trail braking).
-        lat_g = ay[a:b + 1] / G
-        trail = float(np.mean(lat_g > TRAIL_LATERAL_G)) if len(lat_g) else 0.0
 
         coast_s = float(max(0.0, t[thr] - t[b]))
         events.append({
@@ -320,7 +363,7 @@ def _detect_events(grid: Dict[str, np.ndarray]) -> List[Dict[str, Any]]:
             # Distance mise à atteindre la décélération maximale : mesure la
             # vivacité de l'attaque de frein.
             "build_up_m": float(s[peak_pos] - s[a]),
-            "trail_ratio": trail,
+            "trail_ratio": 0.0,
             "coasting_s": coast_s,
             "coasting_m": float(max(0.0, s[thr] - s[b])),
             "window_time_s": float(max(0.0, t[thr] - t[a])),
@@ -658,6 +701,11 @@ def analyze_braking(
         if not events:
             return empty
 
+        # Le trail braking se mesure par rapport au virage : il faut l'apex,
+        # donc après le rattachement.
+        for e in events:
+            e["trail_ratio"] = _trail_ratio(grid, e)
+
         from src.analysis.conditions import get_conditions
         conditions = get_conditions(df)
         a_ref = _capability_g(events, conditions)
@@ -700,6 +748,7 @@ def analyze_braking(
         # deux tours sur la même portion de piste ne suppose aucun modèle : le
         # gain annoncé est un temps que le pilote a déjà réalisé.
         gs, gt = grid["s"], grid["t"]
+        timing_laps = _representative_laps(df)
         for cid, evs in by_corner_events.items():
             pts = [e.get("distance_to_apex_m", 0.0) for e in evs]
             w = max(WINDOW_MIN_ENTRY_M, float(np.max(pts)) + 10.0)
@@ -710,7 +759,10 @@ def analyze_braking(
                     e["window_measured_s"] = None
                     continue
                 e["window_measured_s"] = float(np.interp(s1, gs, gt) - np.interp(s0, gs, gt))
-            e_ok = [e for e in evs if e.get("window_measured_s")]
+            # Référence prise sur les tours représentatifs uniquement : un tour
+            # de sortie ou ralenti fausserait l'écart annoncé.
+            e_ok = [e for e in evs
+                    if e.get("window_measured_s") and (not timing_laps or e["lap"] in timing_laps)]
             best_t = min((e["window_measured_s"] for e in e_ok), default=None)
             for e in evs:
                 wm = e.get("window_measured_s")
@@ -839,43 +891,65 @@ def phase_labels(lap_df: pd.DataFrame, analysis: Optional[Dict[str, Any]] = None
     Phase de pilotage en chaque point d'un tour : « braking », « coasting » ou
     « acceleration ».
 
-    Dérivée des MÊMES zones que les bandes de la carte : la couleur de la trace
-    et la bande de freinage ne peuvent donc pas se contredire.
+    Deux couches, dans cet ordre :
+
+    1. Une base calculée sur l'accélération longitudinale mesurée, qui couvre
+       TOUT le tour. Sans elle, la portion précédant le premier freinage
+       — typiquement la ligne droite des stands, pleins gaz — restait sans
+       étiquette et s'affichait en gris « ni frein ni gaz » sur la carte.
+    2. Les zones de freinage détectées, qui écrasent la base. C'est ce qui
+       garantit que la trace colorée et la bande de freinage racontent la même
+       chose : la bande ne peut pas déborder de sa phase.
     """
     n = len(lap_df)
     if n == 0 or "cumulative_distance" not in lap_df.columns:
         return []
     s = pd.to_numeric(lap_df["cumulative_distance"], errors="coerce").to_numpy(float)
+
+    # ── Couche 1 : base physique sur tout le tour ────────────────────────────
     labels = ["coasting"] * n
+    if "speed" in lap_df.columns and n >= 3:
+        v = pd.to_numeric(lap_df["speed"], errors="coerce").to_numpy(float) / 3.6
+        a = None
+        if "time" in lap_df.columns:
+            t = pd.to_numeric(lap_df["time"], errors="coerce").to_numpy(float)
+            if np.isfinite(t).any() and np.nanmax(np.diff(t)) > 0:
+                a = np.gradient(np.nan_to_num(v), t) / G
+        if a is None and np.isfinite(s).any():
+            # Repli : a = v·dv/ds, comme dans la détection des zones.
+            with np.errstate(invalid="ignore", divide="ignore"):
+                a = np.nan_to_num(v * np.gradient(np.nan_to_num(v), s)) / G
+        if a is not None:
+            labels = [
+                "braking" if x < -BRAKE_ENTER_G
+                else "acceleration" if x > THROTTLE_ON_G
+                else "coasting"
+                for x in a
+            ]
 
-    events: List[Dict[str, Any]] = []
-    if analysis:
-        lap_vals = pd.to_numeric(lap_df.get("lap_number"), errors="coerce") if "lap_number" in lap_df.columns else None
-        lap_no = int(lap_vals.iloc[0]) if lap_vals is not None and len(lap_vals) and pd.notna(lap_vals.iloc[0]) else None
-        events = [e for e in analysis.get("events", []) if lap_no is None or e["lap"] == lap_no]
-
-    if events:
-        for e in events:
-            m = (s >= e["start_s"]) & (s <= e["end_s"])
-            for i in np.flatnonzero(m):
-                labels[int(i)] = "braking"
-        # Accélération : après la remise des gaz, jusqu'au freinage suivant.
-        starts = sorted(e["throttle_s"] for e in events)
-        ends = sorted(e["start_s"] for e in events)
-        for st in starts:
-            nxt = next((x for x in ends if x > st), float("inf"))
-            m = (s > st) & (s < nxt)
-            for i in np.flatnonzero(m):
-                labels[int(i)] = "acceleration"
+    if not analysis:
         return labels
 
-    # Repli sans analyse disponible : seuils physiques identiques.
-    if "speed" not in lap_df.columns or "time" not in lap_df.columns:
+    lap_vals = (
+        pd.to_numeric(lap_df["lap_number"], errors="coerce")
+        if "lap_number" in lap_df.columns else None
+    )
+    lap_no = (
+        int(lap_vals.iloc[0])
+        if lap_vals is not None and len(lap_vals) and pd.notna(lap_vals.iloc[0])
+        else None
+    )
+    events = [e for e in analysis.get("events", []) if lap_no is None or e["lap"] == lap_no]
+    if not events:
         return labels
-    v = pd.to_numeric(lap_df["speed"], errors="coerce").to_numpy(float) / 3.6
-    t = pd.to_numeric(lap_df["time"], errors="coerce").to_numpy(float)
-    if n < 3 or not np.isfinite(t).any():
-        return labels
-    a = np.gradient(np.nan_to_num(v), t) / G
-    return ["braking" if x < -BRAKE_ENTER_G else "acceleration" if x > THROTTLE_ON_G else "coasting"
-            for x in a]
+
+    # ── Couche 2 : les zones détectées font autorité ─────────────────────────
+    for e in events:
+        # Freinage : exactement l'étendue de la bande dessinée sur la carte.
+        for i in np.flatnonzero((s >= e["start_s"]) & (s <= e["end_s"])):
+            labels[int(i)] = "braking"
+        # Temps mort : entre le relâcher de frein et la remise des gaz.
+        if e["throttle_s"] > e["end_s"]:
+            for i in np.flatnonzero((s > e["end_s"]) & (s < e["throttle_s"])):
+                labels[int(i)] = "coasting"
+    return labels

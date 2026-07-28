@@ -11,6 +11,12 @@ import numpy as np
 import pandas as pd
 
 
+# Nombre de VRAIS conseils (hors encarts d'information). Les encarts ne comptent
+# pas dans ce quota : sinon, une séance sous la pluie — qui en ajoute plusieurs —
+# n'affichait plus que deux conseils utiles.
+MAX_REAL_ADVICE = 4
+
+
 def generate_coaching_advice(
     df,
     corner_details: List[Dict[str, Any]],
@@ -84,35 +90,24 @@ def generate_coaching_advice(
             "explanation": "Le grip est au maximum mais les pneus peuvent surchauffer sur les sessions longues. Surveille la dégradation en fin de session.",
             "difficulty": "facile",
         })
-    if is_damp:
+    # Un seul message par condition : le résumé en tête explique déjà
+    # l'adhérence retenue. Empiler trois encarts d'information poussait les
+    # VRAIS conseils hors de la liste affichée.
+    wet_notes = {
+        "damp": ("Piste humide", "Adhérence réduite d'environ 15 %. Évite les bords de piste et "
+                                 "les zones à l'ombre, où l'eau reste. Anticipe les freinages."),
+        "wet": ("Piste mouillée", "Score ajusté +5 pts (contexte difficile). Priorité à la régularité : "
+                                  "chaque erreur coûte plus cher à faible adhérence. Évite les vibreurs "
+                                  "et les zones peintes."),
+        "rain": ("Conditions pluvieuses", "Score ajusté +10 pts. Les vitesses de référence ne sont plus "
+                                          "exploitables : travaille la fluidité, la vision et la trajectoire. "
+                                          "Anticipe nettement les freinages."),
+    }
+    if cond in wet_notes:
+        title, body = wet_notes[cond]
         advice_list.append({
-            "priority": 0,
-            "category": "info",
-            "impact_seconds": 0.0,
-            "corner": None,
-            "message": "Piste humide (damp)",
-            "explanation": "Grip réduit d'environ 15-20%. Privilégie des trajectoires qui évitent les bords de piste et les zones à l'ombre. Les freinages doivent être anticipés.",
-            "difficulty": "facile",
-        })
-    if cond == "wet":
-        advice_list.append({
-            "priority": 0,
-            "category": "info",
-            "impact_seconds": 0.0,
-            "corner": None,
-            "message": "Piste mouillée",
-            "explanation": "Score ajusté +5 pts (contexte difficile). Priorité à la régularité : chaque erreur coûte plus cher par faible adhérence. Évite les vibreurs et les zones peintes.",
-            "difficulty": "facile",
-        })
-    if is_rain:
-        advice_list.append({
-            "priority": 0,
-            "category": "info",
-            "impact_seconds": 0.0,
-            "corner": None,
-            "message": "Conditions pluvieuses",
-            "explanation": "Score ajusté +10 pts. La pluie change tout : vitesses de référence invalides, focuse-toi sur la fluidité et la vision. Anticipe les freinages d'au moins 20% plus tôt.",
-            "difficulty": "facile",
+            "priority": 0, "category": "info", "impact_seconds": 0.0, "corner": None,
+            "message": title, "explanation": body, "difficulty": "facile",
         })
 
     for c in corner_analysis:
@@ -127,7 +122,7 @@ def generate_coaching_advice(
         enchainement_only = [a for a in trajectory_advice if "Enchaînement" in (a.get("message") or "")]
         # Ordre strict : individuels d'abord, puis enchaînements ; limite à 3 conseils hors info
         rest_ordered = list(global_advice) + list(enchainement_only)
-        rest_ordered = rest_ordered[:3]
+        rest_ordered = rest_ordered[:MAX_REAL_ADVICE]
 
         if impact_mult != 1.0:
             for a in rest_ordered:
