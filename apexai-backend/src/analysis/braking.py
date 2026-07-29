@@ -79,6 +79,17 @@ THROTTLE_ON_G = 0.12
 # sans signification.
 PHASE_ON_THROTTLE_G = -0.03
 
+# Second critère, décisif en bout de ligne droite. Près de la vitesse de pointe,
+# l'accélération tombe à zéro et se noie dans le bruit de mesure : impossible de
+# trancher sur ce seul signal, et la plus longue ligne droite du circuit se
+# retrouvait mouchetée de gris.
+#
+# Mais la VITESSE, elle, tranche sans ambiguïté : un kart n'atteint jamais 90 %
+# de sa vitesse de pointe en roue libre, la traînée l'en empêche. À ce régime le
+# pilote est forcément sur les gaz. Le freinage garde la priorité — un freinage
+# à 118 km/h en fin de ligne droite reste un freinage.
+PHASE_TOP_SPEED_RATIO = 0.90
+
 # Longueur minimale d'une phase affichée. En dessous, c'est du bruit de mesure
 # et non un geste de pilotage : un mouchetis de gris au milieu d'une ligne
 # droite n'apprend rien et abîme la lecture de la carte.
@@ -880,8 +891,17 @@ def analyze_braking(
                 "double_brake_laps": int(sum(1 for e in evs if e["double_brake"])),
             }
 
+        top_speed = 0.0
+        try:
+            top_speed = float(np.nanpercentile(grid["v"], 99) * 3.6)
+        except Exception:
+            pass
+
         return {
             "capability_g": round(a_ref, 2),
+            # Sert à colorer la trace : au-delà de 90 % de cette vitesse, le
+            # pilote est forcément sur les gaz.
+            "top_speed_kmh": round(top_speed, 1),
             "by_corner": by_corner,
             "by_lap": by_lap,
             "events": events,
@@ -977,11 +997,21 @@ def phase_labels(lap_df: pd.DataFrame, analysis: Optional[Dict[str, Any]] = None
             with np.errstate(invalid="ignore", divide="ignore"):
                 a = np.nan_to_num(v * np.gradient(np.nan_to_num(v), s)) / G
         if a is not None:
+            # Vitesse de référence : celle de la SESSION, pas du tour. Un tour de
+            # sortie de stand a une pointe basse ; s'y référer classerait sa
+            # ligne droite au ralenti comme « pleins gaz ».
+            top = 0.0
+            if analysis:
+                top = float(analysis.get("top_speed_kmh") or 0.0)
+            if top <= 0:
+                top = float(np.nanmax(v) * 3.6) if np.isfinite(v).any() else 0.0
+            fast = top * PHASE_TOP_SPEED_RATIO / 3.6
+
             labels = [
                 "braking" if x < -BRAKE_ENTER_G
-                else "acceleration" if x >= PHASE_ON_THROTTLE_G
+                else "acceleration" if (x >= PHASE_ON_THROTTLE_G or vi >= fast)
                 else "coasting"
-                for x in a
+                for x, vi in zip(a, v)
             ]
 
     # ── Couche 2 : nettoyage du bruit, AVANT de poser les zones mesurées ─────
