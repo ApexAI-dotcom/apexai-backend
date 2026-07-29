@@ -95,6 +95,10 @@ def _fetch_profile(user_id: str) -> Optional[dict[str, Any]]:
                 "subscription_tier",
                 "analyses_count_current_month",
                 "last_analysis_reset_date",
+                # Paddock Pass : l'essai vit dans SES propres colonnes. Ne pas
+                # les lire ici, c'était accorder un accès que rien ne servait.
+                "trial_tier",
+                "trial_until",
             )
             .eq("id", user_id)
             .limit(1)
@@ -108,10 +112,51 @@ def _fetch_profile(user_id: str) -> Optional[dict[str, Any]]:
         return None
 
 
+# Hiérarchie des accès : un essai ne doit jamais RETIRER de droits à un abonné.
+_TIER_RANK = {"visitor": 0, "rookie": 1, "racer": 2, "team": 3}
+
+
+def _trial_tier_if_active(profile: Optional[dict[str, Any]]) -> Optional[str]:
+    """Tier accordé par un Paddock Pass encore valide, sinon None."""
+    if not profile:
+        return None
+    until_raw = profile.get("trial_until")
+    if not until_raw:
+        return None
+    try:
+        if hasattr(until_raw, "year"):
+            until = until_raw
+        else:
+            until = datetime.fromisoformat(str(until_raw).replace("Z", "+00:00"))
+        if until.tzinfo is None:
+            until = until.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+    if until <= datetime.now(timezone.utc):
+        return None
+    tier = profile.get("trial_tier")
+    return tier.lower() if tier and tier.lower() in TIER_LIMITS else None
+
+
 def get_subscription_tier(user_id: str) -> str:
-    """Retourne le tier de l'utilisateur (rookie, racer, team)."""
+    """
+    Tier EFFECTIF du pilote : abonnement payé ou Paddock Pass en cours.
+
+    Le pass écrit son tier dans `trial_tier` / `trial_until`, sans toucher à
+    `subscription_tier`. Tout ce qui lisait ce dernier — Mon Kart, les Réglages —
+    refusait donc l'accès à quelqu'un dont le pass venait d'être activé : il
+    voyait le compte à rebours tourner sans pouvoir ouvrir les outils.
+
+    Une seule fonction résout désormais la question, et l'essai ne peut que
+    monter les droits, jamais les redescendre : un abonné Team qui utilise un
+    pass Racer reste Team.
+    """
     profile = _fetch_profile(user_id)
-    return _parse_tier(profile.get("subscription_tier") if profile else None)
+    paid = _parse_tier(profile.get("subscription_tier") if profile else None)
+    trial = _trial_tier_if_active(profile)
+    if trial and _TIER_RANK.get(trial, 0) > _TIER_RANK.get(paid, 0):
+        return trial
+    return paid
 
 
 def _reset_monthly_count(user_id: str) -> bool:

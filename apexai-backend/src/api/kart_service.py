@@ -27,17 +27,20 @@ else:
 class KartService:
     @staticmethod
     def get_subscription_tier(user_id: str) -> str:
-        """Fetch the user's subscription tier. Defaults to rookie."""
-        if not supabase:
-            return "rookie"
+        """
+        Tier effectif du pilote — délégué à la source unique.
+
+        Cette méthode lisait `subscription_tier` en direct, ignorant donc les
+        Paddock Pass : Mon Kart et les Réglages restaient verrouillés pendant
+        tout l'essai. Deux implémentations de la même question finissent
+        toujours par répondre différemment.
+        """
         try:
-            res = supabase.table("profiles").select("subscription_tier").eq("id", user_id).limit(1).execute()
-            if res.data and len(res.data) > 0:
-                tier = res.data[0].get("subscription_tier")
-                return tier.lower() if tier else "rookie"
+            from src.core.subscription_service import get_subscription_tier as _tier
+            return _tier(user_id)
         except Exception as e:
             logger.error(f"Error checking tier for {user_id}: {e}")
-        return "rookie"
+            return "rookie"
 
     @staticmethod
     def is_racer_or_team(user_id: str) -> bool:
