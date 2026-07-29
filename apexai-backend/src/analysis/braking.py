@@ -63,8 +63,26 @@ SMOOTH_LENGTH_M = 12.0
 # faisait démarrer les bandes « beaucoup trop tôt ».
 BRAKE_ENTER_G = 0.25
 BRAKE_EXIT_G = 0.15
-# Remise des gaz : seule une accélération franche vient de l'accélérateur.
+# Remise des gaz après un freinage : on cherche une relance FRANCHE, sortie de
+# virage. Ce seuil sert à borner le temps mort, pas à colorer la trace.
 THROTTLE_ON_G = 0.12
+
+# ─── Coloration de la trace ─────────────────────────────────────────────────
+# Un kart ne maintient JAMAIS sa vitesse sans gaz : hors accélérateur, la
+# traînée le ralentit toujours. Donc dès que la vitesse cesse de baisser, le
+# pilote est sur l'accélérateur — c'est un fait mécanique, pas un réglage.
+#
+# Utiliser THROTTLE_ON_G (0,12 g) pour la couleur était une erreur : à vitesse
+# de pointe, pleins gaz ne produit quasiment plus d'accélération puisque la
+# traînée compense le moteur. La ligne droite la plus rapide du circuit se
+# retrouvait donc peinte en « ni frein ni gaz », soit un quart du tour en gris
+# sans signification.
+PHASE_ON_THROTTLE_G = -0.03
+
+# Longueur minimale d'une phase affichée. En dessous, c'est du bruit de mesure
+# et non un geste de pilotage : un mouchetis de gris au milieu d'une ligne
+# droite n'apprend rien et abîme la lecture de la carte.
+PHASE_MIN_RUN_M = 15.0
 
 # ─── Validation d'un événement de freinage ──────────────────────────────────
 MIN_PEAK_G = 0.35
@@ -886,20 +904,59 @@ def get_braking_analysis(
     return result
 
 
+def _despeckle(labels: List[str], s: np.ndarray, min_run_m: float) -> List[str]:
+    """
+    Absorbe les phases trop courtes pour être un geste de pilotage.
+
+    Autour d'un seuil, un signal bruité oscille : on obtient un mouchetis de
+    trois points gris au milieu d'une ligne droite, qui n'apprend rien au pilote
+    et brouille la lecture de la carte. Chaque passage trop court est rattaché à
+    son voisin le plus long — jamais inventé, seulement absorbé.
+    """
+    n = len(labels)
+    if n < 3:
+        return labels
+    out = list(labels)
+    i = 0
+    while i < n:
+        j = i
+        while j + 1 < n and out[j + 1] == out[i]:
+            j += 1
+        length = float(s[j] - s[i]) if np.isfinite(s[i]) and np.isfinite(s[j]) else 0.0
+        if length < min_run_m and (i > 0 or j < n - 1):
+            before = out[i - 1] if i > 0 else None
+            after = out[j + 1] if j + 1 < n else None
+            fill = before if before is not None else after
+            if before is not None and after is not None and before != after:
+                # Entre deux phases différentes, on prolonge celle d'AVANT :
+                # une transition appartient à ce qui la précède.
+                fill = before
+            if fill is not None:
+                for k in range(i, j + 1):
+                    out[k] = fill
+        i = j + 1
+    return out
+
+
 def phase_labels(lap_df: pd.DataFrame, analysis: Optional[Dict[str, Any]] = None) -> List[str]:
     """
     Phase de pilotage en chaque point d'un tour : « braking », « coasting » ou
     « acceleration ».
 
-    Deux couches, dans cet ordre :
+    Trois couches, dans cet ordre :
 
-    1. Une base calculée sur l'accélération longitudinale mesurée, qui couvre
-       TOUT le tour. Sans elle, la portion précédant le premier freinage
-       — typiquement la ligne droite des stands, pleins gaz — restait sans
-       étiquette et s'affichait en gris « ni frein ni gaz » sur la carte.
-    2. Les zones de freinage détectées, qui écrasent la base. C'est ce qui
-       garantit que la trace colorée et la bande de freinage racontent la même
-       chose : la bande ne peut pas déborder de sa phase.
+    1. Une base physique couvrant TOUT le tour. Le critère d'accélération n'est
+       pas « le kart accélère fort » mais « le kart ne perd plus de vitesse » :
+       hors accélérateur, la traînée le ralentit toujours, donc une vitesse
+       stable prouve que le pilote est sur les gaz. C'est ce qui évite de
+       peindre en gris la ligne droite la plus rapide du circuit, où pleins gaz
+       ne produit presque plus d'accélération.
+    2. Les zones de freinage détectées, qui écrasent la base. La bande colorée
+       et la trace racontent ainsi exactement la même chose.
+    2 bis. Un nettoyage des phases trop courtes, appliqué AVANT les zones
+       mesurées pour ne jamais effacer un freinage court.
+
+    Le « coasting » qui subsiste est donc du vrai temps mort : ni frein, ni gaz.
     """
     n = len(lap_df)
     if n == 0 or "cumulative_distance" not in lap_df.columns:
@@ -922,34 +979,37 @@ def phase_labels(lap_df: pd.DataFrame, analysis: Optional[Dict[str, Any]] = None
         if a is not None:
             labels = [
                 "braking" if x < -BRAKE_ENTER_G
-                else "acceleration" if x > THROTTLE_ON_G
+                else "acceleration" if x >= PHASE_ON_THROTTLE_G
                 else "coasting"
                 for x in a
             ]
 
-    if not analysis:
-        return labels
+    # ── Couche 2 : nettoyage du bruit, AVANT de poser les zones mesurées ─────
+    # L'ordre compte. Nettoyer après aurait effacé les zones de freinage les
+    # plus courtes (un événement fait 4 m au minimum, le seuil de nettoyage
+    # 15 m), et un repère se serait retrouvé hors de sa propre phase.
+    labels = _despeckle(labels, s, PHASE_MIN_RUN_M)
 
-    lap_vals = (
-        pd.to_numeric(lap_df["lap_number"], errors="coerce")
-        if "lap_number" in lap_df.columns else None
-    )
-    lap_no = (
-        int(lap_vals.iloc[0])
-        if lap_vals is not None and len(lap_vals) and pd.notna(lap_vals.iloc[0])
-        else None
-    )
-    events = [e for e in analysis.get("events", []) if lap_no is None or e["lap"] == lap_no]
-    if not events:
-        return labels
+    # ── Couche 3 : les zones détectées font autorité ─────────────────────────
+    if analysis:
+        lap_vals = (
+            pd.to_numeric(lap_df["lap_number"], errors="coerce")
+            if "lap_number" in lap_df.columns else None
+        )
+        lap_no = (
+            int(lap_vals.iloc[0])
+            if lap_vals is not None and len(lap_vals) and pd.notna(lap_vals.iloc[0])
+            else None
+        )
+        for e in (analysis.get("events") or []):
+            if lap_no is not None and e["lap"] != lap_no:
+                continue
+            # Freinage : exactement l'étendue de la bande dessinée sur la carte.
+            for i in np.flatnonzero((s >= e["start_s"]) & (s <= e["end_s"])):
+                labels[int(i)] = "braking"
+            # Temps mort : entre le relâcher de frein et la remise des gaz.
+            if e["throttle_s"] > e["end_s"]:
+                for i in np.flatnonzero((s > e["end_s"]) & (s < e["throttle_s"])):
+                    labels[int(i)] = "coasting"
 
-    # ── Couche 2 : les zones détectées font autorité ─────────────────────────
-    for e in events:
-        # Freinage : exactement l'étendue de la bande dessinée sur la carte.
-        for i in np.flatnonzero((s >= e["start_s"]) & (s <= e["end_s"])):
-            labels[int(i)] = "braking"
-        # Temps mort : entre le relâcher de frein et la remise des gaz.
-        if e["throttle_s"] > e["end_s"]:
-            for i in np.flatnonzero((s > e["end_s"]) & (s < e["throttle_s"])):
-                labels[int(i)] = "coasting"
     return labels

@@ -472,3 +472,50 @@ def test_no_long_unlabelled_stretch_in_driving_phases(analysis):
     assert longest < len(phases) * 0.2, (
         f"{longest}/{len(phases)} points consécutifs sans phase identifiée"
     )
+
+
+def test_grey_phase_is_rare_and_meaningful(analysis):
+    """Le gris « ni frein ni gaz » doit rester une exception mesurée.
+
+    Régression : le seuil d'accélération exigeait +0,12 g pour considérer que
+    le pilote était sur les gaz. Or à vitesse de pointe, pleins gaz ne produit
+    presque plus d'accélération — la traînée compense le moteur. La ligne
+    droite la plus rapide du circuit se retrouvait donc peinte en gris, soit un
+    quart du tour sans signification et absent de la légende.
+
+    Un kart ne maintient jamais sa vitesse sans gaz : dès qu'elle cesse de
+    baisser, le pilote est sur l'accélérateur.
+    """
+    # Sur un tour de sortie de stand, le pilote roule vraiment au ralenti :
+    # beaucoup de roue libre y est légitime. On juge donc les tours
+    # représentatifs, ceux-là mêmes qui servent au reste de l'analyse.
+    used = set((analysis.get("ideal_lap") or {}).get("laps_used") or [])
+    laps = [
+        l for l in (analysis.get("plot_data") or {}).get("trajectory_2d", {}).get("laps", [])
+        if not l.get("is_synthetic") and l.get("phase")
+        and (not used or l.get("lap_number") in used)
+    ]
+    if not laps:
+        pytest.skip("aucun tour représentatif avec phases")
+
+    for lap in laps:
+        phases = lap["phase"]
+        grey = phases.count("coasting") / len(phases)
+        assert grey < 0.15, (
+            f"tour {lap.get('lap_number')} : {grey:.0%} du tour en « ni frein ni gaz »"
+        )
+        # Chaque zone grise doit correspondre à quelque chose : soit le temps
+        # mort mesuré après un freinage, soit un vrai lever de pied. Leur nombre
+        # est donc borné par celui des zones de freinage, avec une marge pour
+        # les levers de pied hors virage. Au-delà, c'est du mouchetis de bruit.
+        braking_zones = sum(
+            1 for c in analysis["corner_analysis"] if c.get("has_braking_zone")
+        )
+        runs = sum(
+            1 for i in range(1, len(phases))
+            if phases[i] == "coasting" and phases[i - 1] != "coasting"
+        )
+        assert runs <= braking_zones + 3, (
+            f"tour {lap.get('lap_number')} : {runs} zones grises pour "
+            f"{braking_zones} zones de freinage — mouchetis probable"
+        )
