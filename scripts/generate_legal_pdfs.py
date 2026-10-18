@@ -77,7 +77,7 @@ def build_cgv(path: Path):
     story.append(Paragraph("<b>Article 5 &ndash; Remboursement</b>", styles["LegalHeading"]))
     story.append(Paragraph(
         "Délai de rétractation de 14 jours à compter de la souscription, conformément à la directive "
-        "consommateurs. Demande par email à contact@apexai.run.",
+        "consommateurs. Demande par email à contact@apexai.racing.",
         styles["LegalBody"]))
     story.append(Spacer(1, 0.3*cm))
 
@@ -85,7 +85,7 @@ def build_cgv(path: Path):
     story.append(Paragraph(
         "Conformément au RGPD 2026, les données personnelles font l'objet d'un traitement strict. "
         f"Responsable du traitement : {SOCIETE}. Droits : accès, rectification, effacement, portabilité, "
-        "opposition. Contact : contact@apexai.run.",
+        "opposition. Contact : contact@apexai.racing.",
         styles["LegalBody"]))
     story.append(Spacer(1, 0.3*cm))
 
@@ -93,7 +93,7 @@ def build_cgv(path: Path):
     story.append(Paragraph(
         f"{SOCIETE}, {VILLE} France<br/>"
         f"{ADRESSE}<br/>"
-        "Email : contact@apexai.run",
+        "Email : contact@apexai.racing",
         styles["LegalBody"]))
 
     doc.build(story)
@@ -157,7 +157,7 @@ def build_cgu(path: Path):
     story.append(Paragraph(
         f"{SOCIETE}, {VILLE} France<br/>"
         f"{ADRESSE}<br/>"
-        "Email : contact@apexai.run",
+        "Email : contact@apexai.racing",
         styles["LegalBody"]))
 
     doc.build(story)
