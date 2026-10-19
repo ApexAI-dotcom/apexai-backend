@@ -40,6 +40,13 @@ ENRICHMENT_CHANNELS = {                                         # analyses bonus
 # Signatures d'identification par appareil (motifs cherchés dans l'en-tête brut)
 DEVICE_SIGNATURES = [
     {
+        # Fichier .xrk/.xrz natif converti par src/core/xrk_loader.py
+        "device": "AiM (fichier .xrk natif)",
+        "family": "aim",
+        "patterns": [r'"Device",\s*"AiM XRK"'],
+        "min_matches": 1,
+    },
+    {
         "device": "AiM (export MoTeC CSV)",
         "family": "aim",
         "patterns": [r'"Format",\s*"MoTeC CSV File"', r'"Device",\s*"AiM'],

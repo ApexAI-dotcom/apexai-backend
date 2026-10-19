@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, R
 from pydantic import BaseModel
 
 from src.core.kart_mechanical import parse_kart_mechanical
+from src.core.xrk_loader import normalize_upload
 from src.api.kart_service import KartService
 from src.api.auth import get_current_user
 from src.api.config import settings
@@ -83,8 +84,10 @@ async def bulk_import_sessions(files: List[UploadFile] = File(...), current_user
     for file in files:
         temp_path = None
         try:
-            temp_path = os.path.join(settings.TEMP_DIR, f"kart_imp_{uuid.uuid4().hex[:8]}_{file.filename}")
             content = await file.read()
+            # .xrk / .xrz (AiM natif) -> CSV « MoTeC CSV File » ; les CSV passent tels quels
+            content, saved_name = await normalize_upload(content, file.filename)
+            temp_path = os.path.join(settings.TEMP_DIR, f"kart_imp_{uuid.uuid4().hex[:8]}_{saved_name}")
             with open(temp_path, "wb") as f:
                 f.write(content)
                 

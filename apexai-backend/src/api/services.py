@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 
 from src.core.data_loader import robust_load_telemetry
+from src.core.xrk_loader import normalize_upload
 from src.core.signal_processing import apply_savgol_filter
 from src.analysis.geometry import (
     calculate_trajectory_geometry,
@@ -846,10 +847,11 @@ class AnalysisService:
         """
         temp_path = None
         try:
-            temp_path = os.path.join(settings.TEMP_DIR, f"parse_laps_{uuid.uuid4().hex[:8]}_{file.filename}")
             content = await file.read()
             if len(content) > 50 * 1024 * 1024:
                 raise ValueError("Fichier trop volumineux (max 50 MB).")
+            content, saved_name = await normalize_upload(content, file.filename)
+            temp_path = os.path.join(settings.TEMP_DIR, f"parse_laps_{uuid.uuid4().hex[:8]}_{saved_name}")
             with open(temp_path, "wb") as f:
                 f.write(content)
             await file.seek(0)
@@ -916,17 +918,18 @@ class AnalysisService:
         
         try:
             # 1. Sauvegarder fichier temporairement
-            temp_path = os.path.join(
-                settings.TEMP_DIR,
-                f"{analysis_id}_{file.filename}"
-            )
-            
             content = await file.read()
             MAX_SIZE = 50 * 1024 * 1024  # 50MB
             if len(content) > MAX_SIZE:
                 raise ValueError(
                     f"Fichier trop volumineux ({len(content)/1024/1024:.1f}MB). Limite : 50MB."
                 )
+            # .xrk / .xrz (AiM natif) -> CSV « MoTeC CSV File » ; les CSV passent tels quels
+            content, saved_name = await normalize_upload(content, file.filename)
+            temp_path = os.path.join(
+                settings.TEMP_DIR,
+                f"{analysis_id}_{saved_name}"
+            )
             with open(temp_path, "wb") as f:
                 f.write(content)
             
