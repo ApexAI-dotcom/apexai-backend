@@ -14,6 +14,8 @@ python-dotenv>=1.0.0
 stripe>=15.0.0,<16.0.0
 httpx>=0.26.0
 duckdb>=0.9.0
+# Lecture native des fichiers AiM RaceStudio (.xrk / .xrz) — licence MIT
+libxrk>=0.13.0,<1.0
 python-multipart
 redis>=5.0.0
 supabase>=2.0.0

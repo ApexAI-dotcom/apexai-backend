@@ -13,6 +13,7 @@ from typing import Optional, Any, Dict, List
 from fastapi import UploadFile
 
 from .config import settings
+from src.core.xrk_loader import XRK_EXTENSIONS
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +62,8 @@ async def validate_csv_file(file: UploadFile, content_override: Optional[bytes] 
             return "Nom de fichier manquant"
         
         ext = os.path.splitext(file.filename.lower())[1]
-        if ext != '.csv':
-            return f"Extension invalide. Attendu: .csv, reçu: {ext}"
+        if ext != '.csv' and ext not in XRK_EXTENSIONS:
+            return f"Extension invalide. Attendu: .csv, .xrk ou .xrz, reçu: {ext}"
         
         # Lire contenu ou utiliser l'override
         if content_override is not None:
@@ -80,8 +81,12 @@ async def validate_csv_file(file: UploadFile, content_override: Optional[bytes] 
             return f"Fichier trop gros ({size_mb:.1f}MB). Max: {settings.MAX_FILE_SIZE_MB}MB"
         
         if size < 1000:
-            return "Fichier trop petit (<1KB). Vérifiez que c'est un CSV valide."
-        
+            return "Fichier trop petit (<1KB). Vérifiez que c'est un fichier de télémétrie valide."
+
+        # Fichiers AiM natifs : binaires, la présence du GPS est vérifiée à la conversion
+        if ext in XRK_EXTENSIONS:
+            return None
+
         # Vérifier encoding et contenu
         try:
             sample = content[:5000].decode('utf-8')
