@@ -135,7 +135,7 @@ def compute_setup_advice(
                          f"le kart dans les virages serrés. ASTUCE : retirer la barre de torsion avant pour aider à pivoter.")
         elif fast_corners >= 4:
             front_w = 118
-            front_msg = (f"{fast_corners} courbes rapides mesurées (apex moyen élevé) : rentrer l'avant à 118 cm pour "
+            front_msg = (f"{fast_corners} courbes rapides mesurées (vitesse élevée au point de corde) : rentrer l'avant à 118 cm pour "
                          f"limiter l'agressivité et stabiliser le kart à haute vitesse. ASTUCE : insérer la barre de torsion avant.")
     recs["trackWidthRear"] = _rec("trackWidthRear", rear_w, rear_msg, "high" if (is_rain or grip.startswith("gomm")) else "low")
     recs["trackWidthFront"] = _rec("trackWidthFront", front_w, front_msg, "medium")

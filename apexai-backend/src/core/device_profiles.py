@@ -47,7 +47,7 @@ DEVICE_SIGNATURES = [
         "min_matches": 1,
     },
     {
-        "device": "AiM (export MoTeC CSV)",
+        "device": "AiM (export Race Studio)",
         "family": "aim",
         "patterns": [r'"Format",\s*"MoTeC CSV File"', r'"Device",\s*"AiM'],
         "min_matches": 1,

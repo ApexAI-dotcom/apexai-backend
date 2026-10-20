@@ -59,7 +59,7 @@ TIPS_POOL: List[Dict[str, str]] = [
         "badge": "Populaire",
         "badge_color": "purple",
         "title": "Le regard en sortie",
-        "body": "Regarde toujours la sortie du virage, pas l'apex. Ta trajectoire suivra ton regard.",
+        "body": "Regarde toujours la sortie du virage, pas le point de corde. Ta trajectoire suivra ton regard.",
     },
     {
         "badge": "Astuce",
@@ -141,7 +141,7 @@ def _cache_invalidate(user_id: str) -> None:
 # Weak-point label mapping
 # ---------------------------------------------------------------------------
 CATEGORY_LABELS = {
-    "apex_precision": "Précision d'apex",
+    "apex_precision": "Précision au point de corde",
     "trajectory_consistency": "Régularité trajectoire",
     "apex_speed": "Vitesse en virage",
     "sector_times": "Temps secteurs",

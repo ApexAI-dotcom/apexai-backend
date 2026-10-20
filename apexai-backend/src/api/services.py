@@ -187,14 +187,14 @@ def _run_analysis_pipeline_sync(
 
     # PRE-GATES
     if len(df) < 50:
-        raise ValueError(f"CSV invalide: pas assez de données exploitables ({len(df)} lignes, min 50).")
+        raise ValueError(f"Fichier invalide: pas assez de données exploitables ({len(df)} lignes, min 50).")
     
     if "time" in df.columns:
         times = df["time"].dropna()
         if len(times) >= 2:
             total_duration = times.max() - times.min()
             if total_duration < 2.0:
-                raise ValueError(f"CSV invalide: la durée totale ({total_duration:.1f}s) est anormalement courte (< 2s).")
+                raise ValueError(f"Fichier invalide: la durée totale ({total_duration:.1f}s) est anormalement courte (< 2s).")
             elif total_duration > 86400:
                 logger.warning(f"[{analysis_id}] Durée totale anormalement longue ({total_duration:.1f}s).")
 
@@ -750,7 +750,7 @@ def _run_analysis_pipeline_sync(
             raise ValueError(f"Analyse rejetée: le meilleur temps calculé ({best_lap_time:.2f}s) est incohérent. Trace GPS erronée.")
         
         if len(valid_laps_dict) <= 1 and session_duration > 300.0 and (max_speed or 0) > 40.0:
-            raise ValueError("Analyse rejetée: détection des tours incohérente (session interprétée comme un seul tour). Vérifiez le CSV/export.")
+            raise ValueError("Analyse rejetée: détection des tours incohérente (session interprétée comme un seul tour). Vérifiez le fichier de session.")
         
         if best_lap_time < 5.0:
             raise ValueError(f"Analyse rejetée: le meilleur temps calculé ({best_lap_time:.2f}s) est anormalement court (< 5s).")

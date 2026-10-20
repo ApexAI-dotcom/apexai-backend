@@ -313,7 +313,7 @@ def _validate_data(df: pd.DataFrame) -> Tuple[bool, pd.DataFrame, List[str]]:
         return False, df_clean, [
             f"Error: Fichier non reconnu ou incompatible. "
             f"Lignes : {n_raw}, colonnes détectées : {cols}. "
-            f"Format supporté : AiM/MoTeC CSV avec colonnes GPS (latitude, longitude, speed)."
+            f"Format supporté : fichier de session AiM (le .xrk de Race Studio) avec GPS (latitude, longitude, vitesse)."
         ]
     
     # Vérifier colonnes requises

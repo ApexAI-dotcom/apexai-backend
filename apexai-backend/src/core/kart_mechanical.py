@@ -92,7 +92,7 @@ def parse_kart_mechanical(filepath: str) -> Dict[str, Any]:
             df = _parse_with_pandas(filepath, skiprows, 'latin-1')
         
         if df is None or len(df) == 0:
-            result["error"] = "Failed to parse CSV file."
+            result["error"] = "Fichier de session illisible."
             return result
         
         # Compute aggregates without downsampling

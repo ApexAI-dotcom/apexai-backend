@@ -111,15 +111,15 @@ def xrk_to_motec_csv(content: bytes) -> bytes:
     except Exception as e:
         logger.warning(f"xrk_unreadable: {type(e).__name__}: {str(e)[:120]}")
         raise XrkImportError(
-            "Fichier .xrk illisible ou corrompu. Réessaie avec le fichier d'origine, "
-            "ou exporte la session en CSV depuis RaceStudio."
+            "Fichier .xrk illisible ou corrompu. Réessaie avec le fichier d'origine "
+            "de Race Studio."
         ) from e
 
     # libxrk est tolérant : un fichier qui n'est pas un .xrk donne une session vide, sans exception.
     if not log.channels:
         raise XrkImportError(
             "Fichier .xrk illisible ou vide (aucun canal trouvé). Vérifie que c'est bien le fichier "
-            "d'origine de l'enregistreur, ou exporte la session en CSV depuis RaceStudio."
+            "d'origine de l'enregistreur, tel qu'il sort de Race Studio."
         )
 
     missing = [c for c in _GPS_REQUIRED if c not in log.channels]

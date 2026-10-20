@@ -270,7 +270,7 @@ def plot_lap_comparison(df: pd.DataFrame, save_path: str) -> bool:
             ax.set_xticks(sorted(set(x_corner)))
             ax.set_xticklabels([f'V{x}' for x in sorted(set(x_corner))], color=COLOR_TEXT)
             ax.legend(fontsize=9)
-            _style_ax(ax, 'Stats Comparaison tours — Vitesse apex par virage', 'Virage', 'Vitesse apex (km/h)')
+            _style_ax(ax, 'Comparaison des tours — Vitesse au point de corde par virage', 'Virage', 'Vitesse au point de corde (km/h)')
             fig.tight_layout()
             plt.savefig(save_path, dpi=DPI, bbox_inches='tight', facecolor=BG_DARK)
             plt.close(fig)
@@ -396,7 +396,7 @@ def plot_speed_trace(df: pd.DataFrame, save_path: str) -> bool:
                 apex_s = speed[apex_mask.values]
                 ax.scatter(apex_d, apex_s, marker='v', s=80, 
                           color=COLOR_ORANGE, edgecolors=BG_DARK,
-                          linewidths=0.5, zorder=5, label='Apex')
+                          linewidths=0.5, zorder=5, label='Point de corde')
         
         # Secteurs
         if len(dist) > 0 and not np.isnan(dist[-1]):
@@ -591,7 +591,7 @@ def plot_apex_precision(df: pd.DataFrame, save_path: str) -> bool:
             ax.text(dev + 0.05, pos, f'{dev:.1f}m', 
                    va='center', fontsize=8, color=COLOR_MUTED)
         
-        _style_ax(ax, 'Apex Précision Apex — Écart par Virage', 
+        _style_ax(ax, 'Précision au point de corde — Écart par virage', 
                  'Écart (m)', '')
         ax.legend(fontsize=9)
         
@@ -664,7 +664,7 @@ def plot_speed_delta_by_corner(df: pd.DataFrame, save_path: str) -> bool:
         for i, d in enumerate(deltas):
             if abs(d) >= 0.5:
                 ax.text(i, d + (0.5 if d >= 0 else -0.5), f'{d:+.1f}', ha='center', va='bottom' if d >= 0 else 'top', fontsize=8, color=COLOR_MUTED)
-        _style_ax(ax, 'Trace Vitesse apex — Marge par virage (optimal − réel)', '', 'km/h')
+        _style_ax(ax, 'Vitesse au point de corde — Marge par virage (optimal − réel)', '', 'km/h')
         fig.tight_layout()
         plt.savefig(save_path, dpi=DPI, bbox_inches='tight', facecolor=BG_DARK)
         plt.close(fig)
@@ -675,12 +675,12 @@ def plot_speed_delta_by_corner(df: pd.DataFrame, save_path: str) -> bool:
 
 
 def plot_corner_performance_matrix(df: pd.DataFrame, save_path: str) -> bool:
-    """Heatmap : virages en colonnes, métriques en lignes (Vitesse Apex %, Précision Apex, G Latéral, Temps Perdu). Vert/orange/rouge."""
+    """Heatmap : virages en colonnes, métriques en lignes (Vitesse point de corde %, Précision point de corde, G Latéral, Temps Perdu). Vert/orange/rouge."""
     try:
         corner_analysis = df.attrs.get('corner_analysis', [])
         if not corner_analysis:
             return False
-        row_labels = ['Vitesse Apex %', 'Précision Apex', 'G Latéral', 'Temps Perdu']
+        row_labels = ['Vitesse point de corde %', 'Précision point de corde', 'G Latéral', 'Temps Perdu']
         col_labels = [f"V{c.get('corner_id', 0)}" for c in corner_analysis]
         data = []
         for _ in row_labels:
@@ -785,7 +785,7 @@ def plot_performance_score_breakdown(df: pd.DataFrame, save_path: str) -> bool:
             overall = sum(breakdown.values()) if breakdown else 0.0
         grade = score_data.get('grade', 'C')
 
-        categories = ['Précision Apex', 'Régularité', 'Vitesse Apex', 'Temps Secteurs']
+        categories = ['Précision point de corde', 'Régularité', 'Vitesse point de corde', 'Temps Secteurs']
         values = [
             breakdown.get('apex_precision', 0.0),
             breakdown.get('trajectory_consistency', 0.0),
@@ -1087,7 +1087,7 @@ def generate_plot_data(df: pd.DataFrame) -> Dict[str, Any]:
         if 'score_data' in df.attrs:
             breakdown = df.attrs['score_data'].get('breakdown', {})
             plot_data["performance_radar"] = {
-                "axes": ["Précision Apex", "Régularité", "Vitesse Apex", "Secteurs"],
+                "axes": ["Précision point de corde", "Régularité", "Vitesse point de corde", "Secteurs"],
                 # float natifs : les float64 numpy ne sont pas sérialisables en JSON
                 "values": [
                     round(float(breakdown.get('apex_precision', 0) or 0), 1),
