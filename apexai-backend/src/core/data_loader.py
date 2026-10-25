@@ -76,6 +76,11 @@ def _detect_format(file_path: str) -> int:
     Returns:
         Nombre de lignes à ignorer (skiprows)
     """
+    header_row = _find_channel_header_row(file_path)
+    if header_row is not None:
+        return header_row
+    # Repli historique, pour un fichier dont on ne reconnaît pas la ligne des
+    # canaux : l'en-tête RaceStudio standard fait 14 lignes.
     try:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             for i, line in enumerate(f):
@@ -87,6 +92,50 @@ def _detect_format(file_path: str) -> int:
         return 0  # Format standard : pas de skip
     except Exception:
         return 0
+
+
+# Les métadonnées des exports (RaceStudio, Alfano, Unipro…) ne dépassent jamais
+# quelques dizaines de lignes.
+_CHANNEL_HEADER_SCAN_LINES = 60
+
+
+def _find_channel_header_row(file_path: str) -> Optional[int]:
+    """
+    Index de la ligne qui porte les NOMS des canaux (Time, GPS Latitude…).
+
+    On sautait 14 lignes dès que « aim » apparaissait dans l'en-tête. C'est juste
+    pour un export RaceStudio complet, mais la longueur de l'en-tête varie : un
+    export AiM CSV sans passage sur la ligne n'a ni « Beacon Markers » ni
+    « Segment Times », et le saut fixe avalait alors les premières données. On
+    cherche donc la ligne elle-même : un champ de temps, une latitude, une
+    longitude. Les métadonnées (« Time », « 9:00 AM ») n'en ont que deux champs.
+
+    Returns:
+        L'index de la ligne (= lignes à ignorer avant elle), ou None.
+    """
+    import csv
+
+    def _is_time(name: str) -> bool:
+        return name in ('time', 'temps', 'timestamp', 'time_s', 'time (s)', 'time_ms', 'time ms', 't')
+
+    try:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore', newline='') as f:
+            sample = f.read(256 * 1024)
+        delimiter = ';' if sample.count(';') > sample.count(',') else ','
+        for i, row in enumerate(csv.reader(sample.splitlines(), delimiter=delimiter)):
+            if i >= _CHANNEL_HEADER_SCAN_LINES:
+                break
+            names = [c.strip().strip('"').lstrip('﻿').lower() for c in row]
+            if len(names) < 3:
+                continue
+            has_time = any(_is_time(n) for n in names)
+            has_lat = any('lat' in n for n in names)
+            has_lon = any(('lon' in n or 'lng' in n) for n in names)
+            if has_time and has_lat and has_lon:
+                return i
+    except Exception:
+        return None
+    return None
 
 
 def _parse_with_pandas(file_path: str, skiprows: int, encoding: str = 'utf-8') -> Optional[pd.DataFrame]:
