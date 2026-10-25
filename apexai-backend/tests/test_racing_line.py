@@ -42,8 +42,9 @@ def test_racing_line_is_credible(adria_df):
     assert out["track_length_m"] > 800
     # La ligne min-courbure réduit réellement la courbure (objectif atteint)
     assert out["curvature_reduction_pct"] > 10
-    # Grip calibré dans une plage karting réaliste
-    assert 1.0 <= out["mu_calibrated"] <= 1.55
+    # Grip calibré dans une plage karting réaliste. L'ancien plafond de 1,55 g
+    # était atteint sur toutes les séances réelles : c'était lui qui décidait.
+    assert 1.0 <= out["mu_calibrated"] <= 2.2
     # Temps optimal plausible : plus rapide que le meilleur réel, mais pas absurde
     assert 40 < out["optimal_lap_time_s"] < 52
     # La ligne reste bornée dans un couloir de piste réaliste (pas dans le décor)
@@ -103,3 +104,54 @@ def test_racing_line_safe_without_gps():
     df = pd.DataFrame({"lap_number": [1, 1, 1], "speed": [40, 50, 60]})
     out = build_racing_line(df)
     assert out["available"] is False
+
+
+# ── Calibration sur le chrono réel ──────────────────────────────────────────
+# Le Tour Parfait ne doit répondre qu'à une question : avec CE kart, que
+# donnerait une meilleure trajectoire ? Le modèle est donc d'abord recalé pour
+# reproduire le chrono démontré sur la trajectoire réellement roulée.
+
+def test_model_reproduces_the_demonstrated_lap(adria_df):
+    """Sur la trajectoire roulée, le modèle calibré retrouve le chrono réel."""
+    out = build_racing_line(adria_df)
+    cal = out["calibration"]
+    assert cal["source"] == "meilleur_tour"
+    assert cal["reproduced_s"] == pytest.approx(cal["target_s"], abs=0.05)
+
+
+def test_perfect_lap_never_slower_than_reality(adria_df):
+    out = build_racing_line(adria_df)
+    assert out["optimal_lap_time_s"] <= out["calibration"]["best_real_s"] + 1e-6
+
+
+def test_measured_ideal_is_the_reference_when_given(adria_df):
+    """Avec l'idéal mesuré (meilleurs secteurs), le Tour Parfait passe dessous."""
+    base = build_racing_line(adria_df)
+    ideal = round(base["calibration"]["best_real_s"] - 1.0, 3)
+    out = build_racing_line(adria_df, target_lap_time_s=ideal)
+    assert out["calibration"]["source"] == "ideal_mesure"
+    assert out["calibration"]["target_s"] == pytest.approx(ideal)
+    assert out["optimal_lap_time_s"] <= ideal + 1e-6
+
+
+def test_target_slower_than_best_lap_is_ignored(adria_df):
+    """Un étalon plus lent que le meilleur tour ne peut pas dégrader l'objectif."""
+    base = build_racing_line(adria_df)
+    best = base["calibration"]["best_real_s"]
+    out = build_racing_line(adria_df, target_lap_time_s=best + 5.0)
+    assert out["calibration"]["target_s"] == pytest.approx(best)
+
+
+def test_gain_comes_from_the_line_only(adria_df):
+    """Le gain annoncé reste dans l'ordre de grandeur d'une trajectoire : pas
+    les 5 à 7 % d'avant, quand le modèle prêtait au kart un meilleur moteur."""
+    out = build_racing_line(adria_df)
+    best = out["calibration"]["best_real_s"]
+    gain_pct = 100 * (best - out["optimal_lap_time_s"]) / best
+    assert 0 <= gain_pct < 4.5
+
+
+def test_dry_session_is_not_reported_as_contradicting_dry(adria_df):
+    """Une séance sèche déclarée sèche ne doit jamais déclencher l'alerte."""
+    out = build_racing_line(adria_df)
+    assert out["conditions_mismatch"] is False
