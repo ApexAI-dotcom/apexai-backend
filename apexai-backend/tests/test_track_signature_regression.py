@@ -7,7 +7,8 @@ La fixture est une session réelle (A. Giardelli, Adria Karting Raceway)
 tronquée à 4 tours et gzippée. À chaque évolution du pipeline (data_loader,
 geometry, track_signature), ce test garantit que la signature de piste
 mesurée reste stable :
-    rapide / horaire / 0 épingle / >=4 virages rapides / ~1180-1260 m.
+    rapide / horaire / 12 virages ≈ 4 épingles + 6 moyens + 2 rapides / ~1180-1260 m.
+La nature des virages est relative à la vitesse de pointe (voir track_signature).
 
 Lancement :  python -m pytest tests/ -v   (ou python tests/test_track_signature_regression.py)
 """
@@ -66,8 +67,13 @@ def test_adria_signature_regression():
     # Signature attendue de la piste d'Adria (mesurée sur cette session)
     assert sig["speed_ratio"] == "rapide", sig
     assert sig["rotation"] == "horaire", sig
-    assert sig["hairpins_count"] == 0, sig
-    assert sig["fast_corners_count"] >= 4, sig
+    # Adria a de vraies épingles : avec l'ancien seuil fixe (45 km/h) on en
+    # comptait 0, et les virages moyens n'étaient comptés nulle part.
+    assert 3 <= sig["hairpins_count"] <= 5, sig
+    assert 1 <= sig["fast_corners_count"] <= 3, sig
+    assert sig["hairpins_count"] + sig["medium_corners_count"] + sig["fast_corners_count"] == sig["corners_total"], sig
+    assert len(sig["corner_kinds"]) == sig["corners_total"], sig
+    assert 110 <= sig["top_speed_kmh"] <= 125, sig
     assert 9 <= sig["corners_total"] <= 13, sig
     assert 1150 <= sig["track_length_m"] <= 1300, sig
     assert 75 <= sig["avg_apex_speed_kmh"] <= 90, sig
@@ -80,3 +86,17 @@ def test_adria_signature_regression():
 if __name__ == "__main__":
     test_adria_signature_regression()
     print("NON-REGRESSION OK : signature Adria stable")
+
+
+def test_corner_classification_is_relative_to_top_speed():
+    from src.analysis.track_signature import classify_corner
+    # Même virage relatif, karts différents : même nature
+    assert classify_corner(50, 116, 180) == "epingle"   # X30 / KZ
+    assert classify_corner(34, 78, 180) == "epingle"    # kart de location
+    assert classify_corner(100, 116, 40) == "rapide"
+    assert classify_corner(75, 116, 100) == "moyen"
+    # Garde-fou : un virage ouvert n'est jamais une épingle
+    assert classify_corner(50, 116, 45) == "moyen"
+    # Sans vitesse de pointe : anciens seuils absolus
+    assert classify_corner(40, None, None) == "epingle"
+    assert classify_corner(90, None, None) == "rapide"
