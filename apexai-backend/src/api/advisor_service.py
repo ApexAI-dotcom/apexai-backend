@@ -17,9 +17,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 # Seuils de « piste sinueuse » et de « piste rapide ». Depuis que la nature
 # des virages est relative à la vitesse de pointe (track_signature), un
-# circuit compte en général 3 à 5 épingles et 1 à 3 courbes rapides.
+# circuit compte en général 3 à 5 épingles ; 4 courbes rapides ou plus = piste rapide.
 SINUOUS_HAIRPINS = 5
-FAST_TRACK_CORNERS = 3
+FAST_TRACK_CORNERS = 4
 
 logger = logging.getLogger(__name__)
 
