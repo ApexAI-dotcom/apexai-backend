@@ -18,11 +18,16 @@ La fonction est pure (pas d'I/O) et défensive : elle renvoie toujours un dict
 avec `available` indiquant si le calcul a pu être fait (≥ 2 tours valides).
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import warnings
 
 import numpy as np
 import pandas as pd
+
+# Écart maximal entre un passage sur la ligne et le point mesuré le plus proche.
+# Au-delà, le passage ne correspond pas à ce tour (données manquantes, boîtier
+# coupé) : on ne prolonge pas, on garde les points mesurés.
+MAX_LINE_GAP_S = 1.0
 
 
 def _valid_lap_numbers(df: pd.DataFrame) -> List[int]:
@@ -68,6 +73,7 @@ def compute_ideal_lap(
     sector_length_m: float = 25.0,
     min_sectors: int = 8,
     max_sectors: int = 200,
+    lap_bounds_s: Optional[Dict[int, Tuple[float, float]]] = None,
 ) -> Dict[str, Any]:
     """
     Calcule le tour idéal théorique et le temps réel perdu par secteur/virage.
@@ -76,6 +82,9 @@ def compute_ideal_lap(
         df: DataFrame du pipeline (colonnes lap_number, time, cumulative_distance ;
             corner_id optionnel pour l'attribution par virage).
         sector_length_m: longueur cible d'un mini-secteur (mètres).
+        lap_bounds_s: instants exacts de début et de fin de chaque tour
+            (passages sur la ligne). Optionnel ; sans lui, chaque tour va du
+            premier au dernier point mesuré.
 
     Returns:
         dict avec au minimum {available: bool}. Si available:
@@ -110,17 +119,37 @@ def compute_ideal_lap(
                 continue
             order = np.argsort(d)
             d, t = d[order], t[order]
+            corner = None
+            if "corner_id" in g.columns:
+                corner = pd.to_numeric(g["corner_id"], errors="coerce").to_numpy(dtype=float)
+                corner = corner[mask][order]
+            # Le premier et le dernier point mesurés ne tombent jamais pile sur
+            # la ligne : il manque un intervalle d'échantillonnage à chaque bout
+            # du tour (~0,15 s). Quand les passages exacts sont connus, on
+            # prolonge le tour jusqu'à eux, à la vitesse du point voisin. Le tour
+            # idéal et le meilleur tour parlent alors du même chrono que le
+            # boîtier, au millième.
+            if lap_bounds_s and ln in lap_bounds_s:
+                t_start, t_end = lap_bounds_s[ln]
+                gap_in, gap_out = t[0] - t_start, t_end - t[-1]
+                if 0.0 <= gap_in < MAX_LINE_GAP_S and 0.0 <= gap_out < MAX_LINE_GAP_S:
+                    v_in = (d[1] - d[0]) / max(t[1] - t[0], 1e-6)
+                    v_out = (d[-1] - d[-2]) / max(t[-1] - t[-2], 1e-6)
+                    d = np.concatenate(([d[0] - max(v_in, 0.0) * gap_in], d,
+                                        [d[-1] + max(v_out, 0.0) * gap_out]))
+                    t = np.concatenate(([t_start], t, [t_end]))
+                    if corner is not None:
+                        # Sur la ligne, on n'est dans aucun virage.
+                        corner = np.concatenate(([np.nan], corner, [np.nan]))
             d = d - d[0]
             t = t - t[0]
             # Distance strictement croissante pour np.interp
             keep = np.concatenate(([True], np.diff(d) > 1e-6))
             d, t = d[keep], t[keep]
+            if corner is not None:
+                corner = corner[keep]
             if len(d) < 3:
                 continue
-            corner = None
-            if "corner_id" in g.columns:
-                corner = pd.to_numeric(g["corner_id"], errors="coerce").to_numpy(dtype=float)
-                corner = corner[mask][order][keep]
             lap_profiles[ln] = {"dist": d, "time": t, "corner": corner}
             lap_times[ln] = float(t[-1])
             lengths.append(float(d[-1]))

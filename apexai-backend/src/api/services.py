@@ -11,7 +11,7 @@ import logging
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from fastapi import UploadFile
 import numpy as np
 import pandas as pd
@@ -95,6 +95,35 @@ def _filter_laps_with_buffer(
     return df.iloc[pos_sorted].reset_index(drop=True)
 
 
+def _beacon_lap_bounds(df) -> Dict[int, Tuple[float, float]]:
+    """
+    Début et fin EXACTS de chaque tour complet : (passage k-1, passage k).
+
+    Source commune des chronos (_beacon_lap_times) et du tour idéal mesuré,
+    qui en a besoin pour recoudre ses mini-secteurs jusqu'à la ligne.
+    """
+    try:
+        raw = df.attrs.get("beacon_markers") or []
+    except Exception:
+        return {}
+    times: List[float] = []
+    for value in raw:
+        try:
+            t = float(value)
+        except (TypeError, ValueError):
+            continue
+        if np.isfinite(t):
+            times.append(t)
+    times.sort()
+    # Deux passages confondus ne délimitent pas un tour : on les écarte plutôt
+    # que de publier un chrono nul.
+    return {
+        k: (times[k - 1], times[k])
+        for k in range(1, len(times))
+        if times[k] - times[k - 1] > 0
+    }
+
+
 def _beacon_lap_times(df) -> Dict[int, float]:
     """
     Temps EXACTS des tours complets, lus sur les passages sur la ligne.
@@ -116,28 +145,7 @@ def _beacon_lap_times(df) -> Dict[int, float]:
 
     Sans beacons, le dictionnaire est vide et rien ne change.
     """
-    try:
-        raw = df.attrs.get("beacon_markers") or []
-    except Exception:
-        return {}
-    times: List[float] = []
-    for value in raw:
-        try:
-            t = float(value)
-        except (TypeError, ValueError):
-            continue
-        if np.isfinite(t):
-            times.append(t)
-    times.sort()
-    if len(times) < 2:
-        return {}
-    # Deux passages confondus ne délimitent pas un tour : on les écarte plutôt
-    # que de publier un chrono nul.
-    return {
-        k: round(times[k] - times[k - 1], 3)
-        for k in range(1, len(times))
-        if times[k] - times[k - 1] > 0
-    }
+    return {k: round(end - start, 3) for k, (start, end) in _beacon_lap_bounds(df).items()}
 
 
 def _parse_laps_sync(temp_path: str, beacon_markers: list) -> List[Dict[str, Any]]:
@@ -581,7 +589,10 @@ def _run_analysis_pipeline_sync(
     # générés juste après héritent donc de secondes crédibles.
     ideal_lap_data = None
     try:
-        ideal_lap_data = compute_ideal_lap(df)
+        # Bornes exactes des tours : sans elles, le tour idéal se calait sur
+        # les points échantillonnés et affichait un « meilleur tour » différent
+        # de celui du reste de l'analyse (54,15 s au lieu de 54,331 s).
+        ideal_lap_data = compute_ideal_lap(df, lap_bounds_s=_beacon_lap_bounds(df))
         if ideal_lap_data.get("available"):
             losses = ideal_lap_data.get("per_corner_loss_s") or {}
             per_lap = ideal_lap_data.get("per_corner_laps") or {}

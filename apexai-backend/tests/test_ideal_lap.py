@@ -68,3 +68,47 @@ def test_missing_columns_is_safe():
     df = pd.DataFrame({"speed": [50, 60, 70]})
     out = compute_ideal_lap(df)
     assert out["available"] is False
+
+
+# ── Bornes exactes des tours (passages sur la ligne) ────────────────────────
+
+def _synthetic_laps(lap_times, rate_hz=5.0, length_m=1000.0, offset=0.13):
+    """Tours à vitesse constante, échantillonnés sans tomber sur la ligne."""
+    import numpy as np
+    import pandas as pd
+
+    rows, bounds, t0 = [], {}, 0.0
+    for ln, lt in enumerate(lap_times, start=1):
+        bounds[ln] = (t0, t0 + lt)
+        t = np.arange(t0 + offset, t0 + lt, 1.0 / rate_hz)
+        for tt in t:
+            rows.append({"lap_number": ln, "time": tt, "cumulative_distance": (tt - t0) / lt * length_m})
+        t0 += lt
+    return pd.DataFrame(rows), bounds
+
+
+def test_bounds_make_best_lap_match_the_device():
+    """Sans bornes, le meilleur tour est court d'un intervalle de mesure."""
+    df, bounds = _synthetic_laps([50.0, 50.4, 50.8])
+    sampled = compute_ideal_lap(df)
+    exact = compute_ideal_lap(df, lap_bounds_s=bounds)
+    assert sampled["best_real_lap_time_s"] < 50.0 - 0.05
+    assert exact["best_real_lap_time_s"] == pytest.approx(50.0, abs=1e-3)
+
+
+def test_ideal_never_slower_than_best_with_bounds():
+    df, bounds = _synthetic_laps([50.0, 50.4, 50.8])
+    out = compute_ideal_lap(df, lap_bounds_s=bounds)
+    assert out["ideal_lap_time_s"] <= out["best_real_lap_time_s"] + 1e-6
+    assert out["potential_gain_s"] == pytest.approx(
+        out["best_real_lap_time_s"] - out["ideal_lap_time_s"], abs=2e-3
+    )
+
+
+def test_inconsistent_bounds_are_ignored():
+    """Un passage à plusieurs secondes du premier point n'appartient pas à ce tour."""
+    df, bounds = _synthetic_laps([50.0, 50.4, 50.8])
+    bad = {k: (a - 5.0, b) for k, (a, b) in bounds.items()}
+    assert compute_ideal_lap(df, lap_bounds_s=bad)["best_real_lap_time_s"] == pytest.approx(
+        compute_ideal_lap(df)["best_real_lap_time_s"]
+    )
