@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 
 from src.core.data_loader import robust_load_telemetry
+from src.core.session_header import read_session_header
 from src.core.xrk_loader import normalize_upload
 from src.core.signal_processing import apply_savgol_filter
 from src.analysis.geometry import (
@@ -856,27 +857,9 @@ class AnalysisService:
                 f.write(content)
             await file.seek(0)
 
-            beacon_markers = []
-            try:
-                with open(temp_path, "r", encoding="utf-8", errors="ignore") as bfile:
-                    for i, bline in enumerate(bfile):
-                        if i > 20:
-                            break
-                        if "Beacon" in bline or "beacon" in bline:
-                            parts = bline.strip().replace('"', "").split(",")
-                            if len(parts) >= 2:
-                                raw = parts[1].strip()
-                                parsed = []
-                                for tok in raw.split():
-                                    try:
-                                        parsed.append(float(tok))
-                                    except ValueError:
-                                        pass
-                                if parsed:
-                                    beacon_markers = sorted(parsed)
-                                    break
-            except Exception:
-                pass
+            # Source unique : lit les exports MoTeC ET AiM CSV, dont les
+            # passages sur la ligne ne sont pas écrits de la même façon.
+            beacon_markers = read_session_header(temp_path)["beacon_markers"]
 
             loop = asyncio.get_event_loop()
             return await loop.run_in_executor(
@@ -935,34 +918,15 @@ class AnalysisService:
             
             logger.info(f"[{analysis_id}] File saved: {len(content)} bytes - {file.filename}")
             
-            # Extraire les Beacon Markers + le nom du circuit (Venue) AiM/MoTeC depuis le header brut
-            beacon_markers = []
-            circuit_name = None
-            try:
-                with open(temp_path, 'r', encoding='utf-8', errors='ignore') as bfile:
-                    for i, bline in enumerate(bfile):
-                        if i > 20:
-                            break
-                        parts = bline.strip().replace('"', '').split(',')
-                        if not circuit_name and parts and parts[0].strip().lower() == 'venue':
-                            if len(parts) >= 2 and parts[1].strip():
-                                circuit_name = parts[1].strip()
-                                logger.info(f"[{analysis_id}] ✓ Venue detected: {circuit_name}")
-                        if not beacon_markers and ('Beacon' in bline or 'beacon' in bline):
-                            if len(parts) >= 2:
-                                raw = parts[1].strip()
-                                parsed = []
-                                for tok in raw.split():
-                                    try:
-                                        parsed.append(float(tok))
-                                    except ValueError:
-                                        pass
-                                if parsed:
-                                    beacon_markers = sorted(parsed)
-                        if beacon_markers and circuit_name:
-                            break
-            except Exception as be:
-                logger.warning(f"[{analysis_id}] Could not read header metadata: {be}")
+            # Source unique pour l'en-tête : passages sur la ligne et circuit,
+            # dans les deux formats d'export de RaceStudio. Le circuit se lisait
+            # uniquement sous « Venue » (MoTeC) ; l'AiM CSV l'écrit sous
+            # « Session », et ces séances arrivaient donc sans nom de circuit.
+            header = read_session_header(temp_path)
+            circuit_name = header["circuit_name"]
+            beacon_markers = header["beacon_markers"]
+            if circuit_name:
+                logger.info(f"[{analysis_id}] ✓ Circuit : {circuit_name} ({header['format']})")
             
             if beacon_markers:
                 logger.info(f"[{analysis_id}] ✓ Beacon Markers: {len(beacon_markers)} passages, "

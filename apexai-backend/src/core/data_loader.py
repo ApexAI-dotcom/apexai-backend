@@ -55,31 +55,15 @@ def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> f
 
 def _extract_beacon_markers(filepath: str) -> list:
     """
-    Extrait les Beacon Markers de la ligne 11 d'un fichier CSV AiM/MoTeC.
-    Retourne une liste de floats (temps en secondes) ou [] si absent.
+    Passages sur la ligne d'un export AiM / MoTeC, en secondes, triés.
+
+    Délègue à `src.core.session_header`, la source unique : cette fonction ne
+    lisait que le format MoTeC et ratait tous les exports « AiM CSV File »,
+    dont les marqueurs occupent un champ chacun. Conservée pour ses appelants
+    (kart_mechanical notamment).
     """
-    try:
-        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-            for i, line in enumerate(f):
-                if i > 20:  # Les beacons sont toujours dans les 20 premières lignes
-                    break
-                if 'Beacon' in line or 'beacon' in line:
-                    # Format: "Beacon Markers","82.248 135.306 187.523..."
-                    parts = line.strip().replace('"', '').split(',')
-                    if len(parts) >= 2:
-                        markers_str = parts[1].strip()
-                        markers = []
-                        for x in markers_str.split():
-                            try:
-                                val = float(x)
-                                markers.append(val)
-                            except ValueError:
-                                continue
-                        if markers:
-                            return sorted(markers)
-    except Exception:
-        pass
-    return []
+    from src.core.session_header import read_beacon_markers
+    return read_beacon_markers(filepath)
 
 
 def _detect_format(file_path: str) -> int:
