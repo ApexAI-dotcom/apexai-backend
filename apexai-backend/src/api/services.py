@@ -95,6 +95,51 @@ def _filter_laps_with_buffer(
     return df.iloc[pos_sorted].reset_index(drop=True)
 
 
+def _beacon_lap_times(df) -> Dict[int, float]:
+    """
+    Temps EXACTS des tours complets, lus sur les passages sur la ligne.
+
+    Le temps d'un tour était déduit de max(time) − min(time) sur les points
+    échantillonnés. Après le sous-échantillonnage à 6 000 points, ni le premier
+    ni le dernier point d'un tour ne tombent sur la ligne : il manque un
+    intervalle de mesure à chaque extrémité, soit environ 0,15 s par tour. Le
+    pilote qui compare avec l'écran de son boîtier voit l'écart immédiatement.
+
+    Les beacons sont les passages réels sur la ligne, à la milliseconde. Le
+    tour k va de beacon[k-1] à beacon[k] — exactement la convention que
+    detect_laps applique pour numéroter les tours (geometry.py).
+
+    Seuls les tours COMPLETS sont renvoyés. Le tour 0, avant le premier
+    passage, et le dernier tour, après le dernier passage, sont tronqués par
+    construction : ils gardent leur calcul actuel et restent signalés comme
+    non représentatifs.
+
+    Sans beacons, le dictionnaire est vide et rien ne change.
+    """
+    try:
+        raw = df.attrs.get("beacon_markers") or []
+    except Exception:
+        return {}
+    times: List[float] = []
+    for value in raw:
+        try:
+            t = float(value)
+        except (TypeError, ValueError):
+            continue
+        if np.isfinite(t):
+            times.append(t)
+    times.sort()
+    if len(times) < 2:
+        return {}
+    # Deux passages confondus ne délimitent pas un tour : on les écarte plutôt
+    # que de publier un chrono nul.
+    return {
+        k: round(times[k] - times[k - 1], 3)
+        for k in range(1, len(times))
+        if times[k] - times[k - 1] > 0
+    }
+
+
 def _parse_laps_sync(temp_path: str, beacon_markers: list) -> List[Dict[str, Any]]:
     """
     Charge le CSV, détecte les tours (réutilise load + savgol + geometry + detect_laps),
@@ -118,10 +163,15 @@ def _parse_laps_sync(temp_path: str, beacon_markers: list) -> List[Dict[str, Any
     time_col = "time" if "time" in df.columns else None
     laps_out = []
 
+    # Chronos exacts quand la ligne a été franchie ; sinon, calcul inchangé.
+    exact_times = _beacon_lap_times(df)
+
     for lap_num, group in df.groupby("lap_number", sort=True):
         lap_num = int(lap_num)
         points_count = int(len(group))
-        if time_col and group[time_col].notna().any():
+        if lap_num in exact_times:
+            lap_time_seconds = exact_times[lap_num]
+        elif time_col and group[time_col].notna().any():
             t = pd.to_numeric(group[time_col], errors="coerce").dropna()
             lap_time_seconds = float(t.max() - t.min()) if len(t) >= 2 else 0.0
         else:
@@ -683,8 +733,14 @@ def _run_analysis_pipeline_sync(
             representative = set(_valid_lap_numbers(df))
         except Exception:
             representative = set()
+        # Même source que /parse-laps : les deux écrans doivent afficher le
+        # même chrono pour le même tour.
+        exact_times = _beacon_lap_times(df)
         for lap in sorted(df["lap_number"].dropna().unique().astype(int).tolist()):
             if representative and lap not in representative:
+                continue
+            if lap in exact_times:
+                valid_laps_dict[lap] = exact_times[lap]
                 continue
             grp = df[df["lap_number"] == lap]["time"].dropna()
             if len(grp) >= 2:
