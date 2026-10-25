@@ -34,6 +34,9 @@ Pur numpy/scipy, défensif (renvoie available=False si les données ne suffisent
 """
 
 from typing import Any, Dict, List, Optional
+import logging
+
+logger = logging.getLogger(__name__)
 import warnings
 
 import numpy as np
@@ -46,9 +49,41 @@ except Exception:  # pragma: no cover
     _SCIPY = False
 
 G = 9.81
-A_BRAKE = 1.5 * G      # décélération max karting (~1.5 g)
-A_ACCEL = 0.6 * G      # accélération longitudinale réaliste karting
-MU_MIN, MU_MAX = 1.0, 1.55
+# Replis seulement, quand la séance ne permet pas de mesurer le kart.
+#
+# Ces deux valeurs s'appliquaient autrefois à TOUS les karts. Mesuré sur six
+# séances Rotax (quatre pilotes, six circuits), le freinage réel plafonne entre
+# 0,81 et 0,93 g et l'accélération tombe à 0,16-0,28 g à 110 km/h. Avec 1,5 g et
+# 0,6 g constants, le « Tour Parfait » freinait 70 % plus fort que le kart et
+# relançait avec un moteur deux à quatre fois plus puissant en haut : d'où des
+# gains annoncés de 5 à 7 %, qu'aucun pilote expérimenté ne prend au sérieux.
+A_BRAKE = 1.5 * G
+A_ACCEL = 0.6 * G
+
+# Le Tour Parfait peut prendre une meilleure trajectoire et porter plus de vitesse
+# en courbe, dans les limites du grip mesuré. Il ne peut PAS disposer d'un moteur
+# ou de freins plus forts que ceux du kart. On retient le meilleur de ce que le
+# kart a montré : percentile élevé, pas le maximum, que le bruit GPS gonfle.
+ENVELOPE_PERCENTILE = 95
+# Bornes physiques du karting, tous moteurs confondus (Mini à KZ).
+BRAKE_BOUNDS_G = (0.5, 1.6)
+ACCEL_BOUNDS_G = (0.04, 0.9)
+ENVELOPE_BIN_KMH = 10.0
+ENVELOPE_MIN_SAMPLES = 25
+# Plage dans laquelle la calibration peut placer l'adhérence latérale : du kart
+# sur piste détrempée au KZ en gommes tendres. Large par construction — c'est le
+# chrono, pas la borne, qui doit décider.
+MU_CALIBRATION_BOUNDS = (0.5, 2.2)
+# Incertitude de position d'un GPS de karting (10-25 Hz) : la trajectoire
+# réellement roulée n'est connue qu'à cette précision près.
+GPS_NOISE_M = 0.5
+# Adhérence effective calibrée sur six séances Rotax au sec (quatre pilotes,
+# six circuits) : 1,55 à 1,83 g. Un kart en slicks tient bien plus que le
+# 1,55 g qui servait autrefois de plafond.
+DRY_EFFECTIVE_MU = 1.70
+# Écart toléré avant de dire au pilote que l'état déclaré ne colle pas : sous
+# la pluie (facteur 0,62), une séance sèche ressort nettement au-dessus.
+MISMATCH_MARGIN = 1.25
 
 # Réglementation CIK-FIA (circuits de karting de compétition) : la piste doit
 # mesurer au minimum 8 m de large (usuellement 8 à 10 m). On prend le minimum
@@ -231,6 +266,82 @@ def _valid_laps(df) -> List[int]:
     return [int(ln) for ln, g in df.groupby("lap_number") if int(ln) >= 1 and len(g) > 50]
 
 
+def _kart_envelope(df, laps) -> Dict[str, Any]:
+    """
+    Ce que CE kart sait faire : freinage maximal et accélération selon la vitesse.
+
+    L'accélération d'un kart dépend fortement de la vitesse : forte en sortie de
+    virage, elle s'effondre en bout de ligne droite où la traînée compense le
+    moteur. Une valeur unique la surestime précisément là où le chrono se joue.
+    On mesure donc une courbe, tranche de vitesse par tranche de vitesse.
+
+    Le signal vient de braking._build_grid : même rééchantillonnage spatial et
+    même lissage que l'analyse de freinage, donc indépendant de la fréquence de
+    l'appareil et cohérent avec ce que le pilote lit dans le panneau freinage.
+
+    Returns:
+        {"brake_ms2", "accel_v_ms", "accel_ms2", "source"} ; "source" vaut
+        "mesure" ou "repli". En repli, les constantes historiques s'appliquent.
+    """
+    fallback = {
+        "brake_ms2": A_BRAKE,
+        "accel_v_ms": np.array([0.0, 100.0]),
+        "accel_ms2": np.array([A_ACCEL, A_ACCEL]),
+        "source": "repli",
+    }
+    try:
+        from src.analysis.braking import _build_grid
+        grid = _build_grid(df)
+        if grid is None:
+            return fallback
+        mask = np.isin(grid["lap"], list(laps)) if laps else np.ones(len(grid["s"]), bool)
+        ax = grid["ax"][mask]
+        v = grid["v"][mask]
+        ok = np.isfinite(ax) & np.isfinite(v) & (v > 3.0)
+        ax, v = ax[ok], v[ok]
+        if ax.size < 200:
+            return fallback
+
+        # Freinage : décélérations franches uniquement, au-delà de la traînée.
+        decel = -ax[ax < -0.25 * G]
+        if decel.size < ENVELOPE_MIN_SAMPLES:
+            return fallback
+        brake = float(np.clip(np.percentile(decel, ENVELOPE_PERCENTILE),
+                              BRAKE_BOUNDS_G[0] * G, BRAKE_BOUNDS_G[1] * G))
+
+        # Accélération : par tranche de vitesse.
+        step = ENVELOPE_BIN_KMH / 3.6
+        centers, values = [], []
+        top = float(np.nanmax(v))
+        lo = 0.0
+        while lo < top:
+            sel = (v >= lo) & (v < lo + step) & (ax > 0.02 * G)
+            if sel.sum() >= ENVELOPE_MIN_SAMPLES:
+                centers.append(lo + step / 2)
+                values.append(float(np.percentile(ax[sel], ENVELOPE_PERCENTILE)))
+            lo += step
+        if len(values) < 3:
+            return fallback
+        values = list(np.clip(values, ACCEL_BOUNDS_G[0] * G, ACCEL_BOUNDS_G[1] * G))
+
+        # Au-delà du pic, la puissance ne peut que décroître avec la vitesse : on
+        # impose une courbe non croissante. Sinon une tranche bruitée en haut de
+        # ligne droite rendrait au kart une puissance qu'il n'a pas.
+        peak = int(np.argmax(values))
+        for k in range(peak + 1, len(values)):
+            values[k] = min(values[k], values[k - 1])
+
+        return {
+            "brake_ms2": brake,
+            "accel_v_ms": np.asarray(centers, float),
+            "accel_ms2": np.asarray(values, float),
+            "source": "mesure",
+        }
+    except Exception as exc:  # pragma: no cover - garde-fou
+        logger.warning("_kart_envelope: %s", exc)
+        return fallback
+
+
 def build_racing_line(
     df,
     n_points: int = 300,
@@ -238,6 +349,7 @@ def build_racing_line(
     margin_m: float = 0.3,
     smooth_lambda: float = 0.12,
     max_corner_fix_iter: int = 5,
+    target_lap_time_s: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Construit la ligne de course idéale.
@@ -245,12 +357,16 @@ def build_racing_line(
     Args:
         df: DataFrame du pipeline (GPS + lap_number [+ speed, curvature]).
         track_width_m: largeur de piste supposée (défaut : minimum CIK-FIA 8 m).
+        target_lap_time_s: chrono démontré servant d'étalon (idéal mesuré par
+            meilleurs secteurs). À défaut, le meilleur tour.
 
     Returns dict avec available: bool. Si available :
         lat[], lon[], speed_kmh[]      — la ligne idéale
         track_edges                    — bords de piste estimés (ruban à tracer)
         optimal_lap_time_s             — temps au tour de cette ligne
-        mu_calibrated                  — grip déduit des données du pilote
+        mu_calibrated                  — grip qui reproduit le chrono démontré
+        calibration                    — étalon utilisé et chrono reproduit
+        kart_envelope                  — freinage / accélération mesurés du kart
         curvature_reduction_pct        — réduction d'énergie de courbure vs ligne roulée
         corners_total / corners_preserved / corner_fix_iterations
     """
@@ -455,64 +571,79 @@ def build_racing_line(
                 lo_i[ext] *= 0.5
                 hi_i[ext] *= 0.5
 
-        # ── Vitesses : μ calibré sur le grip réellement atteint ──────────────
-        # Les BORNES viennent des conditions de piste. Elles étaient figées à
-        # [1,00 ; 1,55] : sous la pluie, un grip mesuré à 0,75 g était remonté
-        # de force à 1,00, et la ligne idéale proposait des vitesses que le kart
-        # ne pouvait pas tenir. Le μ reste mesuré sur les données du pilote ;
-        # seule la plage dans laquelle on l'autorise suit la météo.
+        # ── Profil de vitesse : un modèle CALIBRÉ sur la réalité ─────────────
+        #
+        # Le Tour Parfait doit répondre à une seule question : avec CE kart, CE
+        # grip et CES freins, que donnerait une meilleure trajectoire ?
+        #
+        # L'adhérence μ était tirée du 85e percentile de l'accélération latérale
+        # calculée sur la courbure GPS. Ce signal est bruité : il dépassait le
+        # plafond de 1,55 g sur les six séances testées, si bien que μ valait
+        # 1,55 partout — ce n'était plus la donnée qui décidait, c'était la borne.
+        #
+        # On calibre donc sur une grandeur qui ne ment pas : un CHRONO. On fait
+        # rouler le modèle sur la trajectoire réellement suivie et on ajuste μ
+        # jusqu'à ce qu'il reproduise le temps démontré par le pilote. Ensuite
+        # seulement on lui donne la trajectoire optimisée. Le gain annoncé ne
+        # peut alors venir QUE de la ligne. Et par construction :
+        #
+        #     Tour Parfait  ≤  idéal mesuré (meilleurs secteurs)  ≤  meilleur tour
         from src.analysis.conditions import get_conditions
         cond = get_conditions(df)
-        mu_min = min(cond.mu_min, MU_MIN)
-        mu = cond.mu_reference
         conditions_mismatch = False
-        if "speed" in df.columns and "curvature" in df.columns:
-            gg = df[df["lap_number"].isin(laps)] if "lap_number" in df.columns else df
-            v = pd.to_numeric(gg["speed"], errors="coerce").to_numpy(float) / 3.6
-            kappa = np.abs(pd.to_numeric(gg["curvature"], errors="coerce").to_numpy(float))
-            ok = np.isfinite(v) & np.isfinite(kappa) & (kappa > 1e-3) & (v > 5)
-            if ok.sum() > 30:
-                lat_grip = (v[ok] ** 2 * kappa[ok]) / G
-                # 85e percentile : la courbure GPS a des pics de bruit qui
-                # gonflent le grip apparent. On veut un μ robuste, pas le maximum.
-                measured = float(np.percentile(lat_grip, 85))
-                mu = float(np.clip(measured, mu_min, min(cond.mu_max, MU_MAX)))
 
-        kap_final = np.abs(_curvature(Lx, Ly))
-        kap_final[kap_final < 1e-4] = 1e-4
         v_cap = 45.0
         if "speed" in df.columns:
             c = np.nanpercentile(pd.to_numeric(df["speed"], errors="coerce"), 99) / 3.6
             if np.isfinite(c) and c > 10:
                 v_cap = float(c)
 
-        ds = np.hypot(np.diff(Lx, append=Lx[0]), np.diff(Ly, append=Ly[0]))
-        ds[ds < 1e-3] = 1e-3
+        # Freins et moteur de CE kart, mesurés sur la séance.
+        envelope = _kart_envelope(df, laps)
+        a_brake = envelope["brake_ms2"]
+        env_v, env_a = envelope["accel_v_ms"], envelope["accel_ms2"]
 
-        def _lap_time_for(mu_value: float):
-            """Profil de vitesse et chrono pour une adhérence donnée."""
-            prof = np.minimum(np.sqrt(mu_value * G / kap_final), v_cap * 1.02)
+        def _a_accel(speed: float) -> float:
+            # Hors des vitesses mesurées, on prolonge la valeur la plus proche
+            # plutôt que d'extrapoler une courbe qu'on n'a pas observée.
+            return float(np.interp(speed, env_v, env_a, left=env_a[0], right=env_a[-1]))
+
+        def _profile(mu_value: float, kap: np.ndarray, dsv: np.ndarray):
+            """Profil de vitesse et chrono, pour une adhérence et une trajectoire."""
+            n = len(kap)
+            prof = np.minimum(np.sqrt(mu_value * G / kap), v_cap * 1.02)
             for _ in range(3):
-                for i in range(n_points):
-                    j = (i - 1) % n_points
-                    prof[i] = min(prof[i], np.sqrt(prof[j] ** 2 + 2 * A_ACCEL * ds[j]))
-                for i in range(n_points - 1, -1, -1):
-                    j = (i + 1) % n_points
-                    prof[i] = min(prof[i], np.sqrt(prof[j] ** 2 + 2 * A_BRAKE * ds[i]))
-            return prof, float(np.sum(ds / np.maximum(prof, 1.0)))
+                for i in range(n):
+                    j = (i - 1) % n
+                    prof[i] = min(prof[i], np.sqrt(prof[j] ** 2 + 2 * _a_accel(prof[j]) * dsv[j]))
+                for i in range(n - 1, -1, -1):
+                    j = (i + 1) % n
+                    prof[i] = min(prof[i], np.sqrt(prof[j] ** 2 + 2 * a_brake * dsv[i]))
+            return prof, float(np.sum(dsv / np.maximum(prof, 1.0)))
 
-        v_prof, optimal_time = _lap_time_for(mu)
+        def _geometry(x: np.ndarray, y: np.ndarray):
+            kap = np.abs(_curvature(x, y))
+            kap[kap < 1e-4] = 1e-4
+            dsv = np.hypot(np.diff(x, append=x[0]), np.diff(y, append=y[0]))
+            dsv[dsv < 1e-3] = 1e-3
+            return kap, dsv
 
-        # ── Contrôle de cohérence conditions ↔ données ───────────────────────
-        # Une « ligne idéale » plus LENTE que le meilleur tour réel du pilote est
-        # une absurdité : elle signifie que l'état de piste déclaré ne correspond
-        # pas à ce que la télémétrie montre (case cochée par erreur, ou piste
-        # séchée en cours de séance). On ne corrige pas en silence : on remonte
-        # l'adhérence jusqu'à retrouver un objectif atteignable, et on le signale.
-        #
-        # Ce test porte sur un CHRONO, pas sur le μ mesuré : la courbure GPS est
-        # bruitée et son 85e percentile peut dépasser 1,5 g sur un simple artefact,
-        # alors qu'un temps au tour ne ment pas.
+        # Trajectoire réellement roulée, débarrassée du bruit GPS. La trace brute
+        # porte des pics de courbure qui ne sont que du bruit de mesure ; la
+        # ligne optimisée, lissée par construction, les efface. Comparer la
+        # ligne optimisée à la trace brute attribuerait donc à la « meilleure
+        # trajectoire » un gain qui n'est que du bruit retiré. Même optimiseur,
+        # mais confiné à l'incertitude du GPS autour de la ligne roulée : seul
+        # le bruit disparaît, la trajectoire du pilote reste la sienne.
+        noise_lo = np.maximum(-GPS_NOISE_M, off_lo)
+        noise_hi = np.minimum(GPS_NOISE_M, off_hi)
+        res_act = lsq_linear(A, -b, bounds=(noise_lo, noise_hi), max_iter=200)
+        Ax, Ay = Px + res_act.x * nx, Py + res_act.x * ny
+
+        kap_final, ds = _geometry(Lx, Ly)          # trajectoire optimisée
+        kap_actual, ds_actual = _geometry(Ax, Ay)  # trajectoire réellement roulée
+
+        # Chrono réel du tour de référence.
         best_real = None
         try:
             if "lap_number" in df.columns and "time" in df.columns:
@@ -523,19 +654,60 @@ def build_racing_line(
         except Exception:
             best_real = None
 
-        if best_real and optimal_time > best_real and mu < MU_MAX:
-            conditions_mismatch = True
-            lo, hi = mu, MU_MAX
-            # Dichotomie : la plus petite adhérence qui rend l'objectif atteignable.
-            for _ in range(12):
-                mid = 0.5 * (lo + hi)
-                _, t_mid = _lap_time_for(mid)
-                if t_mid > best_real:
-                    lo = mid
-                else:
-                    hi = mid
-            mu = hi
-            v_prof, optimal_time = _lap_time_for(mu)
+        # Cible : le meilleur de ce que le pilote a démontré. L'idéal mesuré
+        # (meilleurs mini-secteurs recousus) est plus exigeant que le meilleur
+        # tour, mais il a été réalisé morceau par morceau : il reste atteignable.
+        target = None
+        calibration_source = "non_calibre"
+        if target_lap_time_s and target_lap_time_s > 0:
+            target, calibration_source = float(target_lap_time_s), "ideal_mesure"
+        elif best_real:
+            target, calibration_source = best_real, "meilleur_tour"
+        if target and best_real and target > best_real:
+            target = best_real  # jamais moins bien que la réalité
+
+        mu = float(cond.mu_reference)
+        reproduced = None
+        if target:
+            lo, hi = MU_CALIBRATION_BOUNDS
+            t_slow = _profile(lo, kap_actual, ds_actual)[1]
+            t_fast = _profile(hi, kap_actual, ds_actual)[1]
+            if t_fast <= target <= t_slow:
+                # Le chrono décroît quand l'adhérence augmente : dichotomie.
+                for _ in range(30):
+                    mid = 0.5 * (lo + hi)
+                    if _profile(mid, kap_actual, ds_actual)[1] > target:
+                        lo = mid
+                    else:
+                        hi = mid
+                mu = hi
+            elif target < t_fast:
+                # Même au grip maximal physique, le modèle ne reproduit pas le
+                # chrono réel : ce sont alors le moteur ou les freins mesurés qui
+                # sont trop prudents. On garde le plafond, et on le dit.
+                mu, calibration_source = hi, "plafond_grip"
+            else:
+                mu, calibration_source = lo, "plancher_grip"
+            reproduced = _profile(mu, kap_actual, ds_actual)[1]
+
+        v_prof, optimal_time = _profile(mu, kap_final, ds)
+
+        # La ligne optimisée est moins sinueuse que la ligne roulée : elle ne
+        # peut pas, sur le même modèle, être plus lente. Si c'est le cas, c'est
+        # que l'optimisation n'a rien trouvé à gagner : on n'invente pas de gain.
+        if reproduced is not None and optimal_time > reproduced:
+            optimal_time = reproduced
+        # Et jamais plus lent que ce que le pilote a déjà démontré.
+        if target and optimal_time > target:
+            optimal_time = target
+
+        # Conditions déclarées contredites par la piste : une séance déclarée
+        # mouillée ne peut pas montrer l'adhérence d'une piste sèche. On compare
+        # le μ calibré à ce qu'on attend d'un kart sec, abattu du facteur de grip
+        # de l'état déclaré — avec une marge, car le μ calibré est une adhérence
+        # EFFECTIVE du modèle, pas une mesure de laboratoire.
+        expected = DRY_EFFECTIVE_MU * cond.grip_factor
+        conditions_mismatch = bool(mu > expected * MISMATCH_MARGIN)
 
         # ── Bords de piste (mêmes que la contrainte d'optimisation) ──────────
         to_lat = lambda X, Y: [round(float(v), 7) for v in ((Y / mlat) + lat0)]
@@ -554,6 +726,22 @@ def build_racing_line(
             "track_length_m": round(float(track_len), 1),
             "optimal_lap_time_s": round(optimal_time, 3),
             "mu_calibrated": round(mu, 3),
+            # Comment le modèle a été recalé sur la réalité.
+            "calibration": {
+                "source": calibration_source,
+                "target_s": round(target, 3) if target else None,
+                "reproduced_s": round(reproduced, 3) if reproduced else None,
+                "best_real_s": round(best_real, 3) if best_real else None,
+            },
+            # Ce que le kart a montré : le Tour Parfait n'en dépasse jamais.
+            "kart_envelope": {
+                "source": envelope["source"],
+                "brake_g": round(a_brake / G, 2),
+                "accel_g_by_kmh": [
+                    [round(float(vv) * 3.6), round(float(aa) / G, 2)]
+                    for vv, aa in zip(env_v, env_a)
+                ],
+            },
             # Le grip mesuré dément l'état de piste déclaré : à signaler plutôt
             # qu'à corriger en silence, c'est souvent une case cochée par erreur.
             "conditions_mismatch": bool(conditions_mismatch),

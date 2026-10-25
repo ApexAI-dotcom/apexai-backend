@@ -577,7 +577,13 @@ def _run_analysis_pipeline_sync(
     # ── Ligne de course idéale (remplace l'ancien « tour IA » factice) ───────
     racing_line_data = None
     try:
-        racing_line_data = build_racing_line(df)
+        # Le chrono idéal MESURÉ sert d'étalon : la ligne idéale doit d'abord le
+        # reproduire sur la trajectoire réellement roulée, avant d'en chercher une
+        # meilleure. Sans lui, elle se cale sur le meilleur tour.
+        _ideal_target = None
+        if ideal_lap_data and ideal_lap_data.get("available"):
+            _ideal_target = ideal_lap_data.get("ideal_lap_time_s")
+        racing_line_data = build_racing_line(df, target_lap_time_s=_ideal_target)
         if racing_line_data.get("available"):
             df.attrs["racing_line"] = racing_line_data
             logger.info(
