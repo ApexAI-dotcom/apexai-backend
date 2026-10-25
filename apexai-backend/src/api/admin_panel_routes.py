@@ -352,6 +352,11 @@ async def revoke_role(user_id: str, ctx: Dict[str, Any] = Depends(require_permis
 # ─────────────────────────────────────────────
 # Paddock Pass — gestion des codes
 # ─────────────────────────────────────────────
+# Durée maximale d'un pass : 3 mois. Les essais courts (24-48 h) servent sur les
+# circuits ; les longs, aux pilotes testeurs qui suivent une saison.
+PADDOCK_PASS_MAX_HOURS = 90 * 24
+
+
 class PromoCreate(BaseModel):
     label: Optional[str] = None
     tier: str = "racer"
@@ -385,8 +390,8 @@ async def create_promo_code(payload: PromoCreate, ctx: Dict[str, Any] = Depends(
     """Génère un Paddock Pass (code unique à distribuer sur les circuits)."""
     if payload.tier not in ("racer", "team"):
         raise HTTPException(status_code=400, detail="Offre inconnue.")
-    if not (1 <= payload.duration_hours <= 720):
-        raise HTTPException(status_code=400, detail="Durée invalide (1-720 h).")
+    if not (1 <= payload.duration_hours <= PADDOCK_PASS_MAX_HOURS):
+        raise HTTPException(status_code=400, detail="Durée invalide (1 heure à 3 mois).")
 
     expires_at = None
     if payload.expires_in_days and payload.expires_in_days > 0:
