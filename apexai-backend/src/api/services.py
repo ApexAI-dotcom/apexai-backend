@@ -910,6 +910,9 @@ def _run_analysis_pipeline_sync(
             # le pilote a déclaré. Sans ces valeurs à l'écran, rien ne prouve
             # que cocher « pluie » sert à quelque chose.
             resolved=conditions.to_dict(),
+            # Fiche du circuit reconnu : gardée avec la séance (la colonne
+            # session_conditions est enregistrée telle quelle).
+            catalog=circuit_match,
         ),
         track_features=TrackFeatures(**track_signature) if track_signature else None,
         ideal_lap=ideal_lap_data if (ideal_lap_data or {}).get("available") else None,
