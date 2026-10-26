@@ -51,11 +51,22 @@ def _normalize_path(path: str) -> str:
 
 class TrackEvent(BaseModel):
     path: str
-    event_type: str = Field(default="view")
+    # Le front envoie « eventType » : sans cet alias, chaque départ de page
+    # était enregistré comme une vue (vues gonflées d'environ 60 %).
+    event_type: str = Field(default="view", alias="eventType")
     duration_ms: Optional[int] = Field(default=None, alias="durationMs")
+    # Identifiant du navigateur (persistant) et de la visite (30 min d'inactivité).
     session_id: Optional[str] = Field(default=None, alias="sessionId")
+    visit_id: Optional[str] = Field(default=None, alias="visitId")
+    user_id: Optional[str] = Field(default=None, alias="userId")
     referrer: Optional[str] = None
     tier: Optional[str] = None
+    device: Optional[str] = None
+    utm_source: Optional[str] = Field(default=None, alias="utmSource")
+    utm_medium: Optional[str] = Field(default=None, alias="utmMedium")
+    utm_campaign: Optional[str] = Field(default=None, alias="utmCampaign")
+    tz: Optional[str] = None
+    lang: Optional[str] = None
 
     class Config:
         populate_by_name = True
@@ -73,13 +84,23 @@ def _resolve_user(authorization: Optional[str]) -> Optional[str]:
         import jwt as _jwt
         secret = getattr(settings, "SUPABASE_JWT_SECRET", "") or ""
         if secret:
-            payload = _jwt.decode(token, secret, algorithms=["HS256"], options={"verify_aud": False})
-            return payload.get("sub")
-        # Sans secret : lecture non vérifiée du sub (usage analytics seulement)
+            try:
+                payload = _jwt.decode(token, secret, algorithms=["HS256"], options={"verify_aud": False})
+                return payload.get("sub")
+            except Exception:
+                pass  # jetons signés par clé asymétrique : lecture simple ci-dessous
+        # Lecture non vérifiée du sub : usage statistique seulement, jamais d'accès.
         payload = _jwt.decode(token, options={"verify_signature": False, "verify_aud": False})
         return payload.get("sub")
     except Exception:
         return None
+
+
+_UUID = re.compile(r"^[0-9a-fA-F-]{36}$")
+
+
+def _clip(value: Optional[str], n: int) -> Optional[str]:
+    return (value or "")[:n] or None
 
 
 @router.post("/track")
@@ -91,14 +112,26 @@ async def track(event: TrackEvent, authorization: Optional[str] = Header(None)):
         return {"ok": False}
     try:
         user_id = _resolve_user(authorization)
+        # sendBeacon (départ de page) ne peut pas porter d'en-tête : le compte
+        # est alors repris du corps, au format UUID seulement.
+        if not user_id and event.user_id and _UUID.match(event.user_id):
+            user_id = event.user_id
+        device = (event.device or "").lower()
         supabase.table("page_events").insert({
             "user_id": user_id,
-            "session_id": (event.session_id or "")[:64] or None,
+            "session_id": _clip(event.session_id, 64),
+            "visit_id": _clip(event.visit_id, 64),
             "path": _normalize_path(event.path),
             "event_type": event.event_type,
-            "duration_ms": int(event.duration_ms) if event.duration_ms and event.duration_ms > 0 else None,
-            "referrer": (event.referrer or "")[:200] or None,
-            "tier": (event.tier or "")[:20] or None,
+            "duration_ms": int(event.duration_ms) if event.duration_ms and 0 < event.duration_ms < 6 * 3600 * 1000 else None,
+            "referrer": _clip(event.referrer, 200),
+            "tier": _clip(event.tier, 20),
+            "device": device if device in ("mobile", "tablette", "ordinateur") else None,
+            "utm_source": _clip(event.utm_source, 60),
+            "utm_medium": _clip(event.utm_medium, 60),
+            "utm_campaign": _clip(event.utm_campaign, 80),
+            "tz": _clip(event.tz, 40),
+            "lang": _clip(event.lang, 10),
         }).execute()
         return {"ok": True}
     except Exception as e:
@@ -185,3 +218,66 @@ async def analytics_overview(days: int = 14, current_user: str = Depends(get_cur
         "timeline": timeline,
         "by_tier": by_tier,
     }
+
+
+def _team_user_ids() -> List[str]:
+    try:
+        res = supabase.table("admin_roles").select("user_id").execute()
+        return [r["user_id"] for r in (res.data or []) if r.get("user_id")]
+    except Exception:
+        return []
+
+
+def _require_stats(current_user: str) -> None:
+    try:
+        from .admin_panel_routes import get_admin_role, PERMISSIONS
+        role = get_admin_role(current_user)
+        if not role or "stats" not in PERMISSIONS.get(role, set()):
+            raise HTTPException(status_code=403, detail="Permission insuffisante.")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=403, detail="Permission insuffisante.")
+
+
+def _fetch_all(table: str, columns: str, since: Optional[str] = None, cap: int = 100000) -> List[Dict[str, Any]]:
+    """Lecture paginée (PostgREST limite chaque réponse à 1 000 lignes)."""
+    rows: List[Dict[str, Any]] = []
+    page = 1000
+    for start in range(0, cap, page):
+        q = supabase.table(table).select(columns).order("created_at", desc=False).range(start, start + page - 1)
+        if since:
+            q = q.gte("created_at", since)
+        data = q.execute().data or []
+        rows.extend(data)
+        if len(data) < page:
+            break
+    return rows
+
+
+def load_launch_report(days: int) -> Dict[str, Any]:
+    from .launch_analytics import build_launch_report
+
+    now = datetime.now(timezone.utc)
+    events = _fetch_all(
+        "page_events",
+        "session_id, visit_id, user_id, path, event_type, duration_ms, referrer, device, utm_source, utm_campaign, created_at",
+    )
+    users = supabase.rpc("admin_launch_users", {}).execute().data or []
+    since = (now - timedelta(days=2 * days + 1)).isoformat()
+    analyses = _fetch_all("analyses", "user_id, created_at", since=since)
+    return build_launch_report(events, users, analyses, _team_user_ids(), now, days)
+
+
+@router.get("/launch")
+async def analytics_launch(days: int = 14, current_user: str = Depends(get_current_user)):
+    """[ADMIN] Suivi de lancement : visiteurs réels, provenance, parcours, inscrits."""
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Service indisponible")
+    _require_stats(current_user)
+    days = max(1, min(days, 90))
+    try:
+        return load_launch_report(days)
+    except Exception as e:
+        logger.error(f"analytics_launch failed: {e}")
+        raise HTTPException(status_code=500, detail="Lecture impossible.")

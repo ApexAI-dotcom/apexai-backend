@@ -196,7 +196,10 @@ async def context_stats(path: str = "/", ctx: Dict[str, Any] = Depends(require_p
         raise HTTPException(status_code=503, detail="Service indisponible")
 
     now = datetime.now(timezone.utc)
-    today = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    # « Aujourd'hui » à l'heure de Paris
+    from zoneinfo import ZoneInfo
+    today = now.astimezone(ZoneInfo("Europe/Paris")).replace(hour=0, minute=0, second=0, microsecond=0) \
+        .astimezone(timezone.utc).isoformat()
     week = (now - timedelta(days=7)).isoformat()
     p = _normalize_path_light(path)
 
@@ -215,21 +218,28 @@ async def context_stats(path: str = "/", ctx: Dict[str, Any] = Depends(require_p
         except Exception:
             return 0
 
-    # Vues + visiteurs uniques du jour (global, toujours affiché)
-    views_today, unique_today = 0, 0
+    # Visiteurs réels du jour : un navigateur compte une fois, l'équipe est exclue.
+    unique_today, online_now, page_visitors_today = 0, 0, 0
     try:
-        res = supabase.table("page_events").select("session_id, path") \
-            .eq("event_type", "view").gte("created_at", today).limit(5000).execute()
-        rows = res.data or []
-        views_today = len(rows)
+        team = [r["user_id"] for r in (supabase.table("admin_roles").select("user_id").execute().data or [])]
+        team_sids = set()
+        if team:
+            tres = supabase.table("page_events").select("session_id").in_("user_id", team).limit(5000).execute()
+            team_sids = {r.get("session_id") for r in (tres.data or []) if r.get("session_id")}
+        res = supabase.table("page_events").select("session_id, path, user_id, created_at") \
+            .eq("event_type", "view").gte("created_at", today).limit(20000).execute()
+        rows = [r for r in (res.data or []) if r.get("session_id") not in team_sids and r.get("user_id") not in team]
         unique_today = len({r.get("session_id") for r in rows if r.get("session_id")})
-        page_views_today = len([r for r in rows if r.get("path") == p])
+        page_visitors_today = len({r.get("session_id") for r in rows if r.get("path") == p and r.get("session_id")})
+        five = (now - timedelta(minutes=5)).isoformat()
+        online_now = len({r.get("session_id") for r in rows if str(r.get("created_at")) >= five})
     except Exception:
-        page_views_today = 0
+        pass
 
     stats: List[Dict[str, Any]] = [
-        {"label": "Vues du site aujourd'hui", "value": views_today},
-        {"label": "Visiteurs uniques aujourd'hui", "value": unique_today},
+        {"label": "Visiteurs aujourd'hui (hors équipe)", "value": unique_today},
+        {"label": "En ligne (5 dernières minutes)", "value": online_now},
+        {"label": "Inscriptions aujourd'hui", "value": _count_signups_since(today)},
     ]
     title = "Aperçu du jour"
 
@@ -261,11 +271,11 @@ async def context_stats(path: str = "/", ctx: Dict[str, Any] = Depends(require_p
     elif p == "/":
         title = "Accueil"
         stats += [
-            {"label": "Vues de l'accueil aujourd'hui", "value": page_views_today},
+            {"label": "Visiteurs de l'accueil aujourd'hui", "value": page_visitors_today},
             {"label": "Essais Paddock actifs", "value": _count_active_trials(now)},
         ]
     else:
-        stats += [{"label": f"Vues de cette page aujourd'hui", "value": page_views_today}]
+        stats += [{"label": "Visiteurs de cette page aujourd'hui", "value": page_visitors_today}]
 
     return {"title": title, "path": p, "stats": stats, "generated_at": now.isoformat()}
 
@@ -275,6 +285,14 @@ def _normalize_path_light(path: str) -> str:
     p = re.sub(r"/[0-9a-fA-F-]{8,}", "", p)
     p = re.sub(r"/\d+", "", p)
     return p or "/"
+
+
+def _count_signups_since(since: str) -> int:
+    try:
+        users = supabase.rpc("admin_launch_users", {}).execute().data or []
+        return len([u for u in users if str(u.get("created_at") or "") >= since])
+    except Exception:
+        return 0
 
 
 def _count_active_trials(now: datetime) -> int:
