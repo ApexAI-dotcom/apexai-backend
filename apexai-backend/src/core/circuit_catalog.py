@@ -3,7 +3,7 @@
 """
 Apex AI — Base des circuits de karting de France (lecture seule, en mémoire).
 
-Le fichier data/circuit_catalog.json est produit par scripts/circuits/ du
+Le fichier src/data/circuit_catalog.json est produit par scripts/circuits/ du
 dépôt front (annuaire FFSA « Où pratiquer » + tracés OpenStreetMap, © ses
 contributeurs, ODbL). On le charge une fois : recherche par nom / commune /
 département, fiche détaillée, et reconnaissance du circuit d'une session à
@@ -20,7 +20,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-DATA = Path(__file__).resolve().parents[2] / "data" / "circuit_catalog.json"
+DATA = Path(__file__).resolve().parents[1] / "data" / "circuit_catalog.json"
 SUMMARY_KEYS = (
     "slug", "name", "city", "postal_code", "department_code", "department", "region", "lat", "lon",
     "indoor", "surface", "width_m", "length_m", "trace_status", "corners_count", "hairpins_count",
