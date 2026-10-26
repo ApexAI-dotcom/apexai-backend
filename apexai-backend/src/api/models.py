@@ -177,6 +177,8 @@ class CircuitCreate(BaseModel):
     rotation: str
     hairpins_count: int = Field(0, alias="hairpinsCount")
     fast_corners_count: int = Field(0, alias="fastCornersCount")
+    # Total des virages (épingles + moyens + rapides) ; absent sur les anciens circuits.
+    corners_count: Optional[int] = Field(None, alias="cornersCount")
     elevation: str
     bumpiness: str
 

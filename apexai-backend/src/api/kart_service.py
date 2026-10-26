@@ -277,11 +277,14 @@ class KartService:
         """Filtre les clés autorisées et convertit les valeurs texte -> codes numériques DB."""
         allowed_keys = {
             "name", "slug", "speed_ratio", "rotation", "hairpins_count",
-            "fast_corners_count", "elevation", "bumpiness"
+            "fast_corners_count", "corners_count", "elevation", "bumpiness"
         }
         p = {k: v for k, v in circuit_data.items() if k in allowed_keys}
+        # Un total absent ne doit pas effacer celui déjà enregistré.
+        if p.get("corners_count") is None:
+            p.pop("corners_count", None)
 
-        for k in ["hairpins_count", "fast_corners_count"]:
+        for k in ["hairpins_count", "fast_corners_count", "corners_count"]:
             if k in p and p[k] is not None:
                 try:
                     p[k] = int(p[k])
