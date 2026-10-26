@@ -248,23 +248,32 @@ class KartService:
             return []
 
     @staticmethod
-    def get_catalog_components(category: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Get the global component catalog (kart_components table)."""
+    def get_catalog_db_components(category: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Lignes actives de la table kart_components (seules utilisables en clé étrangère)."""
         if not supabase:
-            raise Exception("Supabase client not initialized")
-
-        valid_categories = {"engine", "tire", "brake", "chassis", "carburetor", "axle"}
+            return []
         try:
             query = supabase.table("kart_components").select("*").eq("active", True)
             if category:
-                if category not in valid_categories:
-                    return []
                 query = query.eq("category", category)
             res = query.order("category").order("brand").order("name").execute()
             return res.data or []
         except Exception as e:
-            logger.error(f"Error get_catalog_components: {e}")
+            logger.error(f"Error get_catalog_db_components: {e}")
             return []
+
+    @staticmethod
+    def get_catalog_components(category: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Catalogue des composants : table kart_components complétée par la base
+        sourcée 2026-2027 (src/data/component_catalog.json)."""
+        from src.core import component_catalog as compcat
+
+        if category and category not in compcat.all_categories():
+            return []
+        items = compcat.merge(KartService.get_catalog_db_components(category))
+        if category:
+            items = [c for c in items if c.get("category") == category]
+        return items
 
     # Champs "caractéristiques" d'un circuit (stockés en numérique dans la DB prod)
     CIRCUIT_FEATURE_KEYS = {
@@ -424,7 +433,9 @@ class KartService:
                 if not cand:
                     continue
                 score = len(target & cand) / len(cand)
-                if score > best_score:
+                has_w = (c.get("specs") or {}).get("weight_kg") is not None
+                best_w = best is not None and (best.get("specs") or {}).get("weight_kg") is not None
+                if score > best_score or (score == best_score and has_w and not best_w):
                     best, best_score = c, score
             return best if best_score >= 0.5 else None
 
@@ -490,6 +501,27 @@ class KartService:
         return p
 
     @staticmethod
+    def _resolve_tire_component(p: Dict[str, Any]) -> Dict[str, Any]:
+        """Un pneu de la base sourcée absent de kart_components ne peut pas servir
+        de clé étrangère : on l'enregistre en saisie libre (marque + modèle)."""
+        cid = p.get("component_id")
+        if not cid:
+            return p
+        try:
+            found = supabase.table("kart_components").select("id").eq("id", cid).limit(1).execute()
+            if found.data:
+                return p
+        except Exception as e:
+            logger.error(f"Error _resolve_tire_component: {e}")
+        from src.core import component_catalog as compcat
+
+        item = compcat.catalog_items().get(cid)
+        p["component_id"] = None
+        if item and not p.get("custom_model"):
+            p["custom_model"] = f"{item.get('brand') or ''} {item.get('name') or ''}".strip()
+        return p
+
+    @staticmethod
     def get_tire_sets(user_id: str) -> List[Dict[str, Any]]:
         """Get the user's tire sets, enriched with the catalog label if linked."""
         if not supabase:
@@ -513,7 +545,7 @@ class KartService:
         if not supabase:
             raise Exception("Supabase client not initialized")
         try:
-            p = KartService._sanitize_tire_set(payload)
+            p = KartService._resolve_tire_component(KartService._sanitize_tire_set(payload))
             p["user_id"] = user_id
             if not p.get("label"):
                 existing = KartService.get_tire_sets(user_id)
@@ -531,7 +563,7 @@ class KartService:
         if not supabase:
             raise Exception("Supabase client not initialized")
         try:
-            p = KartService._sanitize_tire_set(payload)
+            p = KartService._resolve_tire_component(KartService._sanitize_tire_set(payload))
             res = supabase.table("kart_tire_sets").update(p).eq("id", set_id).eq("user_id", user_id).execute()
             if res.data and len(res.data) > 0:
                 return res.data[0]

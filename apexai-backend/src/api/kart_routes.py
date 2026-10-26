@@ -394,8 +394,10 @@ async def get_catalog_components(category: str = None, current_user: str = Depen
     Optional query param `category` filters on one category.
     """
     try:
+        from src.core import component_catalog as compcat
+
         components = KartService.get_catalog_components(category)
-        return {"components": components}
+        return {"version": compcat.version(), "components": [compcat.compact(c) for c in components]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

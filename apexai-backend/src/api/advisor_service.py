@@ -48,7 +48,10 @@ def match_tire_component(tire_model: str, components: List[Dict[str, Any]]) -> O
             continue
         inter = target_tokens & cand_tokens
         score = len(inter) / len(cand_tokens)
-        if score > best_score:
+        # À score égal, la fiche qui porte un abaque de pressions
+        has_abaque = bool((c.get("specs") or {}).get("cold_pressure_bar"))
+        best_abaque = best is not None and bool((best.get("specs") or {}).get("cold_pressure_bar"))
+        if score > best_score or (score == best_score and has_abaque and not best_abaque):
             best, best_score = c, score
     # Au moins la marque + un identifiant de gomme doivent matcher
     return best if best_score >= 0.5 else None
