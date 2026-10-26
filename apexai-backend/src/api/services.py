@@ -840,6 +840,20 @@ def _run_analysis_pipeline_sync(
         logger.warning(f"[{analysis_id}] track_signature failed: {e}")
         track_signature = None
 
+    # Circuit reconnu dans la base des circuits de France : le tracé de la
+    # session est confronté aux tracés connus (OpenStreetMap + FFSA).
+    circuit_match = None
+    try:
+        from src.core.circuit_catalog import match_points
+        lat_col = "latitude_smooth" if "latitude_smooth" in df.columns else "latitude"
+        lon_col = "longitude_smooth" if "longitude_smooth" in df.columns else "longitude"
+        if lat_col in df.columns and lon_col in df.columns:
+            circuit_match = match_points(zip(df[lat_col].tolist(), df[lon_col].tolist()))
+            if circuit_match and not circuit_name and circuit_match.get("confident"):
+                circuit_name = circuit_match.get("name")
+    except Exception as e:
+        logger.warning(f"[{analysis_id}] circuit catalog match failed: {e}")
+
     response = AnalysisResponse(
         success=True,
         analysis_id=analysis_id,
@@ -900,6 +914,7 @@ def _run_analysis_pipeline_sync(
         track_features=TrackFeatures(**track_signature) if track_signature else None,
         ideal_lap=ideal_lap_data if (ideal_lap_data or {}).get("available") else None,
         racing_line=racing_line_data if (racing_line_data or {}).get("available") else None,
+        circuit=circuit_match,
         import_diagnostics=import_diagnostics,
     )
     return response.dict(exclude_none=True)

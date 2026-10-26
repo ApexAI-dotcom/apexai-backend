@@ -247,6 +247,14 @@ try:
 except ImportError as e:
     logger.warning("⚠ Home routes not loaded: %s", e)
 
+# Base des circuits de karting de France
+try:
+    from .catalog_routes import router as catalog_router
+    app.include_router(catalog_router)
+    logger.info("✓ Catalog routes loaded (/api/catalog/circuits)")
+except ImportError as e:
+    logger.warning("⚠ Catalog routes not loaded: %s", e)
+
 # Routes Mon Kart (MVP)
 try:
     from .kart_routes import router as kart_router

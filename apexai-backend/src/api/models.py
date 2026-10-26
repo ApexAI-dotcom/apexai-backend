@@ -158,6 +158,7 @@ class AnalysisResponse(BaseModel):
     track_features: Optional[TrackFeatures] = Field(default=None, description="Signature de piste dérivée de la télémétrie")
     ideal_lap: Optional[Dict[str, Any]] = Field(default=None, description="Tour idéal théorique (meilleurs mini-secteurs) + temps réellement perdu par virage")
     racing_line: Optional[Dict[str, Any]] = Field(default=None, description="Ligne de course idéale calculée (courbure minimale) + bords de piste estimés")
+    circuit: Optional[Dict[str, Any]] = Field(default=None, description="Circuit reconnu dans la base des circuits de France (points GPS de la session)")
     import_diagnostics: Optional[Dict[str, Any]] = Field(default=None, description="Diagnostic d'import : appareil détecté, canaux trouvés/manquants, fréquence")
 
 
