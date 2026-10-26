@@ -244,7 +244,7 @@ def build_launch_report(
         s["visitors"] += 1
     for u in users:
         if in_window(parse_ts(u.get("created_at")), start, now + timedelta(seconds=1)):
-            src = user_source.get(str(u["user_id"]), "Inconnue")
+            src = user_source.get(str(u["user_id"]), "Non suivie")
             s = sources.setdefault(src, {"source": src, "visitors": 0, "signups": 0})
             s["signups"] += 1
     source_rows = sorted(sources.values(), key=lambda s: (-s["visitors"], -s["signups"]))
