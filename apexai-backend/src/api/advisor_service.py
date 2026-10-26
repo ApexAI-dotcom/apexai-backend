@@ -15,6 +15,12 @@ import logging
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
+# Seuils de « piste sinueuse » et de « piste rapide ». Depuis que la nature
+# des virages est relative à la vitesse de pointe (track_signature), un
+# circuit compte en général 3 à 5 épingles ; 4 courbes rapides ou plus = piste rapide.
+SINUOUS_HAIRPINS = 5
+FAST_TRACK_CORNERS = 4
+
 logger = logging.getLogger(__name__)
 
 
@@ -129,11 +135,11 @@ def compute_setup_advice(
             rear_w = max(1385, base_rear - 5)
             rear_msg = (f"Grip faible à {temp_txt} : rétrécir à {rear_w} mm pour concentrer la charge sur la roue "
                         f"extérieure et générer du grip mécanique.")
-        if is_sinueux or hairpins >= 4:
+        if is_sinueux or hairpins >= SINUOUS_HAIRPINS:
             front_w = 122
             front_msg = (f"{hairpins} épingle(s) mesurée(s) sur ce {speed_ratio} : élargir l'avant à 122 cm pour engager "
                          f"le kart dans les virages serrés. ASTUCE : retirer la barre de torsion avant pour aider à pivoter.")
-        elif fast_corners >= 4:
+        elif fast_corners >= FAST_TRACK_CORNERS:
             front_w = 118
             front_msg = (f"{fast_corners} courbes rapides mesurées (apex moyen élevé) : rentrer l'avant à 118 cm pour "
                          f"limiter l'agressivité et stabiliser le kart à haute vitesse. ASTUCE : insérer la barre de torsion avant.")
@@ -168,7 +174,7 @@ def compute_setup_advice(
                                              "dans l'eau — sans ça l'avant flotte à l'inscription.")
         camber, camber_msg = "Neutre à Positif", ("PLUIE : éviter le carrossage négatif pour poser toute la bande de "
                                                   "roulement et maximiser la surface d'évacuation d'eau.")
-    elif hairpins >= 4 and not grip.startswith("gomm"):
+    elif hairpins >= SINUOUS_HAIRPINS and not grip.startswith("gomm"):
         caster, caster_msg = "Positif", (f"{hairpins} épingles mesurées : augmenter la chasse pour soulever la roue "
                                          f"arrière intérieure et faire pivoter le kart dans les serrés.")
     elif grip.startswith("gomm"):
