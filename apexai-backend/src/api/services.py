@@ -791,6 +791,16 @@ def _run_analysis_pipeline_sync(
         
     lap_time = best_lap_time or 0.0
 
+    # Rapports par tour « à la Race Studio » : tableau des canaux, secteurs,
+    # diagramme G-G, histogramme du régime (calculés sur les tours retenus).
+    try:
+        from src.analysis.lap_report import build_lap_report
+
+        if valid_laps_dict and isinstance(plot_data, dict):
+            plot_data["lap_report"] = build_lap_report(df, valid_laps_dict, _beacon_lap_bounds(df))
+    except Exception as e:
+        logger.warning(f"[{analysis_id}] Rapports par tour indisponibles : {e}")
+
     # Calculate Max Speed & Lap
     max_speed = 0.0
     max_speed_lap = 0
