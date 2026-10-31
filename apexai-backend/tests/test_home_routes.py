@@ -302,3 +302,56 @@ class TestResetAuth:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+# ---------------------------------------------------------------------------
+# focus — le point à travailler, sur une séance précise
+# ---------------------------------------------------------------------------
+
+from src.api.home_routes import _compute_focus  # noqa: E402
+
+
+class TestComputeFocus:
+    def _analysis(self, **kw):
+        base = {
+            "id": "a1",
+            "created_at": "2026-10-31T14:23:17+00:00",
+            "circuit_name": " SoloKart ",
+            "session_type": "practice",
+            "corner_analysis": [
+                {"corner_id": 4, "corner_type": "right", "time_lost": 0.2, "apex_lat": 47.5, "apex_lon": -1.8},
+                {"corner_id": 2, "corner_type": "left", "time_lost": 0.4},
+            ],
+            "coaching_advice": [
+                {"message": "Analyse basée sur 11 tours", "category": "info", "priority": 0},
+                {"corner": 2, "message": "Virage 2 à gauche — Sors plus tôt", "category": "exit", "priority": 2, "impact_seconds": 0.3},
+                {"corner": 4, "message": "Virage 4 à droite — Tu freines 4 m plus tôt", "category": "braking", "priority": 1, "impact_seconds": 0.128},
+            ],
+        }
+        base.update(kw)
+        return base
+
+    def test_top_priority_corner_advice(self):
+        f = _compute_focus([self._analysis()])
+        assert f["corner"] == 4
+        assert f["corner_label"] == "Virage 4 à droite"
+        assert f["headline"] == "Tu freines 4 m plus tôt"
+        assert f["circuit_name"] == "SoloKart"
+        assert f["analysis_id"] == "a1"
+        assert f["impact_seconds"] == 0.128
+        assert f["apex_lat"] == 47.5
+
+    def test_fallback_to_worst_corner(self):
+        f = _compute_focus([self._analysis(coaching_advice=[])])
+        assert f["corner"] == 2
+        assert f["corner_label"] == "Virage 2 à gauche"
+        assert f["impact_seconds"] == 0.4
+
+    def test_skips_analysis_without_data(self):
+        empty = self._analysis(id="new", corner_analysis=None, coaching_advice=None)
+        f = _compute_focus([empty, self._analysis()])
+        assert f["analysis_id"] == "a1"
+
+    def test_none_when_nothing(self):
+        assert _compute_focus([]) is None
+        assert _compute_focus([{"id": "x"}]) is None

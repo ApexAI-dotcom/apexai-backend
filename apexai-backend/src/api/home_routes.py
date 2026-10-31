@@ -194,7 +194,8 @@ async def get_insights(
         result = (
             supabase.table("analyses")
             .select(
-                "id, created_at, score, lap_time, corner_analysis, performance_score"
+                "id, created_at, score, lap_time, corner_analysis, performance_score, "
+                "circuit_name, session_type, coaching_advice"
             )
             .eq("user_id", current_user)
             .order("created_at", desc=True)
@@ -233,6 +234,7 @@ async def get_insights(
                 "insufficient_data": True,
                 "time_gained": None,
                 "weak_point": None,
+                "focus": _compute_focus(analyses),
                 "best_score": analyses[0]["score"] if analyses else 0,
                 "best_lap_time": analyses[0]["lap_time"] if analyses else 0,
                 "analyses_count": len(analyses),
@@ -259,6 +261,7 @@ async def get_insights(
             "insufficient_data": False,
             "time_gained": time_gained,
             "weak_point": weak_point,
+            "focus": _compute_focus(analyses),
             "best_score": best_score,
             "best_lap_time": round(best_lap_time, 2) if best_lap_time else 0,
             "analyses_count": len(analyses),
@@ -382,6 +385,92 @@ def _compute_time_gained(
     # Clamp and round
     clamped = max(-30.0, min(30.0, raw))
     return round(clamped, 1)
+
+
+_CORNER_SIDE = {"left": "à gauche", "right": "à droite"}
+
+
+def _compute_focus(analyses: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """
+    Le point à travailler, sur UNE séance précise (la plus récente analysée).
+
+    L'ancien « weak_point » moyennait les virages de circuits différents
+    (le virage 3 d'Ancenis avec celui de Plessé) : « Virages 3, 4 et 7 » ne
+    voulait rien dire. Ici on garde le conseil le plus prioritaire rattaché à
+    un virage, avec son circuit, sa séance et le temps à gagner, pour que
+    l'accueil puisse ouvrir l'analyse directement sur ce virage.
+    """
+    for a in analyses:  # du plus récent au plus ancien
+        corners = a.get("corner_analysis") if isinstance(a.get("corner_analysis"), list) else []
+        by_id: Dict[int, Dict[str, Any]] = {}
+        for c in corners:
+            if isinstance(c, dict):
+                cid = c.get("corner_id") or c.get("corner_number")
+                if cid is not None:
+                    try:
+                        by_id[int(cid)] = c
+                    except (TypeError, ValueError):
+                        continue
+
+        advice = a.get("coaching_advice") if isinstance(a.get("coaching_advice"), list) else []
+        candidates = []
+        for item in advice:
+            if not isinstance(item, dict) or item.get("corner") is None:
+                continue
+            if item.get("category") == "info":
+                continue
+            try:
+                corner = int(item["corner"])
+            except (TypeError, ValueError):
+                continue
+            impact = float(item.get("impact_seconds") or 0)
+            prio = item.get("priority")
+            prio = int(prio) if isinstance(prio, (int, float)) else 99
+            candidates.append((prio, -impact, corner, item))
+
+        pick: Optional[Dict[str, Any]] = None
+        if candidates:
+            candidates.sort(key=lambda t: (t[0], t[1]))
+            _, neg_impact, corner, item = candidates[0]
+            message = str(item.get("message") or "").strip()
+            # « Virage 4 à droite — Tu freines 4 m plus tôt… » : on garde la consigne.
+            headline = message.split(" — ", 1)[1].strip() if " — " in message else message
+            pick = {
+                "corner": corner,
+                "headline": headline,
+                "category": item.get("category"),
+                "impact_seconds": round(-neg_impact, 3),
+            }
+        elif by_id:
+            # Pas de conseil rattaché à un virage : le virage où l'on perd le plus.
+            worst = max(by_id.values(), key=lambda c: float(c.get("time_lost") or 0))
+            lost = float(worst.get("time_lost") or 0)
+            if lost > 0.005:
+                cid = int(worst.get("corner_id") or worst.get("corner_number"))
+                pick = {
+                    "corner": cid,
+                    "headline": "C'est le virage où tu perds le plus de temps",
+                    "category": "corner",
+                    "impact_seconds": round(lost, 3),
+                }
+
+        if not pick:
+            continue
+        c = by_id.get(pick["corner"], {})
+        side = _CORNER_SIDE.get(str(c.get("corner_type") or "").lower())
+        pick.update(
+            {
+                "analysis_id": a.get("id"),
+                "created_at": str(a.get("created_at") or ""),
+                "circuit_name": (a.get("circuit_name") or "").strip() or None,
+                "session_type": a.get("session_type"),
+                "corner_label": f"Virage {pick['corner']}" + (f" {side}" if side else ""),
+                "apex_lat": c.get("apex_lat"),
+                "apex_lon": c.get("apex_lon"),
+            }
+        )
+        return pick
+    return None
 
 
 def _compute_weak_point(analyses: List[Dict[str, Any]]) -> Dict[str, Any]:
