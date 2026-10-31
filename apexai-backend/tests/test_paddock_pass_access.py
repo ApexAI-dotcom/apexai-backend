@@ -99,3 +99,22 @@ def test_kart_service_uses_the_same_source(profile):
         "trial_until": _in(6),
     }
     assert KartService.get_subscription_tier("u") == "racer"
+
+
+def test_pass_lifts_monthly_analysis_limit(monkeypatch):
+    """Un Paddock Pass Racer en cours lève la limite de 3 analyses du compte gratuit."""
+    from datetime import datetime, timedelta, timezone
+    from src.core import subscription_service as ss
+
+    until = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+    profile = {
+        "subscription_tier": "rookie", "analyses_count_current_month": 3,
+        "last_analysis_reset_date": datetime.now(timezone.utc).isoformat(),
+        "trial_tier": "racer", "trial_until": until,
+    }
+    monkeypatch.setattr(ss, "_fetch_profile", lambda uid: dict(profile))
+    assert ss.check_analysis_limit("u") is True
+    assert ss.get_user_limits("u")["tier"] == "racer"
+    expired = dict(profile, trial_until=(datetime.now(timezone.utc) - timedelta(days=1)).isoformat())
+    monkeypatch.setattr(ss, "_fetch_profile", lambda uid: dict(expired))
+    assert ss.check_analysis_limit("u") is False

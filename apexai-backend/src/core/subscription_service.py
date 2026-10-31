@@ -151,7 +151,11 @@ def get_subscription_tier(user_id: str) -> str:
     monter les droits, jamais les redescendre : un abonné Team qui utilise un
     pass Racer reste Team.
     """
-    profile = _fetch_profile(user_id)
+    return _effective_tier(_fetch_profile(user_id))
+
+
+def _effective_tier(profile: Optional[dict[str, Any]]) -> str:
+    """Abonnement payé ou Paddock Pass en cours, le plus élevé des deux."""
     paid = _parse_tier(profile.get("subscription_tier") if profile else None)
     trial = _trial_tier_if_active(profile)
     if trial and _TIER_RANK.get(trial, 0) > _TIER_RANK.get(paid, 0):
@@ -211,7 +215,7 @@ def check_analysis_limit(user_id: str) -> bool:
         logger.warning("subscription_service: no profile for user %s, applying rookie limit", user_id)
         return limits["analyses_per_month"] != 0  # rookie = 3, donc True
 
-    tier = _parse_tier(profile.get("subscription_tier"))
+    tier = _effective_tier(profile)
     limits = TIER_LIMITS[tier]
     if limits["analyses_per_month"] == -1:
         return True
@@ -270,7 +274,7 @@ def increment_analysis_count(user_id: str) -> None:
 def can_export(user_id: str, format: str) -> bool:
     """Vérifie si l'utilisateur peut exporter. format: 'csv' | 'pdf'. CSV pour racer+, PDF pour team uniquement."""
     profile = _fetch_profile(user_id)
-    tier = _parse_tier(profile.get("subscription_tier") if profile else None)
+    tier = _effective_tier(profile)
     limits = TIER_LIMITS[tier]
     fmt = (format or "").strip().lower()
     if fmt == "csv":
@@ -283,7 +287,7 @@ def can_export(user_id: str, format: str) -> bool:
 def can_compare(user_id: str) -> bool:
     """Vérifie si la comparaison pilotes est autorisée (team uniquement)."""
     profile = _fetch_profile(user_id)
-    tier = _parse_tier(profile.get("subscription_tier") if profile else None)
+    tier = _effective_tier(profile)
     return bool(TIER_LIMITS[tier]["comparison"])
 
 
@@ -293,7 +297,7 @@ def get_user_limits(user_id: str) -> dict[str, Any]:
     Clés: tier, analyses_per_month (limit), analyses_used, can_export_csv, can_export_pdf, can_compare, max_members.
     """
     profile = _fetch_profile(user_id)
-    tier = _parse_tier(profile.get("subscription_tier") if profile else None)
+    tier = _effective_tier(profile)
     limits = TIER_LIMITS[tier].copy()
 
     analyses_used = 0

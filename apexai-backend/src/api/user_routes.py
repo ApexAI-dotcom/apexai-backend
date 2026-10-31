@@ -309,7 +309,7 @@ async def get_user_profile(authorization: Optional[str] = Header(None)):
 
         row = (
             supabase.table("profiles")
-            .select("subscription_tier, analyses_count_current_month")
+            .select("subscription_tier, analyses_count_current_month, trial_tier, trial_until")
             .eq("id", current_user)
             .limit(1)
             .execute()
@@ -318,7 +318,8 @@ async def get_user_profile(authorization: Optional[str] = Header(None)):
         analyses_count = 0
         if row.data and len(row.data) > 0:
             r = row.data[0]
-            tier = "racer" if (r.get("subscription_tier") or "").lower() in ("racer", "team") else "free"
+            from src.core.subscription_service import _effective_tier
+            tier = "racer" if _effective_tier(r) in ("racer", "team") else "free"
             analyses_count = int(r.get("analyses_count_current_month") or 0)
 
         if JWT_SECRET:
