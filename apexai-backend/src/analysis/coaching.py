@@ -173,13 +173,13 @@ def _generate_apex_advice(corner_analysis: List[Dict[str, Any]]) -> List[Dict[st
                     f"En visant {apex_error:.1f}m plus vers {inside}, "
                     f"tu pourras accélérer {apex_error * 0.05:.2f}s plus tôt en sortie. "
                     f"Gain estimé : {impact_seconds:.2f}s sur la session. "
-                    f"Regarde l'apex au moment de tourner le volant, pas la sortie."
+                    f"Regardu point de corde au moment de tourner le volant, pas la sortie."
                 )
             else:
                 message = f"{label} — Apex décalé de {apex_error:.1f}m"
                 explanation = (
                     f"Position d'apex non optimale ({apex_error:.1f}m d'erreur). "
-                    f"Un apex précis te permettrait d'accélérer plus tôt en sortie. "
+                    f"Un point de corde précis te permettrait d'accélérer plus tôt en sortie. "
                     f"Gain estimé : {impact_seconds:.2f}s sur la session."
                 )
 
@@ -225,9 +225,9 @@ def _generate_speed_advice(corner_analysis: List[Dict[str, Any]]) -> List[Dict[s
             impact_seconds = speed_delta * 0.01
             efficiency_pct = efficiency * 100
             label = corner.get('label', f"Virage {corner_id}")
-            message = f"{label} — {speed_real:.1f} km/h à l'apex vs {speed_optimal:.1f} km/h optimal"
+            message = f"{label} — {speed_real:.1f} km/h au point de corde vs {speed_optimal:.1f} km/h optimal"
             explanation = (
-                f"Vitesse réelle à l'apex : {speed_real:.1f} km/h. "
+                f"Vitesse réelle au point de corde : {speed_real:.1f} km/h. "
                 f"Vitesse physiquement atteignable sur ce rayon : {speed_optimal:.1f} km/h "
                 f"(μ={1.1}, R={1/max(metrics.get('curvature', 0.01), 0.001):.0f}m). "
                 f"Tu laisses {speed_delta:.1f} km/h sur la table — c'est {impact_seconds:.2f}s perdu sur la session. "
@@ -314,8 +314,8 @@ def _generate_trajectory_advice(corner_analysis: List[Dict[str, Any]], df) -> Li
                 
                 if loss_entree > 20 and gain_sortie > 10:  # Pattern double apex
                     impact_seconds = loss_entree * 0.005
-                    message = f"Virage {corner.get('corner_id')} : Trajectoire en double apex inefficace"
-                    explanation = f"Perte importante en entrée ({loss_entree:.1f} km/h) puis récupération en sortie ({gain_sortie:.1f} km/h). Une trajectoire plus simple (single apex) serait plus rapide."
+                    message = f"Virage {corner.get('corner_id')} : Trajectoire à deux points de corde inefficace"
+                    explanation = f"Perte importante en entrée ({loss_entree:.1f} km/h) puis récupération en sortie ({gain_sortie:.1f} km/h). Une trajectoire plus simple (un seul point de corde) serait plus rapide."
                     
                     advice.append({
                         'priority': len(advice) + 1,
@@ -473,7 +473,7 @@ def _braking_advice(
         return {
             "message": f"{head} — Tu freines {delta:.0f} m plus tôt que ton meilleur tour",
             "explanation": (
-                f"Ici tu déclenches à {point:.0f} m de l'apex, alors que tu as déjà freiné à "
+                f"Ici tu déclenches à {point:.0f} m du point de corde, alors que tu as déjà freiné à "
                 f"{best_point:.0f} m{ref} en gardant la même vitesse de passage "
                 f"({v_min:.0f} km/h). Ce n'est donc pas une prise de risque : tu l'as déjà fait. "
                 f"Prends un repère fixe au bord de piste et avance-le de {delta:.0f} m."
@@ -486,7 +486,7 @@ def _braking_advice(
         return {
             "message": f"{head} — Ton meilleur passage freinait {abs(delta):.0f} m plus tôt",
             "explanation": (
-                f"Tu déclenches à {point:.0f} m de l'apex, mais ton passage le plus rapide ici "
+                f"Tu déclenches à {point:.0f} m du point de corde, mais ton passage le plus rapide ici "
                 f"freinait à {best_point:.0f} m{ref} — plus tôt, et pourtant plus rapide sur la "
                 f"portion. Anticiper te laisse le temps de rendre les freins avant l'inscription : "
                 f"tu ressors mieux placé, et c'est la sortie qui paie sur la ligne droite suivante. "
@@ -566,11 +566,11 @@ def _build_differentiated_corner_advice(
     # 2. Placement d'apex (mesure bornée par la largeur de piste).
     if apex_error >= 1.0:
         return {
-            "message": f"{head} — Apex manqué de {apex_error:.1f} m",
+            "message": f"{head} — Point de corde manqué de {apex_error:.1f} m",
             "explanation": (
                 f"Ton point de corde est décalé de {apex_error:.1f} m par rapport au point optimal "
-                f"du virage. Fixe l'apex du regard AVANT de braquer : la trajectoire suit le regard. "
-                f"Un apex propre ouvre le volant plus tôt et allonge la phase d'accélération."
+                f"du virage. Fixe le point de corde du regard AVANT de braquer : la trajectoire suit le regard. "
+                f"Un point de corde propre ouvre le volant plus tôt et allonge la phase d'accélération."
                 f"{gain_str}{lap_str}"
             ),
             "difficulty": "moyen", "impact_seconds": impact_seconds, "category": "apex",
@@ -583,12 +583,12 @@ def _build_differentiated_corner_advice(
                    "l'avant reste chargé et le kart tourne sans que tu perdes de vitesse.")
         elif speed_class == "fast":
             how = ("Sur un virage rapide, la perte vient presque toujours d'un lever de pied "
-                   "de sécurité. Vise l'apex du regard et garde le pied constant.")
+                   "de sécurité. Vise le point de corde du regard et garde le pied constant.")
         else:
-            how = ("Élargis ton entrée pour ouvrir le rayon : tu pourras passer plus vite à l'apex "
+            how = ("Élargis ton entrée pour ouvrir le rayon : tu pourras passer plus vite au point de corde "
                    "sans élargir en sortie.")
         return {
-            "message": f"{head} — {delta_speed:.1f} km/h à reprendre à l'apex",
+            "message": f"{head} — {delta_speed:.1f} km/h à reprendre au point de corde",
             "explanation": (
                 f"Tu passes à {apex_speed:.0f} km/h alors que ton meilleur passage sur ce virage "
                 f"est à {apex_opt:.0f} km/h : la vitesse est atteignable, tu l'as déjà faite. {how}"
@@ -615,7 +615,7 @@ def _build_differentiated_corner_advice(
         return {
             "message": f"{head} — Passage maîtrisé",
             "explanation": (
-                f"Rien à corriger : {apex_speed:.0f} km/h à l'apex, trajectoire propre, "
+                f"Rien à corriger : {apex_speed:.0f} km/h au point de corde, trajectoire propre, "
                 f"aucune perte de temps mesurée. Sers-t'en comme référence de sensations."
             ),
             "difficulty": "facile", "impact_seconds": 0.0, "category": "info",
