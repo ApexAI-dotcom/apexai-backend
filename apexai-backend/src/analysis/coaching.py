@@ -26,6 +26,7 @@ def generate_coaching_advice(
     track_temperature: Optional[float] = None,
     laps_analyzed: int = 1,
     laps_used: Optional[List[int]] = None,
+    ideal_lap: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Génère 3-5 conseils hiérarchisés par impact sur la session.
@@ -120,7 +121,11 @@ def generate_coaching_advice(
         # Étape 2 — Enchaînements (perte > 8 km/h entre Vn et Vn+1)
         trajectory_advice = _generate_trajectory_advice(corner_analysis, df)
         enchainement_only = [a for a in trajectory_advice if "Enchaînement" in (a.get("message") or "")]
-        # Ordre strict : individuels d'abord, puis enchaînements ; limite à 3 conseils hors info
+        # Étape 3 — Sorties et relances (retour pilote : on parlait du freinage
+        # et des cordes, jamais de la sortie). Comparées à TES meilleures sorties.
+        exit_items = _generate_exit_advice(df, corner_analysis, laps_used, ideal_lap)
+        global_advice = _merge_with_exits(list(global_advice), exit_items)
+        # Ordre strict : individuels d'abord, puis enchaînements ; limite à 4 conseils hors info
         rest_ordered = list(global_advice) + list(enchainement_only)
         rest_ordered = rest_ordered[:MAX_REAL_ADVICE]
 
@@ -682,3 +687,85 @@ def _generate_global_advice(
         warnings.warn(f"Error generating global advice: {str(e)}")
 
     return advice
+
+
+def _corner_track_order(df, corner_analysis: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Virages dans l'ordre du tour, avec la distance (m) jusqu'au virage suivant."""
+    rows = []
+    try:
+        lap_start = df.groupby("lap_number")["cumulative_distance"].min().to_dict()
+        lap_len = float((df.groupby("lap_number")["cumulative_distance"].max()
+                         - df.groupby("lap_number")["cumulative_distance"].min()).median())
+        for c in corner_analysis:
+            ds = []
+            for p in c.get("per_lap_data") or []:
+                i = int(p.get("apex_index", -1))
+                if 0 <= i < len(df):
+                    lap = df["lap_number"].iloc[i]
+                    ds.append(float(df["cumulative_distance"].iloc[i]) - float(lap_start.get(lap, 0.0)))
+            if ds:
+                rows.append({"corner": c, "pos": float(np.median(ds))})
+        rows.sort(key=lambda r: r["pos"])
+        for k, r in enumerate(rows):
+            nxt = rows[(k + 1) % len(rows)]["pos"] + (lap_len if k == len(rows) - 1 else 0.0)
+            r["to_next_m"] = nxt - r["pos"]
+    except Exception:
+        return [{"corner": c, "pos": 0.0, "to_next_m": None} for c in corner_analysis]
+    return rows
+
+
+def _generate_exit_advice(df, corner_analysis, laps_used, ideal_lap) -> List[Dict[str, Any]]:
+    from src.analysis.exit_analysis import analyze_corner_exits, exit_advice, relance_loss
+    out = []
+    try:
+        for r in _corner_track_order(df, corner_analysis):
+            c = r["corner"]
+            # On mesure la sortie jusqu'au freinage suivant (≈ 40 m avant la corde suivante).
+            offset = (r["to_next_m"] - 40.0) if r.get("to_next_m") else None
+            stats = analyze_corner_exits(df, c, laps_used, offset)
+            if not stats:
+                continue
+            n = c.get("corner_id", 0) or 0
+            corner_type = (c.get("corner_type") or "").lower()
+            dir_fr = "à droite" if corner_type == "right" else "à gauche" if corner_type == "left" else ""
+            head = f"Virage {n} {dir_fr}".strip()
+            built = exit_advice(head, stats, relance_loss(ideal_lap, n))
+            if built:
+                out.append({
+                    "priority": 0,
+                    "category": built["category"],
+                    "impact_seconds": built["impact_seconds"],
+                    "corner": c.get("corner_id"),
+                    "message": built["message"],
+                    "explanation": built["explanation"],
+                    "difficulty": built["difficulty"],
+                })
+    except Exception as e:
+        warnings.warn(f"Error generating exit advice: {str(e)}")
+    out.sort(key=lambda a: a.get("impact_seconds", 0), reverse=True)
+    return out
+
+
+def _merge_with_exits(corner_advice: List[Dict[str, Any]], exit_items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Fusionne conseils de virage et conseils de sortie, classés par temps.
+    Au plus deux conseils par virage ; et si une relance coûte au moins
+    0,03 s, elle figure parmi les premiers conseils affichés.
+    """
+    merged = sorted(corner_advice + exit_items, key=lambda a: float(a.get("impact_seconds") or 0), reverse=True)
+    per_corner: Dict[Any, int] = {}
+    kept = []
+    for a in merged:
+        k = a.get("corner")
+        if k is not None and per_corner.get(k, 0) >= 2:
+            continue
+        per_corner[k] = per_corner.get(k, 0) + 1
+        kept.append(a)
+    top = kept[:MAX_REAL_ADVICE]
+    best_exit = next((a for a in kept if a.get("category") == "exit" and float(a.get("impact_seconds") or 0) >= 0.03), None)
+    if best_exit and best_exit not in top and len(top) == MAX_REAL_ADVICE:
+        kept.remove(best_exit)
+        kept.insert(MAX_REAL_ADVICE - 1, best_exit)
+    for i, a in enumerate(kept, start=1):
+        a["priority"] = i
+    return kept

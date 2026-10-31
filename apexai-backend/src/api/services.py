@@ -670,6 +670,7 @@ def _run_analysis_pipeline_sync(
             track_temperature=track_temperature,
             laps_analyzed=laps_representative,
             laps_used=(ideal_lap_data or {}).get("laps_used"),
+            ideal_lap=ideal_lap_data,
         )
     except Exception as e:
         logger.warning(f"[{analysis_id}] Failed to generate coaching advice: {e}")
