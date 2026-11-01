@@ -82,6 +82,7 @@ def read_session_header(path: str) -> Dict[str, Any]:
           "circuit_name":    circuit déclaré dans le boîtier, ou None,
           "duration_s":      durée de la séance, ou None,
           "segment_times_s": chronos d'origine du boîtier (AiM CSV), ou [],
+          "session_datetime": date et heure locales de la séance, ou None,
         }
 
     Ne lève jamais : un en-tête illisible donne des champs vides, et le
@@ -93,6 +94,7 @@ def read_session_header(path: str) -> Dict[str, Any]:
         "circuit_name": None,
         "duration_s": None,
         "segment_times_s": [],
+        "session_datetime": None,
     }
     labels: Dict[str, List[str]] = {}
     try:
@@ -134,6 +136,13 @@ def read_session_header(path: str) -> Dict[str, Any]:
 
     seg_fields = labels.get("segment times", [])
     info["segment_times_s"] = [t for t in (_duration(v) for v in seg_fields) if t is not None]
+
+    try:
+        from src.analysis.weather import session_datetime
+
+        info["session_datetime"] = session_datetime(labels)
+    except Exception:  # pragma: no cover - en-tête atypique
+        info["session_datetime"] = None
 
     return info
 

@@ -265,6 +265,36 @@ def _run_analysis_pipeline_sync(
     # référence, donc les vitesses de passage optimales, la ligne de course et
     # la capacité de freinage attendue. Un module qui raisonnerait « au sec »
     # sous la pluie assignerait au pilote des objectifs inatteignables.
+    # Météo de la séance (date et heure du fichier, lieu GPS) : quand le
+    # pilote laisse « auto », elle fixe l'état de la piste ; quand il ne donne
+    # pas la température, elle en fournit une estimation. Ce qu'il déclare
+    # explicitement reste prioritaire.
+    weather = None
+    condition_source = "pilote"
+    if track_condition == "auto" or track_temperature is None:
+        try:
+            from src.core.session_header import read_session_header
+            from src.analysis.weather import lookup_session_weather
+
+            when = read_session_header(temp_path).get("session_datetime")
+            lat = float(df["latitude"].median()) if "latitude" in df.columns else None
+            lon = float(df["longitude"].median()) if "longitude" in df.columns else None
+            weather = lookup_session_weather(lat, lon, when)
+        except Exception as exc:
+            logger.warning(f"[{analysis_id}] météo indisponible : {exc}")
+            weather = None
+    track_temperature_estimated = False
+    if track_condition == "auto":
+        if weather:
+            track_condition = weather["track_condition"]
+            condition_source = "météo"
+        else:
+            track_condition = "dry"
+            condition_source = "défaut"
+    if track_temperature is None and weather and weather.get("track_temp_estimated") is not None:
+        track_temperature = float(weather["track_temp_estimated"])
+        track_temperature_estimated = True
+
     conditions = attach_conditions(df, track_condition, track_temperature)
     logger.info(
         "[%s] Conditions : %s%s — μ de référence %.2f g, freinage %.2f–%.2f g",
@@ -921,6 +951,11 @@ def _run_analysis_pipeline_sync(
             # le pilote a déclaré. Sans ces valeurs à l'écran, rien ne prouve
             # que cocher « pluie » sert à quelque chose.
             resolved=conditions.to_dict(),
+            # Météo retrouvée (Open-Meteo) et origine de l'état de piste.
+            weather=weather,
+            condition_source=condition_source,
+            track_temperature_estimated=track_temperature_estimated,
+            air_temp=(weather or {}).get("air_temp"),
             # Fiche du circuit reconnu : gardée avec la séance (la colonne
             # session_conditions est enregistrée telle quelle).
             catalog=circuit_match,

@@ -125,7 +125,7 @@ async def analyze_telemetry(
     request: Request,
     file: UploadFile = File(..., description="Fichier CSV de télémétrie"),
     lap_filter: Optional[str] = Form(None, description="JSON array des numéros de tours à inclure, ex: [1,2,3]"),
-    track_condition: str = Form("dry", description="Condition piste: dry, damp, wet, rain"),
+    track_condition: str = Form("dry", description="Condition piste: dry, damp, wet, rain, auto (météo de la séance)"),
     track_temperature: Optional[str] = Form(None, description="Température piste en °C"),
     session_name: Optional[str] = Form(None, description="Nom optionnel de la session"),
     authorization: Optional[str] = Header(None, description="Bearer JWT pour limite abonnement"),
@@ -171,7 +171,9 @@ async def analyze_telemetry(
             pass
 
     cond = (track_condition or "dry").strip().lower()
-    if cond not in ("dry", "damp", "wet", "rain"):
+    # « auto » : l'analyse retrouve la météo de la séance (date, heure et GPS
+    # du fichier) ; à défaut, « sec » comme avant.
+    if cond not in ("dry", "damp", "wet", "rain", "auto"):
         cond = "dry"
     temp_c = None
     if track_temperature is not None and track_temperature.strip():
