@@ -195,7 +195,7 @@ class AdvisorRequest(BaseModel):
     air_temp: Optional[float] = Field(default=None, alias="airTemp")
     grip: str = Field(default="normal", description="faible | normal | gommée")
     circuit: Optional[Dict[str, Any]] = None
-    mode: Optional[str] = Field(default=None, description="warmup | qualif | course")
+    mode: Optional[str] = Field(default=None, description="roulage | warmup | qualif | course")
     total_weight: Optional[float] = Field(default=None, alias="totalWeight")
     sprocket_front: Optional[int] = Field(default=None, alias="sprocketFront")
     sprocket_rear: Optional[int] = Field(default=None, alias="sprocketRear")

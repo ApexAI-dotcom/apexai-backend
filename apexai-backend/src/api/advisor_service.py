@@ -296,6 +296,8 @@ def recommend_tire_set(
       - course -> un train RODÉ de préférence (constance + endurance),
                   sinon celui avec le plus de vie restante
       - warmup -> le train le plus usé encore roulable (on préserve le stock)
+      - roulage -> le train monté s'il lui reste de la vie, sinon le plus usé
+                   encore roulable (un roulage ne doit pas entamer les bons trains)
     """
     mode = (mode or "course").lower()
     rain = (weather or "sec").lower() == "pluie"
@@ -330,6 +332,14 @@ def recommend_tire_set(
     if mode == "qualif":
         best = max(fresh_candidates, key=lambda t: (STATE_RANK.get(t.get("state"), 1), life_left(t)))
         why = "Qualif : on monte le train le plus frais — la performance pure prime sur peu de tours."
+    elif mode == "roulage":
+        mounted_ok = next((t for t in fresh_candidates if t.get("is_mounted")), None)
+        if mounted_ok:
+            best = mounted_ok
+            why = "Roulage : garde le train monté, il lui reste de la vie ; les trains frais sont pour la course."
+        else:
+            best = min(fresh_candidates, key=lambda t: (STATE_RANK.get(t.get("state"), 1), life_left(t)))
+            why = "Roulage : le train le plus entamé encore roulable suffit ; on préserve les bons trains pour la course."
     elif mode == "warmup":
         best = min(fresh_candidates, key=lambda t: (STATE_RANK.get(t.get("state"), 1), life_left(t)))
         why = "Warm-up : le train le plus entamé suffit pour la mise en température — on préserve les bons trains."

@@ -72,3 +72,13 @@ def test_feature_flag_disabled(mock_is_enabled):
     
     response = client.get("/api/kart/profile")
     assert response.status_code == 404
+
+
+def test_tire_advice_roulage_keeps_mounted_set():
+    from src.api.advisor_service import recommend_tire_set
+    sets = [
+        {"id": "a", "label": "Train A", "state": "neuf", "laps_current": 0, "laps_life": 250},
+        {"id": "b", "label": "Train B", "state": "rode", "laps_current": 120, "laps_life": 250, "is_mounted": True},
+    ]
+    advice = recommend_tire_set(sets, "roulage", "sec")
+    assert advice["set"]["id"] == "b"
