@@ -25,3 +25,13 @@ def test_session_points_match_the_track():
 
 def test_rotation_is_read_from_the_trace():
     assert cc.rotation_of(cc.get("solokart-plesse")["centerline"]) in ("horaire", "anti-horaire")
+
+
+def test_corner_count_ignores_flat_out_kinks():
+    """Citykart Sautron : 15 inflexions sur le tracé, 10 vrais virages."""
+    from src.core import circuit_catalog as cc
+    c = next(x for x in cc.all_circuits() if x["name"] == "Citykart")
+    s = cc.summary(c)
+    assert s["corners_count"] == 10
+    assert s["kinks_count"] == 5
+    assert s["hairpins_count"] + s["medium_count"] + s["fast_corners_count"] == s["corners_count"]

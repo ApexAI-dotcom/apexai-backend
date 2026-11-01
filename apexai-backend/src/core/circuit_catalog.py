@@ -24,7 +24,7 @@ DATA = Path(__file__).resolve().parents[1] / "data" / "circuit_catalog.json"
 SUMMARY_KEYS = (
     "slug", "name", "city", "postal_code", "department_code", "department", "region", "lat", "lon",
     "indoor", "surface", "width_m", "length_m", "trace_status", "corners_count", "hairpins_count",
-    "medium_count", "fast_corners_count", "website", "osm_url", "source",
+    "medium_count", "fast_corners_count", "kinks_count", "website", "osm_url", "source",
 )
 
 
