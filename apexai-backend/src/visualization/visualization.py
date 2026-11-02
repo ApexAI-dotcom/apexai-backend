@@ -1002,6 +1002,30 @@ def generate_all_plots_base64(df: pd.DataFrame) -> Dict[str, Optional[str]]:
 from src.analysis.braking import phase_labels as _phase_labels
 
 
+def _lap_channels(lap_df: pd.DataFrame) -> Dict[str, Any]:
+    """Régime, G latéral et température d'eau d'un tour, s'ils sont dans le fichier."""
+    from src.analysis.lap_report import _col, _num
+
+    out: Dict[str, Any] = {}
+    specs = (
+        ("rpm", ["rpm", "engine rpm", "engine_rpm"], 0),
+        ("lateral_g", ["gps latacc", "lateral_g"], 2),
+        ("water_temp", ["water temp", "water_temp", "watertemp", "h2o temp"], 1),
+    )
+    for key, names, nd in specs:
+        try:
+            arr = _num(lap_df, _col(lap_df, names))
+        except Exception:
+            arr = None
+        if arr is None:
+            continue
+        vals = [None if not np.isfinite(v) else round(float(v), nd) for v in arr]
+        if sum(v is not None and v != 0 for v in vals) < 5:
+            continue
+        out[key] = downsample_array(vals)
+    return out
+
+
 def _driving_phases(lap_df, analysis=None) -> list:
     """
     Phase de pilotage en chaque point : « braking », « acceleration » ou
@@ -1155,6 +1179,9 @@ def generate_plot_data(df: pd.DataFrame) -> Dict[str, Any]:
                             # aucun seuil à réappliquer, donc aucun moyen de
                             # placer une bande ailleurs que sa pastille.
                             "braking_zones": braking_by_lap.get(int(lap), []),
+                            # Canaux moteur et châssis, pour colorer la carte
+                            # (régime, G latéral) comme Race Studio.
+                            **_lap_channels(lap_df),
                         })
             else:
                  traj_laps.append({
