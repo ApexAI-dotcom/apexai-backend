@@ -266,7 +266,12 @@ def load_launch_report(days: int) -> Dict[str, Any]:
     users = supabase.rpc("admin_launch_users", {}).execute().data or []
     since = (now - timedelta(days=2 * days + 1)).isoformat()
     analyses = _fetch_all("analyses", "user_id, created_at", since=since)
-    return build_launch_report(events, users, analyses, _team_user_ids(), now, days)
+    report = build_launch_report(events, users, analyses, _team_user_ids(), now, days)
+    # Revenus réels lus dans Stripe (None si Stripe est injoignable).
+    from .revenue import stripe_revenue
+
+    report["revenue"] = stripe_revenue(days)
+    return report
 
 
 @router.get("/launch")
