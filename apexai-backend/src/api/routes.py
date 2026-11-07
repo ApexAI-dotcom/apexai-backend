@@ -148,6 +148,23 @@ async def analyze_telemetry(
     logger.info(f"🏁 New analysis request: {analysis_id} - {file.filename}")
 
     user_id = _get_user_id_from_authorization(authorization)
+    # Niveau d'analyse du coaching : sans compte, compte gratuit ou Racer
+    # (abonnement payé ou Paddock Pass en cours : même « tier effectif » que
+    # le compteur d'analyses). Racer lit en plus Mon Kart et les réglages.
+    coaching_tier = "visitor"
+    kart_context = None
+    if user_id:
+        try:
+            from src.core.subscription_service import get_subscription_tier
+            coaching_tier = get_subscription_tier(user_id) or "rookie"
+        except Exception:
+            coaching_tier = "rookie"
+        if coaching_tier in ("racer", "team"):
+            try:
+                from src.analysis.coaching_pro import load_kart_context
+                kart_context = load_kart_context(user_id)
+            except Exception:
+                kart_context = None
     if user_id and not check_analysis_limit(user_id):
         raise HTTPException(
             status_code=403,
@@ -191,7 +208,11 @@ async def analyze_telemetry(
         norm_laps = str(sorted(lap_list)) if lap_list else "All"
         norm_temp = str(float(temp_c)) if temp_c is not None else "none"
             
-        cache_str = f"{file_hash}_{norm_laps}_{cond}_{norm_temp}"
+        # Le coaching dépend du niveau du pilote et, en Racer, de son kart : un
+        # même fichier ne doit pas renvoyer l'analyse d'un autre niveau.
+        from src.analysis.coaching_pro import kart_cache_key
+        coach_key = f"{coaching_tier}_{kart_cache_key(kart_context)}_{os.getenv('COACHING_ENGINE', 'pro')}"
+        cache_str = f"{file_hash}_{norm_laps}_{cond}_{norm_temp}_{coach_key}"
         cache_key = hashlib.sha256(cache_str.encode("utf-8")).hexdigest()
             
         redis = getattr(request.app.state, "redis", None)
@@ -229,6 +250,8 @@ async def analyze_telemetry(
             track_temperature=temp_c,
             session_name=session_name,
             user_id=user_id,
+            coaching_tier=coaching_tier,
+            kart_context=kart_context,
         )
 
         # Stocker en cache

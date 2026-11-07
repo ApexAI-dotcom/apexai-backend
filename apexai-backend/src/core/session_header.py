@@ -95,6 +95,8 @@ def read_session_header(path: str) -> Dict[str, Any]:
         "duration_s": None,
         "segment_times_s": [],
         "session_datetime": None,
+        "vehicle": None,
+        "driver": None,
     }
     labels: Dict[str, List[str]] = {}
     try:
@@ -127,6 +129,11 @@ def read_session_header(path: str) -> Dict[str, Any]:
     if not venue and fmt.lower().startswith("aim csv"):
         venue = (labels.get("session") or [""])[0].strip()
     info["circuit_name"] = venue or None
+    # Véhicule et pilote déclarés dans le boîtier (« Vehicle », « Racer » en AiM
+    # CSV, « Driver » en MoTeC) : le coaching s'en sert pour reconnaître la
+    # famille du moteur quand Mon Kart n'est pas rempli.
+    info["vehicle"] = (labels.get("vehicle") or [""])[0].strip() or None
+    info["driver"] = ((labels.get("racer") or labels.get("driver") or [""])[0]).strip() or None
 
     markers = sorted(m for m in _floats(labels.get("beacon markers", [])) if m > 0)
     # Marqueur de fin de séance (AiM CSV) : ce n'est pas un passage sur la ligne.

@@ -49,7 +49,7 @@ router = APIRouter(prefix="/api/analysis", tags=["analysis-jobs"])
 
 # Version du calcul : à changer quand le pipeline change de résultat, pour ne
 # pas resservir un ancien résultat mis en cache.
-PIPELINE_VERSION = "2026-11-07b"
+PIPELINE_VERSION = "2026-11-07c-coaching-pro"
 
 _EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="analysis")
 _JOBS: Dict[str, "Job"] = {}
@@ -194,6 +194,9 @@ def _work(job: Job, content: bytes, saved_name: str, params: Dict[str, Any]) -> 
             params.get("session_name"),
             header["circuit_name"],
             job.mode == "light",
+            params.get("coaching_tier") or "visitor",
+            params.get("_kart"),
+            header.get("vehicle"),
         )
         if job.mode == "full" and job.user_id:
             _kart_hook(job.user_id, temp_path, result, header["circuit_name"], analysis_id)
@@ -337,14 +340,39 @@ async def create_job(
             temp_c = float(track_temperature.strip().replace(",", "."))
         except ValueError:
             temp_c = None
+    # Niveau d'analyse du coaching : sans compte, compte gratuit ou Racer (tier
+    # effectif, Paddock Pass compris). Racer lit en plus Mon Kart et les réglages.
+    coaching_tier, kart_raw = "visitor", None
+    if mode == "full" and user_id:
+        try:
+            from src.core.subscription_service import get_subscription_tier
+
+            coaching_tier = get_subscription_tier(user_id) or "rookie"
+        except Exception:
+            coaching_tier = "rookie"
+        if coaching_tier in ("racer", "team"):
+            try:
+                from src.analysis.coaching_pro import load_kart_context
+
+                kart_raw = load_kart_context(user_id)
+            except Exception:
+                kart_raw = None
+    from src.analysis.coaching_pro import kart_cache_key
+
     params = {
         "laps": laps,
         "condition": "dry" if mode == "light" else cond,
         "temperature": None if mode == "light" else temp_c,
         "session_name": (session_name or "").strip() or None,
+        # Le coaching dépend du niveau et du kart : un même fichier ne doit pas
+        # resservir l'analyse d'un autre niveau.
+        "coaching_tier": coaching_tier,
+        "coach_key": f"{kart_cache_key(kart_raw)}_{os.getenv('COACHING_ENGINE', 'pro')}",
+        "_kart": kart_raw,
     }
-    # Le nom de séance ne change pas le calcul : il reste hors de la signature.
-    sig = signature(content, {k: v for k, v in params.items() if k != "session_name"}, mode)
+    # Le nom de séance ne change pas le calcul : il reste hors de la signature
+    # (comme le contexte kart brut, résumé par coach_key).
+    sig = signature(content, {k: v for k, v in params.items() if k != "session_name" and not k.startswith("_")}, mode)
     filename = file.filename or "session.csv"
 
     # 1. Déjà analysé : résultat immédiat, sans recalcul ni quota.

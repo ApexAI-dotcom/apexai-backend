@@ -237,6 +237,12 @@ async def get_user_subscription(
                 logger.debug("Failed to parse reset date: %s", e)
         
         limits["analyses_used"] = analyses_used
+        # Conseils de coaching par analyse pour ce niveau (source unique : coaching_pro).
+        try:
+            from src.analysis.coaching_pro import TIER_QUOTAS, normalize_tier
+            limits["coaching_advice"] = TIER_QUOTAS[normalize_tier(tier)]
+        except Exception:
+            pass
 
         sub_start = data.get("subscription_start_date")
         subscription_start_date = (

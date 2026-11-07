@@ -236,6 +236,9 @@ def _run_analysis_pipeline_sync(
     session_name: Optional[str] = None,
     circuit_name: Optional[str] = None,
     light: bool = False,
+    coaching_tier: Optional[str] = None,
+    kart_context: Optional[Dict[str, Any]] = None,
+    vehicle_hint: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Pipeline d'analyse synchrone (exécuté dans un thread pour ne pas bloquer l'event loop).
@@ -243,6 +246,11 @@ def _run_analysis_pipeline_sync(
     ``light`` : analyse allégée pour la 2e séance d'une comparaison — tours,
     virages, traces et freinages, sans météo, tour idéal, Tour Parfait IA,
     coaching ni images.
+
+    coaching_tier : niveau d'analyse du coaching (visitor, rookie, racer ; team = racer).
+    Non fourni, il vaut « visitor » : le minimum, jamais plus que ce que le pilote a payé.
+    kart_context : Mon Kart et réglages (niveau Racer), facultatif.
+    vehicle_hint : véhicule déclaré dans le boîtier (famille du moteur sans Mon Kart).
     """
     from src.api.progress import report
 
@@ -720,22 +728,61 @@ def _run_analysis_pipeline_sync(
     # Une seule source de vérité : overall_score = sum(breakdown) depuis calculate_performance_score
     validate_score_consistency(score_data)
 
-    logger.info(f"[{analysis_id}] Generating coaching advice...")
+    # Circuit reconnu dans la base des circuits de France : le tracé de la
+    # session est confronté aux tracés connus (OpenStreetMap + FFSA). Calculé
+    # AVANT le coaching, qui s'en sert pour nommer le type de chaque virage.
+    circuit_match = None
     try:
-        if light:
-            raise _SkipStep()
-        report(86, "Conseils de coaching")
-        coaching_advice_list = generate_coaching_advice(
-            df, corner_details, score_data, unique_corner_analysis,
-            track_condition=track_condition,
-            track_temperature=track_temperature,
-            laps_analyzed=laps_representative,
-            laps_used=(ideal_lap_data or {}).get("laps_used"),
-            ideal_lap=ideal_lap_data,
-        )
+        from src.core.circuit_catalog import match_points
+        lat_col = "latitude_smooth" if "latitude_smooth" in df.columns else "latitude"
+        lon_col = "longitude_smooth" if "longitude_smooth" in df.columns else "longitude"
+        if lat_col in df.columns and lon_col in df.columns:
+            circuit_match = match_points(zip(df[lat_col].tolist(), df[lon_col].tolist()))
+            if circuit_match and not circuit_name and circuit_match.get("confident"):
+                circuit_name = circuit_match.get("name")
     except Exception as e:
-        logger.warning(f"[{analysis_id}] Failed to generate coaching advice: {e}")
-        coaching_advice_list = []
+        logger.warning(f"[{analysis_id}] circuit catalog match failed: {e}")
+
+    logger.info(f"[{analysis_id}] Generating coaching advice...")
+    coaching_meta: Optional[Dict[str, Any]] = None
+    coaching_advice_list: List[Dict[str, Any]] = []
+    # Coaching « pilote pro » (base de principes, analyse par niveaux). L'ancien
+    # moteur reste disponible : COACHING_ENGINE=v1 dans l'environnement du
+    # serveur y revient immédiatement, sans redéploiement de code ; et il prend
+    # le relais tout seul si le nouveau échoue sur un fichier.
+    if not light:
+        report(86, "Conseils de coaching")
+    if not light and os.getenv("COACHING_ENGINE", "pro").strip().lower() != "v1":
+        try:
+            from src.analysis.coaching_pro import generate_pro_coaching, select_setup
+            coaching_advice_list, coaching_meta = generate_pro_coaching(
+                df, unique_corner_analysis,
+                track_condition=track_condition,
+                track_temperature=track_temperature,
+                laps_analyzed=laps_representative,
+                laps_used=(ideal_lap_data or {}).get("laps_used"),
+                ideal_lap=ideal_lap_data,
+                tier=coaching_tier or "visitor",
+                kart_raw=select_setup(kart_context, circuit_name),
+                circuit=circuit_match,
+                vehicle_hint=vehicle_hint,
+            )
+        except Exception as e:
+            logger.warning(f"[{analysis_id}] coaching pro failed, fallback v1: {e}", exc_info=True)
+            coaching_advice_list, coaching_meta = [], None
+    if not coaching_meta and not light:
+        try:
+            coaching_advice_list = generate_coaching_advice(
+                df, corner_details, score_data, unique_corner_analysis,
+                track_condition=track_condition,
+                track_temperature=track_temperature,
+                laps_analyzed=laps_representative,
+                laps_used=(ideal_lap_data or {}).get("laps_used"),
+                ideal_lap=ideal_lap_data,
+            )
+        except Exception as e:
+            logger.warning(f"[{analysis_id}] Failed to generate coaching advice: {e}")
+            coaching_advice_list = []
 
     # L'état de piste déclaré contredit la télémétrie : on le dit au pilote au
     # lieu de le corriger en silence. C'est presque toujours une case cochée par
@@ -915,20 +962,6 @@ def _run_analysis_pipeline_sync(
         logger.warning(f"[{analysis_id}] track_signature failed: {e}")
         track_signature = None
 
-    # Circuit reconnu dans la base des circuits de France : le tracé de la
-    # session est confronté aux tracés connus (OpenStreetMap + FFSA).
-    circuit_match = None
-    try:
-        from src.core.circuit_catalog import match_points
-        lat_col = "latitude_smooth" if "latitude_smooth" in df.columns else "latitude"
-        lon_col = "longitude_smooth" if "longitude_smooth" in df.columns else "longitude"
-        if lat_col in df.columns and lon_col in df.columns:
-            circuit_match = match_points(zip(df[lat_col].tolist(), df[lon_col].tolist()))
-            if circuit_match and not circuit_name and circuit_match.get("confident"):
-                circuit_name = circuit_match.get("name")
-    except Exception as e:
-        logger.warning(f"[{analysis_id}] circuit catalog match failed: {e}")
-
     response = AnalysisResponse(
         success=True,
         analysis_id=analysis_id,
@@ -954,12 +987,17 @@ def _run_analysis_pipeline_sync(
         # Les encarts d'information ne consomment plus le quota : avec trois
         # encarts (pluie + température), la troncature à 5 ne laissait passer
         # que deux vrais conseils.
+        # Nouveau moteur : il a déjà appliqué le quota du niveau (et ajouté
+        # l'aperçu verrouillé) ; l'ancien garde sa limite de 4 conseils.
         coaching_advice=[
             CoachingAdvice(**a) for a in (
-                [a for a in coaching_advice_list if isinstance(a, dict) and a.get("category") == "info"]
-                + [a for a in coaching_advice_list if isinstance(a, dict) and a.get("category") != "info"][:4]
-            ) if a
+                coaching_advice_list if coaching_meta else (
+                    [a for a in coaching_advice_list if isinstance(a, dict) and a.get("category") == "info"]
+                    + [a for a in coaching_advice_list if isinstance(a, dict) and a.get("category") != "info"][:4]
+                )
+            ) if isinstance(a, dict) and a
         ],
+        coaching=coaching_meta,
         plots=PlotUrls(**plots_urls),
         plot_data=plot_data,
         statistics=Statistics(
@@ -1054,6 +1092,8 @@ class AnalysisService:
         track_temperature: Optional[float] = None,
         session_name: Optional[str] = None,
         user_id: Optional[str] = None,
+        coaching_tier: Optional[str] = None,
+        kart_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Traiter un fichier de télémétrie complet.
@@ -1120,6 +1160,9 @@ class AnalysisService:
                 track_temperature,
                 session_name,
                 circuit_name,
+                coaching_tier,
+                kart_context,
+                header.get("vehicle"),
             )
             
             # --- Mon Kart Hook ---

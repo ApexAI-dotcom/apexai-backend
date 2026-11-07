@@ -149,7 +149,7 @@ class AnalysisResponse(BaseModel):
     
     performance_score: PerformanceScore
     corner_analysis: List[CornerAnalysis] = Field(description="Analyse de chaque virage (max 10)")
-    coaching_advice: List[CoachingAdvice] = Field(description="Top 5 conseils")
+    coaching_advice: List[CoachingAdvice] = Field(description="Conseils : encarts de contexte, conseils du niveau, plan de séance (Racer), aperçus verrouillés (locked)")
     
     plots: PlotUrls
     plot_data: Optional[Dict[str, Any]] = Field(default=None, description="Raw data for interactive frontend plotting (Recharts)")
@@ -160,6 +160,7 @@ class AnalysisResponse(BaseModel):
     racing_line: Optional[Dict[str, Any]] = Field(default=None, description="Ligne de course idéale calculée (courbure minimale) + bords de piste estimés")
     circuit: Optional[Dict[str, Any]] = Field(default=None, description="Circuit reconnu dans la base des circuits de France (points GPS de la session)")
     import_diagnostics: Optional[Dict[str, Any]] = Field(default=None, description="Diagnostic d'import : appareil détecté, canaux trouvés/manquants, fréquence")
+    coaching: Optional[Dict[str, Any]] = Field(default=None, description="Coaching : niveau d'analyse (sans compte, gratuit, Racer), données utilisées (circuit, moteur, kart, réglage), conseils verrouillés")
 
 
 class ErrorResponse(BaseModel):

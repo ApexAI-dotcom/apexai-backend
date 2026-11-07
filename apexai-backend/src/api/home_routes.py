@@ -417,7 +417,7 @@ def _compute_focus(analyses: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         for item in advice:
             if not isinstance(item, dict) or item.get("corner") is None:
                 continue
-            if item.get("category") == "info":
+            if item.get("category") == "info" or item.get("locked"):
                 continue
             try:
                 corner = int(item["corner"])

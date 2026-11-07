@@ -324,4 +324,14 @@ def get_user_limits(user_id: str) -> dict[str, Any]:
         "max_members": limits["max_members"],
         "max_circuits": limits["max_circuits"] if limits["max_circuits"] != -1 else None,
         "max_cars": limits["max_cars"] if limits["max_cars"] != -1 else None,
+        # Nombre de conseils de coaching par analyse (source unique : coaching_pro).
+        "coaching_advice": _coaching_quota(tier),
     }
+
+
+def _coaching_quota(tier: str) -> int:
+    try:
+        from src.analysis.coaching_pro import TIER_QUOTAS, normalize_tier
+        return TIER_QUOTAS[normalize_tier(tier)]
+    except Exception:
+        return 5
