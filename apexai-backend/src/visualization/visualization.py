@@ -1327,6 +1327,32 @@ def generate_plot_data(df: pd.DataFrame) -> Dict[str, Any]:
                         if len(t) >= 2:
                             lap_durations[ln] = float(t.iloc[-1] - t.iloc[0])
 
+                    # Un tour partiel (bout de séance de 84 m en 15 s) n'est pas
+                    # le meilleur tour : on ne retient que les tours complets
+                    # (au moins 80 % de la distance médiane). Sans ce filtre,
+                    # tous les deltas valaient ~40 s.
+                    lap_lengths = {
+                        ln: float(ldf['cumulative_distance'].iloc[-1] - ldf['cumulative_distance'].iloc[0])
+                        for ln, ldf in lap_groups.items()
+                    }
+                    if lap_lengths:
+                        median_len = float(np.median(list(lap_lengths.values())))
+                        complete = {ln: d for ln, d in lap_durations.items() if lap_lengths.get(ln, 0.0) >= 0.8 * median_len}
+                        if complete:
+                            lap_durations = complete
+                        lap_groups = {ln: g for ln, g in lap_groups.items() if ln in lap_durations}
+
+                    # Chronos officiels (passages sur la ligne) quand le fichier
+                    # les donne : même meilleur tour que le reste de l'analyse.
+                    try:
+                        from src.api.services import _beacon_lap_times
+
+                        official = {ln: t for ln, t in _beacon_lap_times(df).items() if ln in lap_durations}
+                    except Exception:
+                        official = {}
+                    if official:
+                        lap_durations = {**lap_durations, **official}
+
                     if lap_durations:
                         best_lap_num = min(lap_durations, key=lap_durations.get)
                         best_df = lap_groups[best_lap_num]

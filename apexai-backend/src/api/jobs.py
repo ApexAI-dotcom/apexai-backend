@@ -49,7 +49,7 @@ router = APIRouter(prefix="/api/analysis", tags=["analysis-jobs"])
 
 # Version du calcul : à changer quand le pipeline change de résultat, pour ne
 # pas resservir un ancien résultat mis en cache.
-PIPELINE_VERSION = "2026-11-07"
+PIPELINE_VERSION = "2026-11-07b"
 
 _EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="analysis")
 _JOBS: Dict[str, "Job"] = {}
