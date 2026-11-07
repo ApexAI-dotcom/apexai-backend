@@ -198,8 +198,9 @@ def _work(job: Job, content: bytes, saved_name: str, params: Dict[str, Any]) -> 
             params.get("_kart"),
             header.get("vehicle"),
         )
-        if job.mode == "full" and job.user_id:
-            _kart_hook(job.user_id, temp_path, result, header["circuit_name"], analysis_id)
+        # Mon Kart n'est PAS alimenté par l'analyse : sa seule porte d'entrée
+        # est « Importer ma journée » (décidé avec Yanis le 7/11), pour ne
+        # jamais compter deux fois la même séance ni mélanger les usages.
         return result
     finally:
         progress.bind(None)
@@ -207,33 +208,6 @@ def _work(job: Job, content: bytes, saved_name: str, params: Dict[str, Any]) -> 
             os.remove(temp_path)
         except OSError:
             pass
-
-
-def _kart_hook(user_id: str, temp_path: str, result: Dict[str, Any], circuit_name: Optional[str], analysis_id: str) -> None:
-    """Mon Kart : compteurs d'usure alimentés par la séance (comme /analyze)."""
-    try:
-        from src.api.kart_routes import is_mon_kart_enabled
-        from src.api.kart_service import KartService
-        from src.core.kart_mechanical import parse_kart_mechanical
-
-        if is_mon_kart_enabled() and KartService.is_racer_or_team(user_id):
-            k_res = parse_kart_mechanical(temp_path)
-            if k_res.get("success"):
-                metrics = dict(k_res["aggregates"] or {})
-                tf = result.get("track_features") if isinstance(result, dict) else None
-                if tf:
-                    metrics["track_features"] = tf
-                if circuit_name and not metrics.get("circuit_name"):
-                    metrics["circuit_name"] = circuit_name
-                KartService.upsert_session(
-                    user_id=user_id,
-                    signature=k_res["signature"],
-                    imported_via="analyze",
-                    metrics=metrics,
-                    analysis_id=analysis_id,
-                )
-    except Exception as exc:
-        logger.warning("[%s] Mon Kart : compteurs non mis à jour : %s", analysis_id, exc)
 
 
 async def _run(job: Job, content: bytes, filename: str, params: Dict[str, Any], redis: Any) -> None:

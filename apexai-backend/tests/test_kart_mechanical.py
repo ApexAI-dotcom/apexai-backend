@@ -96,5 +96,29 @@ def test_parse_kart_mechanical(sample_csv_path):
                 assert aggs["best_lap_time"] == 50.5  # min(52.5, 50.5)
                 assert aggs["duration_seconds"] == 600.0  # from metadata 0:10:00!
                 assert aggs["session_date"] == "14/07/2026"
-                assert aggs["circuit_name"] == "Le Mans"
+                # Nom de la fiche circuit quand le nom du boîtier y correspond.
+                assert aggs["circuit_name"] == "Karting des 24h Le Mans"
                 assert aggs["driver_name"] == "Test Driver"
+
+
+def test_logger_internal_battery_is_not_kart_battery():
+    """La pile interne du MyChron (~4 V) ne doit pas déclencher l'alerte batterie."""
+    import pandas as pd
+    from unittest import mock
+
+    from src.core.kart_mechanical import parse_kart_mechanical
+
+    df = pd.DataFrame({
+        "time": [0.0, 1.0, 2.0, 3.0],
+        "rpm": [9000, 12000, 11000, 10000],
+        "int batt voltage": [3.92, 3.91, 3.90, 3.90],
+    })
+    with mock.patch("src.core.kart_mechanical._detect_format", return_value=14), \
+         mock.patch("src.core.kart_mechanical._parse_with_pandas", return_value=df), \
+         mock.patch("src.core.kart_mechanical._extract_beacon_markers", return_value=[0.0, 52.0]), \
+         mock.patch("src.core.kart_mechanical.extract_motec_metadata", return_value={}), \
+         mock.patch("src.core.kart_mechanical.compute_file_signature", return_value="sig"), \
+         mock.patch("pathlib.Path.exists", return_value=True):
+        res = parse_kart_mechanical("/tmp/fake.csv")
+    assert res["success"] is True
+    assert res["aggregates"]["battery_voltage_min"] is None

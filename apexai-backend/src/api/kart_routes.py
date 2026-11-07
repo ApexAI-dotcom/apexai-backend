@@ -103,11 +103,18 @@ async def bulk_import_sessions(files: List[UploadFile] = File(...), current_user
             # Upsert
             upsert_res = KartService.upsert_session(current_user, sig, "bulk_import", aggs, None)
             
+            # Ce que la séance ajoute aux compteurs : l'app en fait le bilan
+            # de la journée importée.
             results.append({
                 "filename": file.filename,
                 "success": True,
                 "is_new": upsert_res["is_new"],
-                "session_id": upsert_res["session"].get("id")
+                "session_id": upsert_res["session"].get("id"),
+                "duration_hours": float(aggs.get("duration_hours") or 0.0),
+                "laps_count": int(aggs.get("laps_count") or 0),
+                "session_date": aggs.get("session_date"),
+                "circuit_name": aggs.get("circuit_name"),
+                "best_lap_time": aggs.get("best_lap_time"),
             })
             
         except Exception as e:

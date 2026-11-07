@@ -1165,33 +1165,8 @@ class AnalysisService:
                 header.get("vehicle"),
             )
             
-            # --- Mon Kart Hook ---
-            if user_id:
-                try:
-                    from src.api.kart_routes import is_mon_kart_enabled
-                    from src.core.kart_mechanical import parse_kart_mechanical
-                    from src.api.kart_service import KartService
-                    
-                    if is_mon_kart_enabled() and KartService.is_racer_or_team(user_id):
-                        k_res = parse_kart_mechanical(temp_path)
-                        if k_res.get("success"):
-                            metrics = dict(k_res["aggregates"] or {})
-                            # Enrichir avec la signature de piste et le Venue issus de l'analyse
-                            tf = result.get("track_features") if isinstance(result, dict) else None
-                            if tf:
-                                metrics["track_features"] = tf
-                            if circuit_name and not metrics.get("circuit_name"):
-                                metrics["circuit_name"] = circuit_name
-                            KartService.upsert_session(
-                                user_id=user_id,
-                                signature=k_res["signature"],
-                                imported_via="analyze",
-                                metrics=metrics,
-                                analysis_id=analysis_id
-                            )
-                except Exception as k_err:
-                    logger.warning(f"[{analysis_id}] Mon Kart best-effort hook failed: {k_err}")
-            # ---------------------
+            # Mon Kart n'est plus alimenté par l'analyse : sa seule porte
+            # d'entrée est « Importer ma journée » (7/11).
 
             return result
             

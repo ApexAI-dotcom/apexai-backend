@@ -120,6 +120,24 @@ def parse_kart_mechanical(filepath: str) -> Dict[str, Any]:
             "driver_name": metadata.get("Driver", None)
         }
         
+        # Date, circuit et pilote : l'en-tête AiM CSV (« Date », « Session »…)
+        # n'a pas les clés MoTeC. Sans date, une journée importée se rangeait
+        # au jour de l'import, et deux journées se mélangeaient.
+        if not aggs["session_date"] or not aggs["circuit_name"] or not aggs["driver_name"]:
+            try:
+                from src.core.session_header import read_session_header
+
+                hdr = read_session_header(filepath)
+                when = hdr.get("session_datetime")
+                if not aggs["session_date"] and when is not None:
+                    aggs["session_date"] = when.isoformat()
+                if not aggs["circuit_name"] and hdr.get("circuit_name"):
+                    aggs["circuit_name"] = hdr["circuit_name"]
+                if not aggs["driver_name"] and hdr.get("driver"):
+                    aggs["driver_name"] = hdr["driver"]
+            except Exception as hdr_err:
+                logger.warning(f"session header fallback failed: {hdr_err}")
+
         # Process beacon markers for laps and best lap time
         beacons = _extract_beacon_markers(filepath)
         if beacons and len(beacons) > 1:
@@ -205,12 +223,42 @@ def parse_kart_mechanical(filepath: str) -> Dict[str, Any]:
             # We want the max absolute braking force
             aggs["g_braking_max"] = float(max(abs(val1), abs(val2)))
             
-        # Battery Voltage
-        batt_series = get_series(df, ['batt', 'volt', 'vbat', 'int batt voltage'])
-        if batt_series is not None:
-            aggs["battery_voltage_avg"] = float(batt_series.mean())
-            aggs["battery_voltage_min"] = float(batt_series.min())
+        # Battery Voltage : la batterie du KART (12 V). Le MyChron enregistre
+        # aussi sa propre pile interne (« Int Batt Voltage », ~4 V), qui
+        # déclenchait à tort l'alerte « tension faible ». On ne garde qu'une
+        # série plausible pour une batterie 12 V (médiane entre 8 et 16 V).
+        aggs["battery_voltage_avg"] = None
+        aggs["battery_voltage_min"] = None
+        for c in df.columns:
+            if not any(k in c for k in ('batt', 'volt', 'vbat')) or 'int' in c.split():
+                continue
+            s_b = pd.to_numeric(df[c], errors='coerce').dropna()
+            if s_b.empty or not (8.0 <= float(s_b.median()) <= 16.0):
+                continue
+            aggs["battery_voltage_avg"] = float(s_b.mean())
+            aggs["battery_voltage_min"] = float(s_b.min())
+            break
             
+        # Nom du circuit tel que l'app le connaît (« Karting de Varennes-sur-
+        # Allier » plutôt que « VarennesK ») : tracé GPS d'abord, nom ensuite.
+        try:
+            from src.core import circuit_catalog
+
+            match = None
+            lat_c = next((c for c in df.columns if 'latitude' in c or c in ('gps latitude', 'lat')), None)
+            lon_c = next((c for c in df.columns if 'longitude' in c or c in ('gps longitude', 'lon')), None)
+            if lat_c and lon_c:
+                la = pd.to_numeric(df[lat_c], errors='coerce')
+                lo = pd.to_numeric(df[lon_c], errors='coerce')
+                step = max(1, len(df) // 400)
+                match = circuit_catalog.match_points(zip(la.iloc[::step].tolist(), lo.iloc[::step].tolist()))
+            if match is None and aggs.get("circuit_name"):
+                match = circuit_catalog.match_name(aggs["circuit_name"])
+            if match and match.get("name"):
+                aggs["circuit_name"] = match["name"]
+        except Exception as cat_err:
+            logger.warning(f"circuit match skipped: {cat_err}")
+
         result["aggregates"] = aggs
         result["success"] = True
         
