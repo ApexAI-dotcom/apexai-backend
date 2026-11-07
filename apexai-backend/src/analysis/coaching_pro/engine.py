@@ -36,10 +36,9 @@ def _info_items(conditions, track_condition, track_temperature, laps_analyzed, l
     cond = (track_condition or "dry").lower()
     labels = {"dry": "Sec", "damp": "Humide", "wet": "Mouillée", "rain": "Pluie"}
     temp = f" {F.num(track_temperature)} °C" if track_temperature is not None else ""
-    laps_txt = f" ({F.laps_list(sorted(laps_used))})" if laps_used else ""
     items = [{
         "priority": 0, "category": "info", "impact_seconds": 0.0, "corner": None,
-        "message": f"Analyse basée sur {laps_analyzed} tour(s) représentatif(s){laps_txt} — {labels.get(cond, 'Sec')}{temp}.",
+        "message": f"{laps_analyzed} {F.plural(laps_analyzed, 'tour retenu', 'tours retenus')} — {labels.get(cond, 'Sec')}{temp}.",
         "explanation": ("Les tours de sortie et de rentrée des stands, ainsi que les tours ralentis (trafic, drapeau), "
                         f"sont écartés : ils fausseraient la comparaison. Les temps perdus annoncés sont mesurés sur ces "
                         f"{laps_analyzed} tour(s). {conditions.summary()}"),
@@ -135,48 +134,92 @@ def _style(findings: List[Finding], x: Ctx) -> Optional[Finding]:
     ids = sorted(corners)
     total = sum(corners.values())
     phrase, action = STYLE_LEVERS[lv]
-    fact = (f"Sur les virages {', '.join(str(i) for i in ids[:-1])} et {ids[-1]}, le même constat revient : "
-            f"{phrase}. Ensemble, ces virages te coûtent {F.sec(total)} par tour.")
+    fact = (f"Le même constat revient aux virages {', '.join(str(i) for i in ids[:-1])} et {ids[-1]} : "
+            f"ensemble, {F.sec(total)} par tour.")
     return Finding("style", "style", "style", None, f"ton style : {phrase}", fact, action,
                    "Repère : c'est une habitude de pilotage, travaille-la sur tout le tour plutôt que virage par virage.",
                    impact_s=0.0, rank_s=total * 0.55, difficulty="moyen", min_tier="rookie", lever=lv,
                    extra={"corners": ids})
 
 
+# Consigne courte de chaque principe, pour l'objectif de la prochaine séance.
+_CUES = {
+    "enrouler": "tourne un temps plus tard et enroule",
+    "entree_calme": "calme ton entrée, kart à plat",
+    "elan": "garde de l'élan",
+    "sacrifier": "freine plus fort, pivote et ressors en V",
+    "braquer_moins": "braque moins",
+    "regime": "garde le moteur dans les tours",
+    "corde_avancee": "tourne un peu plus tôt",
+    "repere_freinage": "un repère de freinage fixe",
+    "attaque_frein": "attaque le frein plus fort",
+    "temps_mort": "enchaîne frein et gaz, sans roue libre",
+    "pied_constant": "pied constant, un effleurement de frein",
+    "lacher_frein": "lâche le frein plus tôt",
+    "corde_tardive": "corde tardive, sortie en V",
+    "regard_corde": "regarde la corde avant de braquer",
+}
+
+
+def _cue(f: Finding) -> str:
+    """Consigne courte d'un conseil de virage."""
+    if f.principle == "frein_point" and f.lever == "repere_freinage":
+        return f.headline.replace("tu freines", "avance ton freinage de").split(" plus tôt")[0]
+    return _CUES.get(f.lever or "", f.headline)
+
+
+def _setup_line(f: Finding) -> Optional[str]:
+    """Ce qui se fait hors piste ou au départ, en une ligne."""
+    import re
+    teeth = re.search(r"couronne :? ?(\d+ → \d+ dents)", f.action)
+    press = re.search(r"Pressions à froid[^:]*: ([^.]+?\d\sbar)(?=\.|$)", f.action)
+    if f.principle == "demultiplication":
+        if teeth:
+            return f"Au stand : couronne {teeth.group(1)}."
+        return "Au stand : " + ("rallonge" if "courte" in f.headline else "raccourcis") + " d'une dent à la couronne."
+    if press:
+        return f"Au stand : pressions à froid {press.group(1)}."
+    if f.principle == "eau":
+        return ("Au stand : masque un tiers du radiateur." if "froid" in f.headline
+                else "Au stand : découvre le radiateur, vise 55 à 60 °C.")
+    if f.principle == "pneus_chauffe":
+        return "Au départ : charge les pneus au tour de lancement, freine fort et accélère fort."
+    if f.principle == "pneus_chute":
+        return "En fin de séance : roule plus rond pour ménager les pneus."
+    if f.principle == "regularite":
+        return "Pour commencer : cinq tours à 98 %, mêmes repères, puis attaque."
+    return None
+
+
 def _plan(chosen: List[Finding], corners_by_id) -> Optional[Dict[str, Any]]:
-    """Un objectif par relais, dans l'ordre : réglage d'abord, puis les virages qui coûtent le plus."""
-    steps, used = [], set()
-    setup = [f for f in chosen if f.family in ("reglage", "pneus", "moteur") and f.corner is None]
-    for f in setup[:1] + [f for f in chosen if f.corner is not None]:
-        key = f.corner if f.corner is not None else f.principle
-        if key in used or f.family == "style":
+    """
+    Ta prochaine séance : UN objectif, deux points à garder en tête au plus, et
+    le réglage à faire au stand s'il y en a un. Pas de découpage en relais : un
+    pilote en roulage roule comme il veut, autant de fois qu'il veut.
+    """
+    setup = next((ln for ln in (_setup_line(f) for f in chosen if f.corner is None) if ln), None)
+    corners, used = [], set()
+    for f in chosen:
+        if f.corner is None or f.corner in used:
             continue
-        used.add(key)
-        steps.append(f)
-        if len(steps) == 3:
-            break
-    if len(steps) < 2:
+        used.add(f.corner)
+        corners.append(f)
+    if not corners:
         return None
-
-    seen_actions = {}
-
-    def short(f: Finding) -> str:
-        first = f.action.split(". ")[0].rstrip(".").rstrip(" :")
-        if first in seen_actions and f.corner is not None:
-            return f"virage {f.corner} — même consigne qu'au virage {seen_actions[first]}."
-        seen_actions[first] = f.corner
-        if f.corner is None:
-            return f"au stand, avant de repartir — {first[:1].lower() + first[1:]}."
-        return f"virage {f.corner} — {first[:1].lower() + first[1:]}."
-
-    parts = [f"Relais {i + 1} (4 à 5 tours) : {short(f)}" for i, f in enumerate(steps)]
-    parts.append("Dernier relais : tout ensemble, puis compare ton meilleur tour à celui d'aujourd'hui dans « Comparer deux séances ».")
+    lines = []
+    if setup:
+        lines.append(setup)
+    main = corners[0]
+    lines.append(f"Objectif : virage {main.corner}, {_cue(main)}.")
+    rest = [f"virage {f.corner}, {_cue(f)}" for f in corners[1:3] if _cue(f) != _cue(main)]
+    if rest:
+        lines.append("Si ça vient bien : " + " ; ".join(rest) + ".")
     return {
         "priority": 0, "category": "plan", "impact_seconds": 0.0, "corner": None,
-        "message": "Plan pour ta prochaine séance",
-        "explanation": " ".join(parts), "difficulty": "facile",
+        "message": "Ta prochaine séance",
+        "explanation": " ".join(lines), "difficulty": "facile",
         "principle": "plan", "family": "plan", "tier_required": "racer",
-        "steps": parts,
+        "steps": lines,
     }
 
 
@@ -330,9 +373,9 @@ def generate_pro_coaching(
         else:
             locked.append({
                 "priority": 0, "category": "plan", "impact_seconds": 0.0, "corner": None,
-                "message": "Plan pour ta prochaine séance", "explanation": "", "difficulty": "facile",
+                "message": "Ta prochaine séance", "explanation": "", "difficulty": "facile",
                 "principle": "plan", "family": "plan", "tier_required": "racer", "locked": True,
-                "teaser": "Ton programme relais par relais, relié à ton kart et à ton réglage",
+                "teaser": "Ton objectif pour la prochaine séance, relié à ton kart et à ton réglage",
             })
     for it in locked:
         it["priority"] = len(real) + 1

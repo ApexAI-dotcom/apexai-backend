@@ -4,7 +4,7 @@ Base de principes de pilotage, reliée aux mesures.
 
 Chaque principe est ce qu'un coach ou un ingénieur de piste dirait devant les
 données : un constat chiffré tiré de la séance, une consigne applicable au
-prochain relais, et un repère pour vérifier que ça a marché. Un principe ne
+prochaine séance, et un repère pour vérifier que ça a marché. Un principe ne
 parle que si sa mesure le déclenche ; s'il lui manque une donnée (pas de
 capteur de régime, pas de kart renseigné…), il passe à sa version simple ou
 se tait. Aucun gain n'est estimé : le temps annoncé est toujours mesuré.
@@ -34,7 +34,7 @@ class Finding:
     headline: str
     fact: str                   # constat chiffré (1re phrase affichée)
     action: str                 # consigne du jour
-    check: str = ""             # comment vérifier au prochain relais
+    check: str = ""             # comment vérifier à la prochaine séance
     impact_s: float = 0.0       # temps mesuré (s/tour) ; 0 si non chronométrable
     rank_s: float = 0.0         # poids de classement (= impact_s, ou équivalent pour la séance)
     difficulty: str = "moyen"
@@ -215,7 +215,7 @@ def p_brake_point(cf: CornerFacts, x: Ctx) -> Optional[Finding]:
                 f"pour la même vitesse au point de corde ({F.kmh(vmin)}).")
         action = x.voice.pick("brake_later", [
             f"Prends un repère fixe (panneau, poteau, marque au sol) et avance-le de {F.m(delta)}, par paliers de 2 à 3 m.",
-            f"Avance ton repère de freinage de {F.m(delta)} en deux ou trois relais : tu l'as déjà fait, ce n'est pas un risque.",
+            f"Avance ton repère de freinage de {F.m(delta)}, petit à petit : tu l'as déjà fait, ce n'est pas un risque.",
         ])
         check = "Si le kart ne veut plus tourner ou que tu élargis en sortie, reviens d'un palier."
         head = f"tu freines {F.m(delta)} plus tôt que ton meilleur passage"
@@ -320,9 +320,9 @@ def p_kart_scrub(cf: CornerFacts, x: Ctx) -> Optional[Finding]:
         return None
     if cf.time_lost < 0.03:
         return None
-    fact = (f"Pendant {F.sec(ph['neutral_s'])}, le kart reste sous {F.g(ph['neutral_lat'])} d'appui sans reprendre "
-            f"de vitesse (contre {F.sec(ph['best_s'])} sur ton tour {ph['best_lap']}) : ce n'est pas un temps mort, "
-            "c'est le châssis qui force sur le moteur.")
+    fact = (f"Pendant {F.sec(ph['neutral_s'])}, le kart reste en appui sans reprendre de vitesse "
+            f"({F.sec(ph['best_s'])} sur ton tour {ph['best_lap']}). Sous {F.g(ph['neutral_lat'])}, ce n'est pas "
+            "un temps mort : c'est le châssis qui force sur le moteur.")
     action = x.voice.pick("kart_scrub", [
         "Braque moins et plus tard, puis ouvre les mains dès la corde : un kart qui frotte en appui retient le "
         "moteur. Laisse-le courir un peu plus large en sortie.",
@@ -422,7 +422,7 @@ def p_corner_speed(cf: CornerFacts, x: Ctx) -> Optional[Finding]:
         lever = "elan"
     return Finding("vitesse_corde", "trajectoire", "speed", cf.id,
                    f"{F.kmh(gap, 1)} à reprendre au point de corde", fact, action,
-                   f"Repère : vise {F.kmh(best)} au point le plus lent au prochain relais.",
+                   f"Repère : vise {F.kmh(best)} au point le plus lent.",
                    impact_s=cf.time_lost, rank_s=cf.time_lost, difficulty="difficile" if cf.kind == "rapide" else "moyen",
                    lever=lever)
 
@@ -775,7 +775,7 @@ def p_pressures(x: Ctx) -> Optional[Finding]:
         head = f"pressions à chaud hors cible ({k.tire['name']})"
     fact = (f"Tu pars à {F.bar(avg)} à froid ; la plage de ta gomme ({k.tire.get('compound') or 'slick'}) sur piste "
             f"{getattr(x.conditions, 'label', 'sèche').lower()} est de {F.num(lo, 2)} à {F.bar(hi)} ({k.tire.get('source')}).{hot_txt}")
-    action = ("Recale-toi dans la plage avant le prochain relais." + (_pressure_line(x, d) if d else "")
+    action = ("Recale-toi dans la plage avant de repartir en piste." + (_pressure_line(x, d) if d else "")
               + " Mesure à froid, pneus à l'ombre, avec le même manomètre.")
     return Finding("pression", "pneus", "setup", None, head, fact, action,
                    rank_s=0.08, difficulty="facile", min_tier="racer")
@@ -827,7 +827,7 @@ def p_gearing(x: Ctx) -> Optional[Finding]:
     else:
         return None
     return Finding("demultiplication", "reglage", "setup", None, head, fact, action,
-                   "Repère : au prochain relais, compare le régime en bout de ligne droite et au point le plus lent.",
+                   "Repère : à ta prochaine séance, compare le régime en bout de ligne droite et au point le plus lent.",
                    impact_s=0.0, rank_s=rank, difficulty="facile", min_tier="racer",
                    teaser="Combien de dents changer à la couronne pour ce circuit")
 
@@ -849,7 +849,7 @@ def p_consistency(x: Ctx) -> Optional[Finding]:
         where = " L'écart vient surtout " + " et ".join(
             f"du virage {c.id} ({F.sec(c.lap_spread_s)} entre ton meilleur et ton pire passage)" for c in top) + "."
     fact = (f"Ton tour habituel est à {F.sec(gap)} de ton meilleur tour ({F.sec(s.best_lap_time, 3)}, tour {s.best_lap}).{where}")
-    action = ("Prochain relais : cinq tours à 98 %, exactement les mêmes repères à chaque tour, puis seulement attaque. "
+    action = ("À ta prochaine séance, commence par cinq tours à 98 %, avec les mêmes repères à chaque tour, puis attaque. "
               "La vitesse vient de la régularité.")
     return Finding("regularite", "regularite", "consistency", None, f"{F.sec(gap)} entre ton meilleur tour et ton tour habituel",
                    fact, action, impact_s=0.0, rank_s=min(0.12, gap * 0.15), difficulty="moyen", min_tier="rookie")
@@ -894,7 +894,7 @@ STYLE_LEVERS = {
              "Pilote plus rond partout : garde de l'élan au point le plus lent, le moteur repart de plus haut."),
     "sacrifier": ("tu gagnes quand tu sacrifies l'entrée pour la sortie",
                   "Dans les virages lents, freine un peu plus fort, pivote, et accélère roues droites : pilotage en V."),
-    "braquer_moins": ("ton kart frotte : tu le forces à tourner",
+    "braquer_moins": ("ton kart frotte, tu le forces à tourner",
                       "Moins de volant, un seul mouvement par virage : un kart à plat ne retient pas le moteur."),
     "repere_freinage": ("tes freinages manquent de repères fixes",
                         "Choisis un repère visuel par freinage et tiens-le toute la séance, puis avance-les un par un."),
