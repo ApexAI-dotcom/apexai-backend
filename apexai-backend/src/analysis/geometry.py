@@ -62,23 +62,25 @@ def _get_apex_gps(df_work: pd.DataFrame, indices: List[int]) -> Tuple[Optional[f
     if lat_col not in df_work.columns or lon_col not in df_work.columns:
         return None, None
     try:
+        # Tableaux numpy plutôt que df.iloc[i][col] point par point (x50).
+        n = len(df_work)
+        lat_arr = pd.to_numeric(df_work[lat_col], errors='coerce').to_numpy(dtype=float)
+        lon_arr = pd.to_numeric(df_work[lon_col], errors='coerce').to_numpy(dtype=float)
         valid_indices = [
             i for i in indices
-            if 0 <= i < len(df_work)
-            and pd.notna(df_work.iloc[i][lat_col])
-            and pd.notna(df_work.iloc[i][lon_col])
+            if 0 <= i < n and not np.isnan(lat_arr[i]) and not np.isnan(lon_arr[i])
         ]
         if not valid_indices:
             return None, None
         speed_col = 'speed' if 'speed' in df_work.columns else 'GPS Speed'
         if speed_col in df_work.columns:
-            speeds = df_work.iloc[valid_indices][speed_col]
-            apex_rel = speeds.values.argmin()
+            speeds = df_work[speed_col].to_numpy()[valid_indices]
+            apex_rel = speeds.argmin()
             apex_iloc = valid_indices[apex_rel]
         else:
             apex_iloc = valid_indices[len(valid_indices) // 2]
-        lat = float(df_work.iloc[apex_iloc][lat_col])
-        lon = float(df_work.iloc[apex_iloc][lon_col])
+        lat = float(lat_arr[apex_iloc])
+        lon = float(lon_arr[apex_iloc])
         if not (-90 <= lat <= 90 and -180 <= lon <= 180):
             return None, None
         if lat == 0.0 and lon == 0.0:
@@ -1407,6 +1409,11 @@ def calculate_optimal_trajectory(df: pd.DataFrame) -> pd.DataFrame:
     
     df_result = df.copy()
     n_points = len(df_result)
+    # Copie propre des virages : le pipeline garde sa liste d'origine (le score
+    # la lit telle qu'avant), comme lorsque pandas recopiait attrs en profondeur.
+    if isinstance(df_result.attrs.get('corners'), dict):
+        import copy as _copy
+        df_result.attrs['corners'] = _copy.deepcopy(df_result.attrs['corners'])
     
     # Initialiser colonnes
     df_result['optimal_speed_kmh'] = np.nan

@@ -5,6 +5,7 @@ Apex AI - API Services
 Service d'analyse de télémétrie
 """
 
+import src.core.fast_attrs  # noqa: F401  (copie légère de DataFrame.attrs : x5 plus rapide)
 import asyncio
 import os
 import logging
@@ -220,6 +221,10 @@ def _parse_laps_sync(temp_path: str, beacon_markers: list) -> List[Dict[str, Any
     return laps_out
 
 
+class _SkipStep(Exception):
+    """Étape sautée en analyse allégée (traitée comme « indisponible »)."""
+
+
 def _run_analysis_pipeline_sync(
     temp_path: str,
     beacon_markers: list,
@@ -230,8 +235,18 @@ def _run_analysis_pipeline_sync(
     track_temperature: Optional[float] = None,
     session_name: Optional[str] = None,
     circuit_name: Optional[str] = None,
+    light: bool = False,
 ) -> Dict[str, Any]:
-    """Pipeline d'analyse synchrone (exécuté dans un thread pour ne pas bloquer l'event loop)."""
+    """
+    Pipeline d'analyse synchrone (exécuté dans un thread pour ne pas bloquer l'event loop).
+
+    ``light`` : analyse allégée pour la 2e séance d'une comparaison — tours,
+    virages, traces et freinages, sans météo, tour idéal, Tour Parfait IA,
+    coaching ni images.
+    """
+    from src.api.progress import report
+
+    report(8, "Lecture du fichier")
     logger.info(f"[{analysis_id}] Step 1/5: Loading data...")
     result = robust_load_telemetry(temp_path)
     if not result["success"]:
@@ -271,7 +286,8 @@ def _run_analysis_pipeline_sync(
     # explicitement reste prioritaire.
     weather = None
     condition_source = "pilote"
-    if track_condition == "auto" or track_temperature is None:
+    if not light and (track_condition == "auto" or track_temperature is None):
+        report(14, "Météo de la séance")
         try:
             from src.core.session_header import read_session_header
             from src.analysis.weather import lookup_session_weather
@@ -303,10 +319,12 @@ def _run_analysis_pipeline_sync(
         conditions.mu_reference, conditions.braking_min_g, conditions.braking_max_g,
     )
 
+    report(20, "Nettoyage du tracé GPS")
     logger.info(f"[{analysis_id}] Step 2/5: Filtering GPS...")
     df = apply_savgol_filter(df)
     logger.info(f"[{analysis_id}] Step 3/5: Calculating geometry...")
     df = calculate_trajectory_geometry(df)
+    report(28, "Découpage des tours")
     logger.info(f"[{analysis_id}] Step 3.5/5: Detecting laps...")
     df = detect_laps(df)
     laps_analyzed = 1
@@ -343,6 +361,7 @@ def _run_analysis_pipeline_sync(
             pass
     
     logger.info(f"[DIAG] Appel detect_corners avec {len(df)} rows, laps_analyzed={laps_analyzed}")
+    report(38, "Détection des virages")
     logger.info(f"[{analysis_id}] Step 4/5: Detecting corners...")
     df = detect_corners(df, laps_analyzed=laps_analyzed, curvature_threshold_override=curvature_threshold_global)
 
@@ -365,6 +384,7 @@ def _run_analysis_pipeline_sync(
     # « Freinages » et les conseils de coaching lisent tous ce même résultat :
     # aucun des quatre ne peut plus contredire les autres.
     braking_data: Dict[str, Any] = {"by_corner": {}, "by_lap": {}, "capability_g": 0.0}
+    report(50, "Analyse des freinages")
     try:
         braking_data = get_braking_analysis(df, corner_details)
         logger.info(
@@ -443,6 +463,7 @@ def _run_analysis_pipeline_sync(
                 "apex_lon": None,
             }
 
+    report(60, "Virage par virage")
     logger.info(f"[{analysis_id}] Analyzing corner performance...")
     corner_analysis_list = []
     for corner in corner_details:
@@ -618,7 +639,11 @@ def _run_analysis_pipeline_sync(
     # l'ancienne approximation basée sur la seule vitesse d'apex : les conseils
     # générés juste après héritent donc de secondes crédibles.
     ideal_lap_data = None
+    if not light:
+        report(70, "Tour idéal")
     try:
+        if light:
+            raise _SkipStep()
         # Bornes exactes des tours : sans elles, le tour idéal se calait sur
         # les points échantillonnés et affichait un « meilleur tour » différent
         # de celui du reste de l'analyse (54,15 s au lieu de 54,331 s).
@@ -668,6 +693,9 @@ def _run_analysis_pipeline_sync(
     # ── Ligne de course idéale (remplace l'ancien « tour IA » factice) ───────
     racing_line_data = None
     try:
+        if light:
+            raise _SkipStep()
+        report(78, "Tour Parfait IA")
         # Le chrono idéal MESURÉ sert d'étalon : la ligne idéale doit d'abord le
         # reproduire sur la trajectoire réellement roulée, avant d'en chercher une
         # meilleure. Sans lui, elle se cale sur le meilleur tour.
@@ -694,6 +722,9 @@ def _run_analysis_pipeline_sync(
 
     logger.info(f"[{analysis_id}] Generating coaching advice...")
     try:
+        if light:
+            raise _SkipStep()
+        report(86, "Conseils de coaching")
         coaching_advice_list = generate_coaching_advice(
             df, corner_details, score_data, unique_corner_analysis,
             track_condition=track_condition,
@@ -727,11 +758,14 @@ def _run_analysis_pipeline_sync(
             "difficulty": "facile",
         })
 
-    logger.info(f"[{analysis_id}] Generating plots (PNG)...")
     df.attrs["corner_analysis"] = unique_corner_analysis
     df.attrs["score_data"] = score_data
     df.attrs["overall_score"] = score_data.get("overall_score", 0.0)
-    plots_urls = generate_all_plots_base64(df)
+    # Images PNG (matplotlib) : plus affichées nulle part depuis les graphiques
+    # interactifs, elles coûtaient 40 % du temps d'analyse et un envoi d'images
+    # depuis le téléphone du pilote. Désactivées ; la fonction reste disponible.
+    plots_urls: Dict[str, Any] = {}
+    report(94, "Mise en forme des graphiques")
     
     logger.info(f"[{analysis_id}] Generating plot data (JSON)...")
     plot_data = generate_plot_data(df)

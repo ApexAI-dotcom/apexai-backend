@@ -425,19 +425,15 @@ def _calculate_metadata(df: pd.DataFrame) -> Dict[str, Any]:
             duration = float(time_values.max() - time_values.min())
             metadata['duration_seconds'] = duration
     
-    # Calculer longueur du circuit (somme des distances Haversine)
+    # Calculer longueur du circuit (somme des distances Haversine), vectorisé :
+    # même formule que _haversine_distance, sans boucle Python sur 15 000 points.
     if len(df) > 1:
-        total_distance = 0.0
-        for i in range(1, len(df)):
-            lat1 = df['latitude'].iloc[i-1]
-            lon1 = df['longitude'].iloc[i-1]
-            lat2 = df['latitude'].iloc[i]
-            lon2 = df['longitude'].iloc[i]
-            
-            # Vérifier que les valeurs sont valides
-            if (pd.notna(lat1) and pd.notna(lon1) and pd.notna(lat2) and pd.notna(lon2)):
-                dist = _haversine_distance(float(lat1), float(lon1), float(lat2), float(lon2))
-                total_distance += dist
+        lat = pd.to_numeric(df['latitude'], errors='coerce').to_numpy(dtype=float)
+        lon = pd.to_numeric(df['longitude'], errors='coerce').to_numpy(dtype=float)
+        lat1, lat2, lon1, lon2 = lat[:-1], lat[1:], lon[:-1], lon[1:]
+        ok = ~(np.isnan(lat1) | np.isnan(lon1) | np.isnan(lat2) | np.isnan(lon2))
+        dists = _haversine_distance(lat1[ok], lon1[ok], lat2[ok], lon2[ok])
+        total_distance = float(sum(np.asarray(dists, dtype=float).tolist()))
         
         metadata['circuit_length_m'] = round(total_distance, 2)
     

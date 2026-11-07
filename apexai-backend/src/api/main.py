@@ -255,6 +255,14 @@ try:
 except ImportError as e:
     logger.warning("⚠ Catalog routes not loaded: %s", e)
 
+# Analyses en tâche de fond (dépôt -> numéro de tâche -> progression)
+try:
+    from .jobs import router as jobs_router
+    app.include_router(jobs_router)
+    logger.info("✓ Analysis jobs loaded (/api/analysis/jobs)")
+except ImportError as e:
+    logger.warning("⚠ Analysis jobs not loaded: %s", e)
+
 # Routes Mon Kart (MVP)
 try:
     from .kart_routes import router as kart_router
