@@ -1105,7 +1105,7 @@ def generate_plot_data(df: pd.DataFrame) -> Dict[str, Any]:
                     "throttle_pct": downsample_array([round(float(t), 1) for t in df['throttle'].values]),
                     "brake_pct": downsample_array([round(float(b), 1) for b in df['brake'].values]),
                 })
-            plot_data["throttle_brake"] = {"laps": tb_laps}
+            plot_data["throttle_brake"] = {"laps": tb_laps, "source": df.attrs.get('pedals_source', 'estimé')}
 
         # --- 3. Performance Radar ---
         if 'score_data' in df.attrs:

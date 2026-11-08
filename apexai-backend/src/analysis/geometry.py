@@ -347,32 +347,23 @@ def calculate_trajectory_geometry(df: pd.DataFrame) -> pd.DataFrame:
     lateral_g = lateral_g_series.values
     df_result['lateral_g'] = lateral_g
     
-    # 6. THROTTLE/BRAKE INFERENCE (si pas dans CSV)
-    if 'throttle' not in df_result.columns or 'brake' not in df_result.columns:
-        throttle = np.zeros(n_points)
-        brake = np.zeros(n_points)
-        
-        for i in range(1, n_points):
-            try:
-                if pd.notna(speed[i]) and pd.notna(speed[i-1]):
-                    delta_v = speed[i] - speed[i-1]
-                    
-                    if delta_v > 0.5:  # Accélération
-                        throttle[i] = min(100.0, delta_v * 20)
-                        brake[i] = 0.0
-                    elif delta_v < -0.5:  # Décélération
-                        brake[i] = min(100.0, abs(delta_v) * 20)
-                        throttle[i] = 0.0
-                    else:  # Coasting
-                        throttle[i] = 0.0
-                        brake[i] = 0.0
-            except Exception:
-                throttle[i] = 0.0
-                brake[i] = 0.0
-        
-        df_result['throttle'] = throttle
-        df_result['brake'] = brake
-    
+    # 6. ACCÉLÉRATEUR / FREIN
+    # Voies de capteurs si le fichier en a (TPS, pression de frein) ; sinon,
+    # lecture de l'accélération longitudinale et du régime, comme dans Race
+    # Studio (voir src/analysis/pedals.py).
+    from src.analysis.pedals import estimate_pedals, sensor_pedals
+
+    thr_s, brk_s = sensor_pedals(df_result)
+    if thr_s is None or brk_s is None:
+        thr_e, brk_e = estimate_pedals(df_result, speed, time)
+        thr_s = thr_e if thr_s is None else thr_s
+        brk_s = brk_e if brk_s is None else brk_s
+        df_result.attrs['pedals_source'] = 'estimé'
+    else:
+        df_result.attrs['pedals_source'] = 'capteurs'
+    df_result['throttle'] = thr_s
+    df_result['brake'] = brk_s
+
     return df_result
 
 
