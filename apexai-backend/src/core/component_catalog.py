@@ -5,8 +5,9 @@ Apex AI — Base des composants de karting (saison 2026-2027, lecture seule).
 
 Le fichier src/data/component_catalog.json est produit par
 scripts/composants/catalog.py du dépôt front : manuels constructeurs,
-règlements 2026, listes d'homologation CIK-FIA et retours de pilotes, chaque
-fiche avec ses sources. On le fusionne avec la table kart_components :
+règlements 2026, listes d'homologation CIK-FIA, chaque fiche avec ses sources.
+L'entretien et les durées avant révision viennent uniquement des documents du
+constructeur (règle du 8 nov. 2026 : aucun avis de pilote servi dans l'app). On le fusionne avec la table kart_components :
 
 - une ligne de la table garde son identifiant et son nom (profils et trains
   de pneus y font référence) et reçoit les compléments de la base (usages,
@@ -29,7 +30,7 @@ DATA = Path(__file__).resolve().parents[1] / "data" / "component_catalog.json"
 
 # Champs renvoyés dans les listes (les sources et l'entretien détaillés restent dans la fiche)
 LIST_KEYS = (
-    "id", "category", "category_label", "brand", "name", "subcategory", "specs", "default_life", "life_unit",
+    "id", "category", "category_label", "brand", "name", "subcategory", "specs", "default_life", "life_unit", "life_ref",
     "active", "in_db", "uses", "aliases", "homologation", "source_types", "season", "has_maintenance",
 )
 
@@ -75,6 +76,9 @@ def merge(db_rows: Optional[Iterable[Dict[str, Any]]]) -> List[Dict[str, Any]]:
         if extra.get("default_life") is not None:
             item["default_life"], item["life_unit"] = extra["default_life"], extra.get("life_unit")
         item["subcategory"] = item.get("subcategory") or extra.get("subcategory")
+        # Durée avant révision : sourcée (life_ref) seulement si le constructeur la donne ;
+        # sinon la valeur de la table reste une simple valeur de départ des jauges.
+        item["life_ref"] = extra.get("life_ref")
         for k in ("uses", "aliases", "homologation", "notes", "maintenance", "sources", "source_types", "season"):
             item[k] = extra.get(k) if extra.get(k) else ([] if k in ("uses", "aliases", "maintenance", "sources", "source_types") else None)
         item["in_db"] = True

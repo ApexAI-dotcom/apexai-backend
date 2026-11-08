@@ -14,9 +14,11 @@ def test_merge_keeps_db_names_and_adds_sourced_data():
     items = {c["id"]: c for c in cc.merge(DB)}
     dd2 = items["rotax-dd2"]
     assert dd2["name"] == "Max DD2" and dd2["in_db"] is True
-    assert dd2["default_life"] == 25  # retour pilotes : révision vers 25 h
+    # Le manuel DD2 ne donne pas d'heures avant révision : la valeur de la table
+    # reste une valeur de départ, non sourcée (life_ref vide).
+    assert dd2["default_life"] == 15 and dd2["life_ref"] is None
     assert dd2["specs"]["weight_kg"] == 21
-    assert any(m["kind"] == "retour pilotes" for m in dd2["maintenance"])
+    assert all(m["kind"] == "constructeur" for m in dd2["maintenance"])
     sl4 = items["vega-rouge-sl4"]
     assert sl4["specs"]["cold_pressure_bar"] and sl4["specs"]["price_eur_set"] == 205
     # Fiches absentes de la table : servies, mais marquées hors base

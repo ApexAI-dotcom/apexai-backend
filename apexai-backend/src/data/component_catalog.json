@@ -28,71 +28,22 @@
    "name": null,
    "subcategory": null,
    "specs": {},
-   "default_life": 6,
-   "life_unit": "hours",
+   "default_life": null,
+   "life_unit": null,
    "uses": [
     "KZ",
     "KZ2"
    ],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "kp_kz",
-     "label": "KartPulse : entretien TM KZ (avis de pilotes)",
-     "url": "https://forums.kartpulse.com/t/tm-kz-r1-maintenance-intervals-before-after-session-prep/14551",
-     "type": "retour pilotes"
-    }
-   ],
-   "notes": "Aucun intervalle constructeur publié. Pilotes KZ : piston toutes les 3 à 6 h, bas moteur 12 à 18 h, huile de boîte toutes les 2 à 4 séances.",
-   "maintenance": [
-    {
-     "element": "Piston",
-     "action": "Remplacer",
-     "interval": "3 à 6",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Bas moteur",
-     "action": "Réfection",
-     "interval": "12 à 18",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Huile de boîte",
-     "action": "Vidange",
-     "interval": "2 à 4",
-     "unit": "séances",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Clapets",
-     "action": "Contrôler (au moins à chaque changement de piston)",
-     "interval": "3 à 6",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    }
-   ],
+   "sources": [],
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
+   "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": true,
-   "source_types": [
-    "retour pilotes"
-   ]
+   "source_types": []
   },
   {
    "id": "tm-r2",
@@ -101,71 +52,22 @@
    "name": null,
    "subcategory": null,
    "specs": {},
-   "default_life": 6,
-   "life_unit": "hours",
+   "default_life": null,
+   "life_unit": null,
    "uses": [
     "KZ",
     "KZ2"
    ],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "kp_kz",
-     "label": "KartPulse : entretien TM KZ (avis de pilotes)",
-     "url": "https://forums.kartpulse.com/t/tm-kz-r1-maintenance-intervals-before-after-session-prep/14551",
-     "type": "retour pilotes"
-    }
-   ],
-   "notes": "Aucun intervalle constructeur publié. Pilotes KZ : piston toutes les 3 à 6 h, bas moteur 12 à 18 h, huile de boîte toutes les 2 à 4 séances.",
-   "maintenance": [
-    {
-     "element": "Piston",
-     "action": "Remplacer",
-     "interval": "3 à 6",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Bas moteur",
-     "action": "Réfection",
-     "interval": "12 à 18",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Huile de boîte",
-     "action": "Vidange",
-     "interval": "2 à 4",
-     "unit": "séances",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Clapets",
-     "action": "Contrôler (au moins à chaque changement de piston)",
-     "interval": "3 à 6",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    }
-   ],
+   "sources": [],
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
+   "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": true,
-   "source_types": [
-    "retour pilotes"
-   ]
+   "source_types": []
   },
   {
    "id": "tm-kz10c",
@@ -174,71 +76,22 @@
    "name": null,
    "subcategory": null,
    "specs": {},
-   "default_life": 6,
-   "life_unit": "hours",
+   "default_life": null,
+   "life_unit": null,
    "uses": [
     "KZ",
     "KZ2"
    ],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "kp_kz",
-     "label": "KartPulse : entretien TM KZ (avis de pilotes)",
-     "url": "https://forums.kartpulse.com/t/tm-kz-r1-maintenance-intervals-before-after-session-prep/14551",
-     "type": "retour pilotes"
-    }
-   ],
-   "notes": "Aucun intervalle constructeur publié. Pilotes KZ : piston toutes les 3 à 6 h, bas moteur 12 à 18 h, huile de boîte toutes les 2 à 4 séances.",
-   "maintenance": [
-    {
-     "element": "Piston",
-     "action": "Remplacer",
-     "interval": "3 à 6",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Bas moteur",
-     "action": "Réfection",
-     "interval": "12 à 18",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Huile de boîte",
-     "action": "Vidange",
-     "interval": "2 à 4",
-     "unit": "séances",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Clapets",
-     "action": "Contrôler (au moins à chaque changement de piston)",
-     "interval": "3 à 6",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    }
-   ],
+   "sources": [],
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
+   "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": true,
-   "source_types": [
-    "retour pilotes"
-   ]
+   "source_types": []
   },
   {
    "id": "vortex-rvx",
@@ -247,71 +100,22 @@
    "name": null,
    "subcategory": null,
    "specs": {},
-   "default_life": 6,
-   "life_unit": "hours",
+   "default_life": null,
+   "life_unit": null,
    "uses": [
     "KZ",
     "KZ2"
    ],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "kp_kz",
-     "label": "KartPulse : entretien TM KZ (avis de pilotes)",
-     "url": "https://forums.kartpulse.com/t/tm-kz-r1-maintenance-intervals-before-after-session-prep/14551",
-     "type": "retour pilotes"
-    }
-   ],
-   "notes": "Aucun intervalle constructeur publié. Pilotes KZ : piston toutes les 3 à 6 h, bas moteur 12 à 18 h, huile de boîte toutes les 2 à 4 séances.",
-   "maintenance": [
-    {
-     "element": "Piston",
-     "action": "Remplacer",
-     "interval": "3 à 6",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Bas moteur",
-     "action": "Réfection",
-     "interval": "12 à 18",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Huile de boîte",
-     "action": "Vidange",
-     "interval": "2 à 4",
-     "unit": "séances",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Clapets",
-     "action": "Contrôler (au moins à chaque changement de piston)",
-     "interval": "3 à 6",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    }
-   ],
+   "sources": [],
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
+   "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": true,
-   "source_types": [
-    "retour pilotes"
-   ]
+   "source_types": []
   },
   {
    "id": "iame-water-swift",
@@ -325,22 +129,14 @@
    "uses": [],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    }
-   ],
-   "notes": "Durée avant révision : valeur usuelle du catalogue d'origine, sans document constructeur.",
+   "sources": [],
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": true,
-   "source_types": [
-    "base ApexAI"
-   ]
+   "source_types": []
   },
   {
    "id": "iame-mini-swift",
@@ -354,22 +150,14 @@
    "uses": [],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    }
-   ],
-   "notes": "Durée avant révision : valeur usuelle du catalogue d'origine, sans document constructeur.",
+   "sources": [],
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": true,
-   "source_types": [
-    "base ApexAI"
-   ]
+   "source_types": []
   },
   {
    "id": "iame-super-x30",
@@ -383,22 +171,14 @@
    "uses": [],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    }
-   ],
-   "notes": "Durée avant révision : valeur usuelle du catalogue d'origine, sans document constructeur.",
+   "sources": [],
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": true,
-   "source_types": [
-    "base ApexAI"
-   ]
+   "source_types": []
   },
   {
    "id": "subaru-kx21",
@@ -412,22 +192,14 @@
    "uses": [],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    }
-   ],
-   "notes": "Durée avant révision : valeur usuelle du catalogue d'origine, sans document constructeur.",
+   "sources": [],
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": true,
-   "source_types": [
-    "base ApexAI"
-   ]
+   "source_types": []
   },
   {
    "id": "honda-gx270",
@@ -441,22 +213,14 @@
    "uses": [],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    }
-   ],
-   "notes": "Durée avant révision : valeur usuelle du catalogue d'origine, sans document constructeur.",
+   "sources": [],
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": true,
-   "source_types": [
-    "base ApexAI"
-   ]
+   "source_types": []
   },
   {
    "id": "honda-gx390",
@@ -470,22 +234,14 @@
    "uses": [],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    }
-   ],
-   "notes": "Durée avant révision : valeur usuelle du catalogue d'origine, sans document constructeur.",
+   "sources": [],
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": true,
-   "source_types": [
-    "base ApexAI"
-   ]
+   "source_types": []
   },
   {
    "id": "honda-gx160",
@@ -515,7 +271,7 @@
      "type": "constructeur"
     }
    ],
-   "notes": "Première vidange à 20 h. La durée avant révision affichée est une valeur usuelle, pas une donnée Honda.",
+   "notes": "Première vidange à 20 h.",
    "maintenance": [
     {
      "element": "Huile moteur",
@@ -559,6 +315,7 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": true,
    "source_types": [
@@ -593,7 +350,7 @@
      "type": "constructeur"
     }
    ],
-   "notes": "Première vidange à 20 h. La durée avant révision affichée est une valeur usuelle, pas une donnée Honda.",
+   "notes": "Première vidange à 20 h.",
    "maintenance": [
     {
      "element": "Huile moteur",
@@ -637,6 +394,7 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": true,
    "source_types": [
@@ -668,9 +426,10 @@
      "type": "presse spécialisée"
     }
    ],
-   "notes": null,
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": false,
    "source_types": [
@@ -689,8 +448,8 @@
     "spark_plug": "Antiparasite PVL 401 222, NGK TB05EMA ou Selettra « S »",
     "technical": "Alésage 48,20 mm, course 54,05 mm ; carburateur Tillotson HW-33A ou HL-398A ; allumage Selettra analogique. Aucun intervalle d'entretien publié trouvé"
    },
-   "default_life": 15,
-   "life_unit": "hours",
+   "default_life": null,
+   "life_unit": null,
    "uses": [
     "IAME Eurocup KA100"
    ],
@@ -705,43 +464,16 @@
      "label": "IAME KA100 Reedjet : fiche d'homologation Karting Australia (MAJ 17/01/2023)",
      "url": "https://kartingnetau.r6d.dev/wp-content/uploads/2023/01/IAME-KA100-100cc-REEDJET-Engine-Updated-17-January-2023.pdf",
      "type": "homologation"
-    },
-    {
-     "key": "kp_ka100",
-     "label": "KartPulse : entretien IAME KA100 (avis de pilotes)",
-     "url": "https://forums.kartpulse.com/t/iame-ka100-maintenance-and-rebuild-time/1852",
-     "type": "retour pilotes"
     }
    ],
-   "notes": "Aucun intervalle constructeur publié. Pilotes : 10 à 15 h entre deux hauts moteurs sans tirer haut dans les tours ; kit de carburateur vers 5 à 6 h.",
-   "maintenance": [
-    {
-     "element": "Haut moteur",
-     "action": "Révision",
-     "interval": "10 à 15",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_ka100",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Carburateur",
-     "action": "Kit de réfection",
-     "interval": "5 à 6",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_ka100",
-     "ref": null,
-     "kind": "retour pilotes"
-    }
-   ],
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
+   "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": true,
    "source_types": [
-    "homologation",
-    "retour pilotes"
+    "homologation"
    ]
   },
   {
@@ -772,6 +504,7 @@
    "notes": "Pignon 11 dents imposé en Minime.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": false,
    "source_types": [
@@ -805,9 +538,10 @@
      "type": "presse spécialisée"
     }
    ],
-   "notes": null,
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": false,
    "source_types": [
@@ -825,8 +559,8 @@
     "stroke": "2T",
     "gearbox": "6 rapports"
    },
-   "default_life": 6,
-   "life_unit": "hours",
+   "default_life": null,
+   "life_unit": null,
    "uses": [
     "KZ",
     "KZ2"
@@ -845,43 +579,16 @@
      "label": "KartClass : les moteurs KZ par marque",
      "url": "https://kartclass.com/blogs/news/different-brand-of-kz-shifter-engines",
      "type": "presse spécialisée"
-    },
-    {
-     "key": "kp_kz",
-     "label": "KartPulse : entretien TM KZ (avis de pilotes)",
-     "url": "https://forums.kartpulse.com/t/tm-kz-r1-maintenance-intervals-before-after-session-prep/14551",
-     "type": "retour pilotes"
     }
    ],
-   "notes": "Pas d'intervalle constructeur publié : 6 h avant révision, d'après les pilotes KZ (piston 3 à 6 h).",
-   "maintenance": [
-    {
-     "element": "Piston",
-     "action": "Remplacer",
-     "interval": "3 à 6",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Bas moteur",
-     "action": "Réfection",
-     "interval": "12 à 18",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    }
-   ],
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
+   "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": false,
    "source_types": [
-    "presse spécialisée",
-    "retour pilotes"
+    "presse spécialisée"
    ]
   },
   {
@@ -895,8 +602,8 @@
     "stroke": "2T",
     "gearbox": "6 rapports"
    },
-   "default_life": 6,
-   "life_unit": "hours",
+   "default_life": null,
+   "life_unit": null,
    "uses": [
     "KZ",
     "KZ2"
@@ -909,43 +616,16 @@
      "label": "KartClass : guide des moteurs IAME",
      "url": "https://kartclass.com/blogs/news/iame-engine-guide-types-models-and-specs",
      "type": "presse spécialisée"
-    },
-    {
-     "key": "kp_kz",
-     "label": "KartPulse : entretien TM KZ (avis de pilotes)",
-     "url": "https://forums.kartpulse.com/t/tm-kz-r1-maintenance-intervals-before-after-session-prep/14551",
-     "type": "retour pilotes"
     }
    ],
-   "notes": "Pas d'intervalle constructeur publié : 6 h avant révision, d'après les pilotes KZ (piston 3 à 6 h).",
-   "maintenance": [
-    {
-     "element": "Piston",
-     "action": "Remplacer",
-     "interval": "3 à 6",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Bas moteur",
-     "action": "Réfection",
-     "interval": "12 à 18",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    }
-   ],
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
+   "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": false,
    "source_types": [
-    "presse spécialisée",
-    "retour pilotes"
+    "presse spécialisée"
    ]
   },
   {
@@ -962,8 +642,8 @@
     "gearbox_oil": "40 ml EP100 (Wladoil IAME Gear Oil) ou SAE 30",
     "technical": "Température de fonctionnement 45 à 65 °C ; avance fixe 22° ; squish 1,0 mm ; jeu à la coupe des segments 0,35 à 0,40 mm"
    },
-   "default_life": 10,
-   "life_unit": "hours",
+   "default_life": null,
+   "life_unit": null,
    "uses": [
     "FFSA Senior / Master / Gentleman",
     "IAME Eurocup X30 Senior / Master / Lady"
@@ -980,15 +660,9 @@
      "label": "Manuel IAME 125cc X30 (MAN-80)",
      "url": "https://cdn.shopify.com/s/files/1/0341/9396/5189/files/Manual_IAME_125cc_X30.pdf",
      "type": "constructeur"
-    },
-    {
-     "key": "kp_x30",
-     "label": "KartPulse : calendrier de révision IAME X30 (préparateur et pilotes)",
-     "url": "https://forums.kartpulse.com/t/insight-and-opinion-wanted-into-rebuild-schedule-iame-x30/1008",
-     "type": "retour pilotes"
     }
    ],
-   "notes": "IAME compte en litres de mélange (piston 100 L en compétition). Côté pilotes et préparateurs : haut moteur vers 8 à 10 h, bas moteur vers 20 h.",
+   "notes": "IAME compte en litres de mélange (piston 100 L en compétition).",
    "maintenance": [
     {
      "element": "Piston",
@@ -1109,34 +783,14 @@
      "source": "iame_x30",
      "ref": "p. 7",
      "kind": "constructeur"
-    },
-    {
-     "element": "Haut moteur",
-     "action": "Révision",
-     "interval": "8 à 10",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_x30",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Bas moteur",
-     "action": "Réfection",
-     "interval": "≈ 20",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_x30",
-     "ref": null,
-     "kind": "retour pilotes"
     }
    ],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": true,
    "source_types": [
-    "constructeur",
-    "retour pilotes"
+    "constructeur"
    ]
   },
   {
@@ -1146,8 +800,8 @@
    "name": "X30 Junior",
    "subcategory": null,
    "specs": {},
-   "default_life": 10,
-   "life_unit": "hours",
+   "default_life": null,
+   "life_unit": null,
    "uses": [],
    "aliases": [],
    "homologation": null,
@@ -1157,22 +811,16 @@
      "label": "Manuel IAME 125cc X30 (MAN-80)",
      "url": "https://cdn.shopify.com/s/files/1/0341/9396/5189/files/Manual_IAME_125cc_X30.pdf",
      "type": "constructeur"
-    },
-    {
-     "key": "kp_x30",
-     "label": "KartPulse : calendrier de révision IAME X30 (préparateur et pilotes)",
-     "url": "https://forums.kartpulse.com/t/insight-and-opinion-wanted-into-rebuild-schedule-iame-x30/1008",
-     "type": "retour pilotes"
     }
    ],
    "notes": "Même moteur que le X30, bridé : mêmes intervalles en litres de mélange.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": true,
    "source_types": [
-    "constructeur",
-    "retour pilotes"
+    "constructeur"
    ]
   },
   {
@@ -1201,9 +849,10 @@
      "type": "presse spécialisée"
     }
    ],
-   "notes": null,
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": false,
    "source_types": [
@@ -1221,8 +870,8 @@
     "stroke": "2T",
     "gearbox": "6 rapports"
    },
-   "default_life": 6,
-   "life_unit": "hours",
+   "default_life": null,
+   "life_unit": null,
    "uses": [
     "KZ",
     "KZ2"
@@ -1235,43 +884,16 @@
      "label": "TKART : les meilleurs moteurs KZ",
      "url": "https://tkart.it/en/news/toolbox/the-best-kz-engines",
      "type": "presse spécialisée"
-    },
-    {
-     "key": "kp_kz",
-     "label": "KartPulse : entretien TM KZ (avis de pilotes)",
-     "url": "https://forums.kartpulse.com/t/tm-kz-r1-maintenance-intervals-before-after-session-prep/14551",
-     "type": "retour pilotes"
     }
    ],
-   "notes": "Pas d'intervalle constructeur publié : 6 h avant révision, d'après les pilotes KZ (piston 3 à 6 h).",
-   "maintenance": [
-    {
-     "element": "Piston",
-     "action": "Remplacer",
-     "interval": "3 à 6",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Bas moteur",
-     "action": "Réfection",
-     "interval": "12 à 18",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    }
-   ],
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
+   "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": false,
    "source_types": [
-    "presse spécialisée",
-    "retour pilotes"
+    "presse spécialisée"
    ]
   },
   {
@@ -1299,9 +921,10 @@
      "type": "presse spécialisée"
     }
    ],
-   "notes": null,
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": false,
    "source_types": [
@@ -1319,8 +942,8 @@
     "stroke": "2T",
     "gearbox": "6 rapports"
    },
-   "default_life": 6,
-   "life_unit": "hours",
+   "default_life": null,
+   "life_unit": null,
    "uses": [
     "KZ",
     "KZ2"
@@ -1333,43 +956,16 @@
      "label": "TKART : les meilleurs moteurs KZ",
      "url": "https://tkart.it/en/news/toolbox/the-best-kz-engines",
      "type": "presse spécialisée"
-    },
-    {
-     "key": "kp_kz",
-     "label": "KartPulse : entretien TM KZ (avis de pilotes)",
-     "url": "https://forums.kartpulse.com/t/tm-kz-r1-maintenance-intervals-before-after-session-prep/14551",
-     "type": "retour pilotes"
     }
    ],
-   "notes": "Pas d'intervalle constructeur publié : 6 h avant révision, d'après les pilotes KZ (piston 3 à 6 h).",
-   "maintenance": [
-    {
-     "element": "Piston",
-     "action": "Remplacer",
-     "interval": "3 à 6",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Bas moteur",
-     "action": "Réfection",
-     "interval": "12 à 18",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    }
-   ],
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
+   "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": false,
    "source_types": [
-    "presse spécialisée",
-    "retour pilotes"
+    "presse spécialisée"
    ]
   },
   {
@@ -1383,8 +979,8 @@
     "stroke": "2T",
     "gearbox": "6 rapports"
    },
-   "default_life": 6,
-   "life_unit": "hours",
+   "default_life": null,
+   "life_unit": null,
    "uses": [
     "KZ",
     "KZ2"
@@ -1397,43 +993,16 @@
      "label": "TKART : les meilleurs moteurs KZ",
      "url": "https://tkart.it/en/news/toolbox/the-best-kz-engines",
      "type": "presse spécialisée"
-    },
-    {
-     "key": "kp_kz",
-     "label": "KartPulse : entretien TM KZ (avis de pilotes)",
-     "url": "https://forums.kartpulse.com/t/tm-kz-r1-maintenance-intervals-before-after-session-prep/14551",
-     "type": "retour pilotes"
     }
    ],
-   "notes": "Pas d'intervalle constructeur publié : 6 h avant révision, d'après les pilotes KZ (piston 3 à 6 h).",
-   "maintenance": [
-    {
-     "element": "Piston",
-     "action": "Remplacer",
-     "interval": "3 à 6",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Bas moteur",
-     "action": "Réfection",
-     "interval": "12 à 18",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    }
-   ],
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
+   "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": false,
    "source_types": [
-    "presse spécialisée",
-    "retour pilotes"
+    "presse spécialisée"
    ]
   },
   {
@@ -1447,8 +1016,8 @@
     "stroke": "2T",
     "gearbox": "6 rapports"
    },
-   "default_life": 6,
-   "life_unit": "hours",
+   "default_life": null,
+   "life_unit": null,
    "uses": [
     "KZ",
     "KZ2"
@@ -1461,43 +1030,16 @@
      "label": "KartClass : les moteurs KZ par marque",
      "url": "https://kartclass.com/blogs/news/different-brand-of-kz-shifter-engines",
      "type": "presse spécialisée"
-    },
-    {
-     "key": "kp_kz",
-     "label": "KartPulse : entretien TM KZ (avis de pilotes)",
-     "url": "https://forums.kartpulse.com/t/tm-kz-r1-maintenance-intervals-before-after-session-prep/14551",
-     "type": "retour pilotes"
     }
    ],
-   "notes": "Pas d'intervalle constructeur publié : 6 h avant révision, d'après les pilotes KZ (piston 3 à 6 h).",
-   "maintenance": [
-    {
-     "element": "Piston",
-     "action": "Remplacer",
-     "interval": "3 à 6",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Bas moteur",
-     "action": "Réfection",
-     "interval": "12 à 18",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    }
-   ],
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
+   "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": false,
    "source_types": [
-    "presse spécialisée",
-    "retour pilotes"
+    "presse spécialisée"
    ]
   },
   {
@@ -1514,7 +1056,7 @@
     "gearbox_oil": "100 cm³ SAE 15W-40",
     "technical": "Même manuel que le 125 MAX evo"
    },
-   "default_life": 25,
+   "default_life": 50,
    "life_unit": "hours",
    "uses": [
     "FFSA Nationale",
@@ -1533,21 +1075,9 @@
      "label": "Rotax 125 MAX evo / Junior / Mini / Micro MAX evo : Installation Instructions and Operators Manual (éd. 09/2016)",
      "url": "https://kart.co.za/wp-content/uploads/2021/02/Installation-Instructions-and-Operators-Manual.pdf",
      "type": "constructeur"
-    },
-    {
-     "key": "apexai_pilotes",
-     "label": "Retours des pilotes ApexAI (octobre 2026)",
-     "url": null,
-     "type": "retour pilotes"
-    },
-    {
-     "key": "kp_rotax",
-     "label": "KartPulse : révision des Rotax (avis de pilotes)",
-     "url": "https://forums.kartpulse.com/t/rebuild-of-rotax/6352",
-     "type": "retour pilotes"
     }
    ],
-   "notes": "Constructeur : démontage et contrôle complet toutes les 50 h en centre agréé. En compétition, les pilotes révisent le haut moteur bien avant (15 à 25 h).",
+   "notes": "Démontage et contrôle complet toutes les 50 h en centre agréé.",
    "maintenance": [
     {
      "element": "Pignon / chaîne",
@@ -1688,44 +1218,19 @@
      "source": "rotax_evo_2016",
      "ref": "p. 56",
      "kind": "constructeur"
-    },
-    {
-     "element": "Haut moteur",
-     "action": "Révision",
-     "interval": "15 à 20",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_rotax",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Moteur complet",
-     "action": "Réfection",
-     "interval": "40 à 50",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_rotax",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Moteur (haut et bas, version DD2)",
-     "action": "Révision",
-     "interval": 25,
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "apexai_pilotes",
-     "ref": null,
-     "kind": "retour pilotes"
     }
    ],
    "season": "2026-2027",
+   "life_ref": {
+    "source": "rotax_evo_2016",
+    "label": "Rotax 125 MAX evo / Junior / Mini / Micro MAX evo : Installation Instructions and Operators Manual (éd. 09/2016)",
+    "url": "https://kart.co.za/wp-content/uploads/2021/02/Installation-Instructions-and-Operators-Manual.pdf",
+    "ref": "p. 56"
+   },
    "category_label": "Moteurs",
    "in_db_seed": true,
    "source_types": [
-    "constructeur",
-    "retour pilotes"
+    "constructeur"
    ]
   },
   {
@@ -1744,8 +1249,8 @@
     "rpm": "13 600 tr/min max",
     "technical": "Rodage : rapport long, gicleur 2 tailles plus riche ; 15 min ≤ 10 000 tr/min, 15 min ≤ 12 000 tr/min, 15 min pleine charge ; eau ≥ 55 °C"
    },
-   "default_life": 25,
-   "life_unit": "hours",
+   "default_life": null,
+   "life_unit": null,
    "uses": [
     "Rotax DD2"
    ],
@@ -1761,21 +1266,9 @@
      "label": "Rotax 125 MAX DD2 : Operating Manual 2024",
      "url": "https://rotax-racing.com/assets/uploads/Engines/KA_Operating-Manual_125MAX_DD2_en_2024_2024-12-06-081458_vvwv.pdf",
      "type": "constructeur"
-    },
-    {
-     "key": "apexai_pilotes",
-     "label": "Retours des pilotes ApexAI (octobre 2026)",
-     "url": null,
-     "type": "retour pilotes"
-    },
-    {
-     "key": "kp_rotax",
-     "label": "KartPulse : révision des Rotax (avis de pilotes)",
-     "url": "https://forums.kartpulse.com/t/rebuild-of-rotax/6352",
-     "type": "retour pilotes"
     }
    ],
-   "notes": "Révision haut et bas moteur vers 25 h selon les pilotes ApexAI. Le manuel prévoit un démontage complet en centre agréé Rotax (50 h pour la famille 125 MAX evo).",
+   "notes": "Le manuel Rotax impose un démontage et contrôle complet du moteur (piston, axe, bielle, roulements de vilebrequin) dans un centre agréé Rotax. Règle l'échéance de ta jauge moteur avec ton centre.",
    "maintenance": [
     {
      "element": "Huile de boîte",
@@ -1788,62 +1281,22 @@
      "kind": "constructeur"
     },
     {
-     "element": "Moteur complet (piston, axe, bielle, roulements)",
-     "action": "Démontage et contrôle par un centre agréé Rotax (intervalle : tableau du manuel)",
-     "interval": "",
-     "unit": null,
-     "usage": "tous",
-     "source": "rotax_dd2_2024",
-     "ref": "ch. 4 p. 8",
-     "kind": "constructeur"
-    },
-    {
      "element": "Filtre à air",
-     "action": "Nettoyer et huiler ; kit de nettoyage après chaque séance sous la pluie",
-     "interval": "",
+     "action": "Nettoyer avec le kit de nettoyage, huiler, remplacer s'il est abîmé",
+     "interval": "après chaque séance sous la pluie",
      "unit": null,
      "usage": "tous",
      "source": "rotax_dd2_2024",
      "ref": "ch. 4 p. 8",
      "kind": "constructeur"
-    },
-    {
-     "element": "Moteur (haut et bas)",
-     "action": "Révision",
-     "interval": 25,
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "apexai_pilotes",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Haut moteur",
-     "action": "Révision",
-     "interval": "15 à 20",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_rotax",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Moteur complet",
-     "action": "Réfection",
-     "interval": "40 à 50",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_rotax",
-     "ref": null,
-     "kind": "retour pilotes"
     }
    ],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": true,
    "source_types": [
-    "constructeur",
-    "retour pilotes"
+    "constructeur"
    ]
   },
   {
@@ -1861,7 +1314,7 @@
     "rpm": "> 13 800 tr/min possibles à vide (réduit la durée de vie)",
     "technical": "Le Micro MAX evo a une bougie spécifique"
    },
-   "default_life": 25,
+   "default_life": 50,
    "life_unit": "hours",
    "uses": [
     "FFSA Senior / Master / Gentleman",
@@ -1879,21 +1332,9 @@
      "label": "Rotax 125 MAX evo / Junior / Mini / Micro MAX evo : Installation Instructions and Operators Manual (éd. 09/2016)",
      "url": "https://kart.co.za/wp-content/uploads/2021/02/Installation-Instructions-and-Operators-Manual.pdf",
      "type": "constructeur"
-    },
-    {
-     "key": "apexai_pilotes",
-     "label": "Retours des pilotes ApexAI (octobre 2026)",
-     "url": null,
-     "type": "retour pilotes"
-    },
-    {
-     "key": "kp_rotax",
-     "label": "KartPulse : révision des Rotax (avis de pilotes)",
-     "url": "https://forums.kartpulse.com/t/rebuild-of-rotax/6352",
-     "type": "retour pilotes"
     }
    ],
-   "notes": "Constructeur : démontage et contrôle complet toutes les 50 h en centre agréé. En compétition, les pilotes révisent le haut moteur bien avant (15 à 25 h).",
+   "notes": "Démontage et contrôle complet toutes les 50 h en centre agréé.",
    "maintenance": [
     {
      "element": "Pignon / chaîne",
@@ -2034,44 +1475,19 @@
      "source": "rotax_evo_2016",
      "ref": "p. 56",
      "kind": "constructeur"
-    },
-    {
-     "element": "Haut moteur",
-     "action": "Révision",
-     "interval": "15 à 20",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_rotax",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Moteur complet",
-     "action": "Réfection",
-     "interval": "40 à 50",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_rotax",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Moteur (haut et bas, version DD2)",
-     "action": "Révision",
-     "interval": 25,
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "apexai_pilotes",
-     "ref": null,
-     "kind": "retour pilotes"
     }
    ],
    "season": "2026-2027",
+   "life_ref": {
+    "source": "rotax_evo_2016",
+    "label": "Rotax 125 MAX evo / Junior / Mini / Micro MAX evo : Installation Instructions and Operators Manual (éd. 09/2016)",
+    "url": "https://kart.co.za/wp-content/uploads/2021/02/Installation-Instructions-and-Operators-Manual.pdf",
+    "ref": "p. 56"
+   },
    "category_label": "Moteurs",
    "in_db_seed": true,
    "source_types": [
-    "constructeur",
-    "retour pilotes"
+    "constructeur"
    ]
   },
   {
@@ -2246,6 +1662,12 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": {
+    "source": "rotax_evo_2016",
+    "label": "Rotax 125 MAX evo / Junior / Mini / Micro MAX evo : Installation Instructions and Operators Manual (éd. 09/2016)",
+    "url": "https://kart.co.za/wp-content/uploads/2021/02/Installation-Instructions-and-Operators-Manual.pdf",
+    "ref": "p. 56"
+   },
    "category_label": "Moteurs",
    "in_db_seed": true,
    "source_types": [
@@ -2428,6 +1850,12 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": {
+    "source": "rotax_evo_2016",
+    "label": "Rotax 125 MAX evo / Junior / Mini / Micro MAX evo : Installation Instructions and Operators Manual (éd. 09/2016)",
+    "url": "https://kart.co.za/wp-content/uploads/2021/02/Installation-Instructions-and-Operators-Manual.pdf",
+    "ref": "p. 56"
+   },
    "category_label": "Moteurs",
    "in_db_seed": true,
    "source_types": [
@@ -2445,8 +1873,8 @@
     "stroke": "2T",
     "gearbox": "6 rapports"
    },
-   "default_life": 6,
-   "life_unit": "hours",
+   "default_life": null,
+   "life_unit": null,
    "uses": [
     "KZ",
     "KZ2",
@@ -2460,43 +1888,16 @@
      "label": "KartSport News : gamme moteurs TM Kart homologuée 2026-2028",
      "url": "https://www.kartsportnews.com/2025/11/04/tms-new-engine-range/",
      "type": "presse spécialisée"
-    },
-    {
-     "key": "kp_kz",
-     "label": "KartPulse : entretien TM KZ (avis de pilotes)",
-     "url": "https://forums.kartpulse.com/t/tm-kz-r1-maintenance-intervals-before-after-session-prep/14551",
-     "type": "retour pilotes"
     }
    ],
-   "notes": "Homologation CIK-FIA 2026-2028, successeur du KZ-R2 (existe en version Total Black). Pas d'intervalle constructeur publié : 6 h avant révision, d'après les pilotes KZ (piston 3 à 6 h).",
-   "maintenance": [
-    {
-     "element": "Piston",
-     "action": "Remplacer",
-     "interval": "3 à 6",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Bas moteur",
-     "action": "Réfection",
-     "interval": "12 à 18",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    }
-   ],
+   "notes": "Homologation CIK-FIA 2026-2028, successeur du KZ-R2 (existe en version Total Black).",
+   "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": false,
    "source_types": [
-    "presse spécialisée",
-    "retour pilotes"
+    "presse spécialisée"
    ]
   },
   {
@@ -2527,6 +1928,7 @@
    "notes": "Homologation 2023-2025.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": false,
    "source_types": [
@@ -2567,6 +1969,7 @@
    "notes": "Homologation 2026-2028, successeur du MINI 3 / 3B.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": false,
    "source_types": [
@@ -2598,9 +2001,10 @@
      "type": "presse spécialisée"
     }
    ],
-   "notes": null,
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": false,
    "source_types": [
@@ -2635,6 +2039,7 @@
    "notes": "Homologation prolongée pour 2026-2028.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": false,
    "source_types": [
@@ -2670,6 +2075,7 @@
    "notes": "Homologation prolongée pour 2026-2028.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": false,
    "source_types": [
@@ -2704,6 +2110,7 @@
    "notes": "Homologation prolongée pour 2026-2028.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": false,
    "source_types": [
@@ -2735,9 +2142,10 @@
      "type": "presse spécialisée"
     }
    ],
-   "notes": null,
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": false,
    "source_types": [
@@ -2772,6 +2180,7 @@
    "notes": "Carburateur Dell'Orto PHBG 18 BS, allumage Selettra PF5858.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": false,
    "source_types": [
@@ -2805,7 +2214,7 @@
      "type": "constructeur"
     }
    ],
-   "notes": "Constructeur : piston toutes les 30 h, bielle et roulements de vilebrequin toutes les 60 h.",
+   "notes": "Piston toutes les 30 h, bielle et roulements de vilebrequin toutes les 60 h.",
    "maintenance": [
     {
      "element": "Piston",
@@ -2889,6 +2298,12 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": {
+    "source": "vortex_minirok",
+    "label": "Vortex Mini ROK : manuel d'utilisation",
+    "url": "https://www.vortex-rok.com/gestione/allegati_motori_campionati/142_180.pdf",
+    "ref": "§5.13 p. 27"
+   },
    "category_label": "Moteurs",
    "in_db_seed": true,
    "source_types": [
@@ -2925,7 +2340,7 @@
      "type": "constructeur"
     }
    ],
-   "notes": "Constructeur : piston toutes les 30 h, bielle et roulements de vilebrequin toutes les 60 h.",
+   "notes": "Piston toutes les 30 h, bielle et roulements de vilebrequin toutes les 60 h.",
    "maintenance": [
     {
      "element": "Piston",
@@ -3019,6 +2434,12 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": {
+    "source": "vortex_rokgp",
+    "label": "Vortex ROK GP : manuel d'utilisation",
+    "url": "https://www.vortex-rok.com/gestione/allegati_motori_campionati/194_302.pdf",
+    "ref": "§5.1 p. 28"
+   },
    "category_label": "Moteurs",
    "in_db_seed": true,
    "source_types": [
@@ -3032,8 +2453,8 @@
    "name": "ROK Junior",
    "subcategory": null,
    "specs": {},
-   "default_life": 30,
-   "life_unit": "hours",
+   "default_life": null,
+   "life_unit": null,
    "uses": [
     "ROK Cup Junior"
    ],
@@ -3056,6 +2477,7 @@
    "notes": "Le manuel ROK GP couvre la version Junior : piston 30 h, bas moteur 60 h.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": true,
    "source_types": [
@@ -3089,9 +2511,10 @@
      "type": "presse spécialisée"
     }
    ],
-   "notes": null,
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": false,
    "source_types": [
@@ -3109,8 +2532,8 @@
     "stroke": "2T",
     "gearbox": "6 rapports"
    },
-   "default_life": 6,
-   "life_unit": "hours",
+   "default_life": null,
+   "life_unit": null,
    "uses": [
     "KZ",
     "KZ2"
@@ -3129,43 +2552,16 @@
      "label": "TKART : les meilleurs moteurs KZ",
      "url": "https://tkart.it/en/news/toolbox/the-best-kz-engines",
      "type": "presse spécialisée"
-    },
-    {
-     "key": "kp_kz",
-     "label": "KartPulse : entretien TM KZ (avis de pilotes)",
-     "url": "https://forums.kartpulse.com/t/tm-kz-r1-maintenance-intervals-before-after-session-prep/14551",
-     "type": "retour pilotes"
     }
    ],
-   "notes": "Pas d'intervalle constructeur publié : 6 h avant révision, d'après les pilotes KZ (piston 3 à 6 h).",
-   "maintenance": [
-    {
-     "element": "Piston",
-     "action": "Remplacer",
-     "interval": "3 à 6",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Bas moteur",
-     "action": "Réfection",
-     "interval": "12 à 18",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    }
-   ],
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
+   "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": false,
    "source_types": [
-    "presse spécialisée",
-    "retour pilotes"
+    "presse spécialisée"
    ]
   },
   {
@@ -3193,9 +2589,10 @@
      "type": "presse spécialisée"
     }
    ],
-   "notes": null,
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": false,
    "source_types": [
@@ -3227,9 +2624,10 @@
      "type": "presse spécialisée"
     }
    ],
-   "notes": null,
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": false,
    "source_types": [
@@ -3261,9 +2659,10 @@
      "type": "presse spécialisée"
     }
    ],
-   "notes": null,
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": false,
    "source_types": [
@@ -3281,8 +2680,8 @@
     "stroke": "2T",
     "gearbox": "6 rapports"
    },
-   "default_life": 6,
-   "life_unit": "hours",
+   "default_life": null,
+   "life_unit": null,
    "uses": [
     "KZ",
     "KZ2"
@@ -3295,43 +2694,16 @@
      "label": "KartClass : les moteurs Vortex",
      "url": "https://kartclass.com/blogs/news/types-of-vortex-engines",
      "type": "presse spécialisée"
-    },
-    {
-     "key": "kp_kz",
-     "label": "KartPulse : entretien TM KZ (avis de pilotes)",
-     "url": "https://forums.kartpulse.com/t/tm-kz-r1-maintenance-intervals-before-after-session-prep/14551",
-     "type": "retour pilotes"
     }
    ],
-   "notes": "Pas d'intervalle constructeur publié : 6 h avant révision, d'après les pilotes KZ (piston 3 à 6 h).",
-   "maintenance": [
-    {
-     "element": "Piston",
-     "action": "Remplacer",
-     "interval": "3 à 6",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Bas moteur",
-     "action": "Réfection",
-     "interval": "12 à 18",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    }
-   ],
+   "notes": "Pas d'intervalle d'entretien publié par le constructeur : règle l'échéance de ta jauge moteur avec ton préparateur.",
+   "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Moteurs",
    "in_db_seed": false,
    "source_types": [
-    "presse spécialisée",
-    "retour pilotes"
+    "presse spécialisée"
    ]
   },
   {
@@ -3346,22 +2718,14 @@
    "uses": [],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    }
-   ],
-   "notes": "Durée de vie en tours et pressions : valeurs de départ du catalogue d'origine, pas des données du fabricant.",
+   "sources": [],
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": true,
-   "source_types": [
-    "base ApexAI"
-   ]
+   "source_types": []
   },
   {
    "id": "vega-vert-xh3",
@@ -3375,22 +2739,14 @@
    "uses": [],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    }
-   ],
-   "notes": "Durée de vie en tours et pressions : valeurs de départ du catalogue d'origine, pas des données du fabricant.",
+   "sources": [],
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": true,
-   "source_types": [
-    "base ApexAI"
-   ]
+   "source_types": []
   },
   {
    "id": "lecont-jaune-svm",
@@ -3404,22 +2760,14 @@
    "uses": [],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    }
-   ],
-   "notes": "Durée de vie en tours et pressions : valeurs de départ du catalogue d'origine, pas des données du fabricant.",
+   "sources": [],
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": true,
-   "source_types": [
-    "base ApexAI"
-   ]
+   "source_types": []
   },
   {
    "id": "lecont-blanc-svb",
@@ -3433,22 +2781,14 @@
    "uses": [],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    }
-   ],
-   "notes": "Durée de vie en tours et pressions : valeurs de départ du catalogue d'origine, pas des données du fabricant.",
+   "sources": [],
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": true,
-   "source_types": [
-    "base ApexAI"
-   ]
+   "source_types": []
   },
   {
    "id": "mojo-d2",
@@ -3462,22 +2802,14 @@
    "uses": [],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    }
-   ],
-   "notes": "Durée de vie en tours et pressions : valeurs de départ du catalogue d'origine, pas des données du fabricant.",
+   "sources": [],
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": true,
-   "source_types": [
-    "base ApexAI"
-   ]
+   "source_types": []
   },
   {
    "id": "komet-k2m",
@@ -3491,22 +2823,14 @@
    "uses": [],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    }
-   ],
-   "notes": "Durée de vie en tours et pressions : valeurs de départ du catalogue d'origine, pas des données du fabricant.",
+   "sources": [],
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": true,
-   "source_types": [
-    "base ApexAI"
-   ]
+   "source_types": []
   },
   {
    "id": "komet-k2h",
@@ -3520,22 +2844,14 @@
    "uses": [],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    }
-   ],
-   "notes": "Durée de vie en tours et pressions : valeurs de départ du catalogue d'origine, pas des données du fabricant.",
+   "sources": [],
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": true,
-   "source_types": [
-    "base ApexAI"
-   ]
+   "source_types": []
   },
   {
    "id": "bridgestone-yds",
@@ -3549,22 +2865,14 @@
    "uses": [],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    }
-   ],
-   "notes": "Durée de vie en tours et pressions : valeurs de départ du catalogue d'origine, pas des données du fabricant.",
+   "sources": [],
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": true,
-   "source_types": [
-    "base ApexAI"
-   ]
+   "source_types": []
   },
   {
    "id": "mg-blanc-wt",
@@ -3578,22 +2886,14 @@
    "uses": [],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    }
-   ],
-   "notes": "Durée de vie en tours et pressions : valeurs de départ du catalogue d'origine, pas des données du fabricant.",
+   "sources": [],
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": true,
-   "source_types": [
-    "base ApexAI"
-   ]
+   "source_types": []
   },
   {
    "id": "dunlop-dh-h",
@@ -3622,6 +2922,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -3655,6 +2956,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -3688,6 +2990,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -3712,21 +3015,15 @@
      "label": "Speedwear : pneus Komet (revendeur)",
      "url": "https://speedwear.be/en/product-tag/comet/",
      "type": "revendeur"
-    },
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
     }
    ],
-   "notes": "Durée de vie en tours et pressions de départ : valeurs du catalogue d'origine, pas des données du fabricant.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": true,
    "source_types": [
-    "base ApexAI",
     "revendeur"
    ]
   },
@@ -3757,6 +3054,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -3790,6 +3088,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -3830,6 +3129,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -3851,25 +3151,19 @@
    "homologation": null,
    "sources": [
     {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    },
-    {
      "key": "lecont_svc",
      "label": "Karting Australia : spécification du pneu LeCont SVC 2022-2026",
      "url": "https://kartingnetau.r6d.dev/wp-content/uploads/2021/12/LeCont-SVC-Dry-Tyre-Specification-2022-2026.pdf",
      "type": "règlement"
     }
    ],
-   "notes": "Durée de vie en tours et pressions : valeurs de départ du catalogue d'origine, pas des données du fabricant.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": true,
    "source_types": [
-    "base ApexAI",
     "règlement"
    ]
   },
@@ -3889,22 +3183,14 @@
    ],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "kp_lecont",
-     "label": "KartPulse : LeCont LOH, LPM et LH03",
-     "url": "https://forums.kartpulse.com/t/lecont-tyres-loh-vs-lpm-vs-lh03/14045",
-     "type": "retour pilotes"
-    }
-   ],
-   "notes": "Grip moyen, flanc plus tolérant que les pneus CIK-FIA.",
+   "sources": [],
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
-   "source_types": [
-    "retour pilotes"
-   ]
+   "source_types": []
   },
   {
    "id": "lecont-lmk",
@@ -3932,6 +3218,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -3965,6 +3252,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -4010,23 +3298,17 @@
      "label": "Kart-Actu : pneumatiques FFSA Karting 2024-2026 (modèles et prix TTC du train)",
      "url": "https://kart-actu.com/ffsakarting/pneumatiques-ffsa-karting-2024-2026/2023/",
      "type": "presse spécialisée"
-    },
-    {
-     "key": "kp_lecont",
-     "label": "KartPulse : LeCont LOH, LPM et LH03",
-     "url": "https://forums.kartpulse.com/t/lecont-tyres-loh-vs-lpm-vs-lh03/14045",
-     "type": "retour pilotes"
     }
    ],
-   "notes": "Grip moyen à élevé.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
     "homologation",
     "presse spécialisée",
-    "retour pilotes",
     "règlement"
    ]
   },
@@ -4054,22 +3336,16 @@
      "label": "CIK-FIA : pneus homologués 2024-2026, liste technique (liée depuis KartSport News)",
      "url": "https://www.kartsportnews.com/2024/01/15/2024-homologated-equipment/",
      "type": "homologation"
-    },
-    {
-     "key": "kp_lecont",
-     "label": "KartPulse : LeCont LOH, LPM et LH03",
-     "url": "https://forums.kartpulse.com/t/lecont-tyres-loh-vs-lpm-vs-lh03/14045",
-     "type": "retour pilotes"
     }
    ],
-   "notes": "Gomme à fort grip, surtout utilisée en KZ.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
-    "homologation",
-    "retour pilotes"
+    "homologation"
    ]
   },
   {
@@ -4114,6 +3390,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -4148,6 +3425,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -4180,6 +3458,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -4216,6 +3495,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -4252,6 +3532,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -4280,21 +3561,15 @@
      "label": "eKartingNews : nouvelle nomenclature des pneus MG",
      "url": "https://www.ekartingnews.com/?p=105749",
      "type": "presse spécialisée"
-    },
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
     }
    ],
-   "notes": "Durée de vie en tours et pressions de départ : valeurs du catalogue d'origine, pas des données du fabricant.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": true,
    "source_types": [
-    "base ApexAI",
     "presse spécialisée"
    ]
   },
@@ -4328,6 +3603,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -4364,6 +3640,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -4397,6 +3674,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -4425,21 +3703,15 @@
      "label": "eKartingNews : nouvelle nomenclature des pneus MG",
      "url": "https://www.ekartingnews.com/?p=105749",
      "type": "presse spécialisée"
-    },
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
     }
    ],
-   "notes": "Durée de vie en tours et pressions de départ : valeurs du catalogue d'origine, pas des données du fabricant.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": true,
    "source_types": [
-    "base ApexAI",
     "presse spécialisée"
    ]
   },
@@ -4469,6 +3741,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -4502,6 +3775,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -4537,6 +3811,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -4570,6 +3845,7 @@
    "notes": "Pneu intermédiaire.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -4603,6 +3879,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -4636,6 +3913,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -4669,6 +3947,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -4709,6 +3988,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -4751,6 +4031,7 @@
    "notes": "Pression en piste détrempée donnée par Rotax : 0,85 bar.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -4793,6 +4074,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -4829,21 +4111,15 @@
      "label": "Rotax : pneus MOJO (gamme et usages)",
      "url": "https://rotax-racing.com/mojo-tyres",
      "type": "constructeur"
-    },
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
     }
    ],
-   "notes": "Rotax : après le premier roulage d'un pneu neuf, la pression ne doit pas monter de plus de 0,35 bar. Durée de vie en tours et pressions de départ : valeurs du catalogue d'origine, pas des données du fabricant.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": true,
    "source_types": [
-    "base ApexAI",
     "constructeur",
     "homologation"
    ]
@@ -4878,21 +4154,15 @@
      "label": "Rotax : pneus MOJO (gamme et usages)",
      "url": "https://rotax-racing.com/mojo-tyres",
      "type": "constructeur"
-    },
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
     }
    ],
-   "notes": "Pression en piste détrempée donnée par Rotax : 1,0 bar. Durée de vie en tours et pressions de départ : valeurs du catalogue d'origine, pas des données du fabricant.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": true,
    "source_types": [
-    "base ApexAI",
     "constructeur",
     "homologation"
    ]
@@ -4924,6 +4194,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -4957,6 +4228,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -4990,6 +4262,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -5035,21 +4308,15 @@
      "label": "Kart-Actu : pneumatiques FFSA Karting 2024-2026 (modèles et prix TTC du train)",
      "url": "https://kart-actu.com/ffsakarting/pneumatiques-ffsa-karting-2024-2026/2023/",
      "type": "presse spécialisée"
-    },
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
     }
    ],
-   "notes": "Durée de vie en tours et pressions de départ : valeurs du catalogue d'origine, pas des données du fabricant.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": true,
    "source_types": [
-    "base ApexAI",
     "homologation",
     "presse spécialisée",
     "règlement"
@@ -5097,6 +4364,7 @@
    "notes": "Dureté IRHD 69 avant et arrière (revendeur).",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -5139,6 +4407,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -5177,21 +4446,15 @@
      "label": "Kart-Actu : pneumatiques FFSA Karting 2024-2026 (modèles et prix TTC du train)",
      "url": "https://kart-actu.com/ffsakarting/pneumatiques-ffsa-karting-2024-2026/2023/",
      "type": "presse spécialisée"
-    },
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
     }
    ],
-   "notes": "Durée de vie en tours et pressions de départ : valeurs du catalogue d'origine, pas des données du fabricant.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": true,
    "source_types": [
-    "base ApexAI",
     "presse spécialisée",
     "règlement"
    ]
@@ -5229,6 +4492,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -5286,6 +4550,7 @@
    "notes": "Gomme dure.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -5330,6 +4595,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pneus",
    "in_db_seed": false,
    "source_types": [
@@ -5357,9 +4623,10 @@
      "type": "homologation"
     }
    ],
-   "notes": "Poids du châssis : valeur usuelle du catalogue d'origine, à confirmer.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": true,
    "source_types": [
@@ -5386,9 +4653,10 @@
      "type": "homologation"
     }
    ],
-   "notes": "Poids du châssis : valeur usuelle du catalogue d'origine, à confirmer.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": true,
    "source_types": [
@@ -5415,9 +4683,10 @@
      "type": "homologation"
     }
    ],
-   "notes": "Poids du châssis : valeur usuelle du catalogue d'origine, à confirmer.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": true,
    "source_types": [
@@ -5444,9 +4713,10 @@
      "type": "homologation"
     }
    ],
-   "notes": "Poids du châssis : valeur usuelle du catalogue d'origine, à confirmer.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": true,
    "source_types": [
@@ -5473,9 +4743,10 @@
      "type": "homologation"
     }
    ],
-   "notes": "Poids du châssis : valeur usuelle du catalogue d'origine, à confirmer.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": true,
    "source_types": [
@@ -5502,9 +4773,10 @@
      "type": "homologation"
     }
    ],
-   "notes": "Poids du châssis : valeur usuelle du catalogue d'origine, à confirmer.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": true,
    "source_types": [
@@ -5531,9 +4803,10 @@
      "type": "homologation"
     }
    ],
-   "notes": "Poids du châssis : valeur usuelle du catalogue d'origine, à confirmer.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": true,
    "source_types": [
@@ -5560,9 +4833,10 @@
      "type": "homologation"
     }
    ],
-   "notes": "Poids du châssis : valeur usuelle du catalogue d'origine, à confirmer.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": true,
    "source_types": [
@@ -5589,9 +4863,10 @@
      "type": "homologation"
     }
    ],
-   "notes": "Poids du châssis : valeur usuelle du catalogue d'origine, à confirmer.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": true,
    "source_types": [
@@ -5618,9 +4893,10 @@
      "type": "homologation"
     }
    ],
-   "notes": "Poids du châssis : valeur usuelle du catalogue d'origine, à confirmer.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": true,
    "source_types": [
@@ -5647,9 +4923,10 @@
      "type": "homologation"
     }
    ],
-   "notes": "Poids du châssis : valeur usuelle du catalogue d'origine, à confirmer.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": true,
    "source_types": [
@@ -5676,9 +4953,10 @@
      "type": "homologation"
     }
    ],
-   "notes": "Poids du châssis : valeur usuelle du catalogue d'origine, à confirmer.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": true,
    "source_types": [
@@ -5705,9 +4983,10 @@
      "type": "homologation"
     }
    ],
-   "notes": "Poids du châssis : valeur usuelle du catalogue d'origine, à confirmer.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": true,
    "source_types": [
@@ -5727,9 +5006,10 @@
    "aliases": [],
    "homologation": null,
    "sources": [],
-   "notes": "Poids du châssis : valeur usuelle du catalogue d'origine, à confirmer.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": true,
    "source_types": []
@@ -5762,6 +5042,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -5796,6 +5077,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -5830,6 +5112,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -5866,6 +5149,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -5902,6 +5186,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -5938,6 +5223,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -5974,6 +5260,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -6018,6 +5305,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": true,
    "source_types": [
@@ -6061,6 +5349,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": true,
    "source_types": [
@@ -6106,6 +5395,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -6141,6 +5431,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -6175,6 +5466,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -6209,6 +5501,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -6243,6 +5536,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -6286,6 +5580,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": true,
    "source_types": [
@@ -6321,6 +5616,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -6355,6 +5651,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -6389,6 +5686,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -6423,6 +5721,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -6457,6 +5756,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -6491,6 +5791,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -6525,6 +5826,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -6559,6 +5861,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -6593,6 +5896,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -6627,6 +5931,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -6661,6 +5966,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -6695,6 +6001,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -6729,6 +6036,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -6763,6 +6071,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -6797,6 +6106,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -6831,6 +6141,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -6865,6 +6176,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -6899,6 +6211,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -6933,6 +6246,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -6967,6 +6281,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7001,6 +6316,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7035,6 +6351,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7069,6 +6386,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7103,6 +6421,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7137,6 +6456,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7171,6 +6491,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7205,6 +6526,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7239,6 +6561,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7273,6 +6596,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7307,6 +6631,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7341,6 +6666,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7375,6 +6701,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7409,6 +6736,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7443,6 +6771,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7477,6 +6806,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7511,6 +6841,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7545,6 +6876,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7579,6 +6911,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7613,6 +6946,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7647,6 +6981,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7681,6 +7016,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7715,6 +7051,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7749,6 +7086,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7783,6 +7121,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7817,6 +7156,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7851,6 +7191,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7885,6 +7226,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7919,6 +7261,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7953,6 +7296,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -7987,6 +7331,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -8021,6 +7366,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -8055,6 +7401,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -8089,6 +7436,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -8123,6 +7471,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -8157,6 +7506,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -8191,6 +7541,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -8225,6 +7576,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -8259,6 +7611,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -8293,6 +7646,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -8327,6 +7681,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -8361,6 +7716,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -8395,6 +7751,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -8413,22 +7770,14 @@
    "uses": [],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    }
-   ],
-   "notes": "Poids du châssis : valeur usuelle du catalogue d'origine, à confirmer.",
+   "sources": [],
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": true,
-   "source_types": [
-    "base ApexAI"
-   ]
+   "source_types": []
   },
   {
    "id": "tonykart-racer-401rr",
@@ -8468,6 +7817,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": true,
    "source_types": [
@@ -8503,6 +7853,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -8537,6 +7888,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -8571,6 +7923,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -8605,6 +7958,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Châssis",
    "in_db_seed": false,
    "source_types": [
@@ -8623,22 +7977,14 @@
    "uses": [],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    }
-   ],
-   "notes": "Durée de vie en tours : valeur usuelle du catalogue d'origine, aucun intervalle publié par le fabricant.",
+   "sources": [],
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Freins",
    "in_db_seed": true,
-   "source_types": [
-    "base ApexAI"
-   ]
+   "source_types": []
   },
   {
    "id": "parolin-ap",
@@ -8652,22 +7998,14 @@
    "uses": [],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    }
-   ],
-   "notes": "Durée de vie en tours : valeur usuelle du catalogue d'origine, aucun intervalle publié par le fabricant.",
+   "sources": [],
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Freins",
    "in_db_seed": true,
-   "source_types": [
-    "base ApexAI"
-   ]
+   "source_types": []
   },
   {
    "id": "rr-evo",
@@ -8681,22 +8019,14 @@
    "uses": [],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    }
-   ],
-   "notes": "Durée de vie en tours : valeur usuelle du catalogue d'origine, aucun intervalle publié par le fabricant.",
+   "sources": [],
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Freins",
    "in_db_seed": true,
-   "source_types": [
-    "base ApexAI"
-   ]
+   "source_types": []
   },
   {
    "id": "birel-freeline",
@@ -8721,9 +8051,10 @@
      "type": "constructeur"
     }
    ],
-   "notes": "Durée de vie en tours : valeur usuelle du catalogue d'origine, aucun intervalle publié par le fabricant.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Freins",
    "in_db_seed": true,
    "source_types": [
@@ -8756,6 +8087,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Freins",
    "in_db_seed": false,
    "source_types": [
@@ -8785,9 +8117,10 @@
      "type": "constructeur"
     }
    ],
-   "notes": "Durée de vie en tours : valeur usuelle du catalogue d'origine, aucun intervalle publié par le fabricant.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Freins",
    "in_db_seed": true,
    "source_types": [
@@ -8820,6 +8153,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Freins",
    "in_db_seed": false,
    "source_types": [
@@ -8849,9 +8183,10 @@
      "type": "constructeur"
     }
    ],
-   "notes": "Durée de vie en tours : valeur usuelle du catalogue d'origine, aucun intervalle publié par le fabricant.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Freins",
    "in_db_seed": true,
    "source_types": [
@@ -8881,9 +8216,10 @@
      "type": "constructeur"
     }
    ],
-   "notes": "Durée de vie en tours : valeur usuelle du catalogue d'origine, aucun intervalle publié par le fabricant.",
+   "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Freins",
    "in_db_seed": true,
    "source_types": [
@@ -8915,6 +8251,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Carburateurs",
    "in_db_seed": false,
    "source_types": [
@@ -8944,6 +8281,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Carburateurs",
    "in_db_seed": false,
    "source_types": [
@@ -8962,22 +8300,14 @@
    "uses": [],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    }
-   ],
+   "sources": [],
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Carburateurs",
    "in_db_seed": true,
-   "source_types": [
-    "base ApexAI"
-   ]
+   "source_types": []
   },
   {
    "id": "dellorto-vhsh30",
@@ -9006,6 +8336,7 @@
    "notes": "Venturi 30 mm maximum en KZ2 FFSA.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Carburateurs",
    "in_db_seed": true,
    "source_types": [
@@ -9037,6 +8368,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Carburateurs",
    "in_db_seed": false,
    "source_types": [
@@ -9068,6 +8400,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Carburateurs",
    "in_db_seed": true,
    "source_types": [
@@ -9099,6 +8432,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Carburateurs",
    "in_db_seed": false,
    "source_types": [
@@ -9128,6 +8462,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Carburateurs",
    "in_db_seed": false,
    "source_types": [
@@ -9146,22 +8481,14 @@
    "uses": [],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    }
-   ],
+   "sources": [],
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Axes arrière",
    "in_db_seed": true,
-   "source_types": [
-    "base ApexAI"
-   ]
+   "source_types": []
   },
   {
    "id": "axle-medium-50",
@@ -9175,22 +8502,14 @@
    "uses": [],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    }
-   ],
+   "sources": [],
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Axes arrière",
    "in_db_seed": true,
-   "source_types": [
-    "base ApexAI"
-   ]
+   "source_types": []
   },
   {
    "id": "axle-hard-50",
@@ -9204,22 +8523,14 @@
    "uses": [],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    }
-   ],
+   "sources": [],
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Axes arrière",
    "in_db_seed": true,
-   "source_types": [
-    "base ApexAI"
-   ]
+   "source_types": []
   },
   {
    "id": "otk-axle-q",
@@ -9233,22 +8544,14 @@
    "uses": [],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    }
-   ],
+   "sources": [],
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Axes arrière",
    "in_db_seed": true,
-   "source_types": [
-    "base ApexAI"
-   ]
+   "source_types": []
   },
   {
    "id": "otk-axle-m",
@@ -9262,22 +8565,14 @@
    "uses": [],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    }
-   ],
+   "sources": [],
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Axes arrière",
    "in_db_seed": true,
-   "source_types": [
-    "base ApexAI"
-   ]
+   "source_types": []
   },
   {
    "id": "otk-axle-h",
@@ -9291,22 +8586,14 @@
    "uses": [],
    "aliases": [],
    "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_base",
-     "label": "Catalogue ApexAI d'origine (valeur usuelle sans document source)",
-     "url": null,
-     "type": "base ApexAI"
-    }
-   ],
+   "sources": [],
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Axes arrière",
    "in_db_seed": true,
-   "source_types": [
-    "base ApexAI"
-   ]
+   "source_types": []
   },
   {
    "id": "axle-25-880",
@@ -9335,6 +8622,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Axes arrière",
    "in_db_seed": false,
    "source_types": [
@@ -9368,6 +8656,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Axes arrière",
    "in_db_seed": false,
    "source_types": [
@@ -9401,6 +8690,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Axes arrière",
    "in_db_seed": false,
    "source_types": [
@@ -9434,6 +8724,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Axes arrière",
    "in_db_seed": false,
    "source_types": [
@@ -9467,6 +8758,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Axes arrière",
    "in_db_seed": false,
    "source_types": [
@@ -9500,6 +8792,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Axes arrière",
    "in_db_seed": false,
    "source_types": [
@@ -9533,6 +8826,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Axes arrière",
    "in_db_seed": false,
    "source_types": [
@@ -9566,6 +8860,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Allumages",
    "in_db_seed": false,
    "source_types": [
@@ -9597,6 +8892,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Allumages",
    "in_db_seed": false,
    "source_types": [
@@ -9628,6 +8924,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Allumages",
    "in_db_seed": false,
    "source_types": [
@@ -9659,6 +8956,7 @@
    "notes": "Écartement 0,7 à 0,8 mm, serrage 18 Nm.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Bougies",
    "in_db_seed": false,
    "source_types": [
@@ -9690,6 +8988,7 @@
    "notes": "Écartement 0,7 à 0,8 mm, serrage 18 Nm. Équivalent Denso W20EPR-U.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Bougies",
    "in_db_seed": false,
    "source_types": [
@@ -9721,6 +9020,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Bougies",
    "in_db_seed": false,
    "source_types": [
@@ -9752,6 +9052,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Bougies",
    "in_db_seed": false,
    "source_types": [
@@ -9788,6 +9089,7 @@
    "notes": "Écartement 0,7 à 0,8 mm, serrage 25 à 27 Nm. Le Micro MAX evo a une bougie spécifique.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Bougies",
    "in_db_seed": false,
    "source_types": [
@@ -9819,6 +9121,7 @@
    "notes": "Antiparasite PVL 401 222 ; Selettra « S » également homologuée.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Bougies",
    "in_db_seed": false,
    "source_types": [
@@ -9874,6 +9177,7 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Bougies",
    "in_db_seed": false,
    "source_types": [
@@ -9914,6 +9218,7 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pignons et couronnes",
    "in_db_seed": false,
    "source_types": [
@@ -9945,6 +9250,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pignons et couronnes",
    "in_db_seed": false,
    "source_types": [
@@ -9976,6 +9282,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pignons et couronnes",
    "in_db_seed": false,
    "source_types": [
@@ -10007,6 +9314,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pignons et couronnes",
    "in_db_seed": false,
    "source_types": [
@@ -10038,6 +9346,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pignons et couronnes",
    "in_db_seed": false,
    "source_types": [
@@ -10078,6 +9387,7 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Chaînes",
    "in_db_seed": false,
    "source_types": [
@@ -10131,6 +9441,7 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Embrayages",
    "in_db_seed": false,
    "source_types": [
@@ -10160,19 +9471,9 @@
     }
    ],
    "notes": null,
-   "maintenance": [
-    {
-     "element": "Embrayage de surcharge",
-     "action": "Contrôler",
-     "interval": "tableau du manuel",
-     "unit": null,
-     "usage": "tous",
-     "source": "rotax_dd2_2024",
-     "ref": "ch. 4 p. 9",
-     "kind": "constructeur"
-    }
-   ],
+   "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Embrayages",
    "in_db_seed": false,
    "source_types": [
@@ -10232,96 +9533,11 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Embrayages",
    "in_db_seed": false,
    "source_types": [
     "constructeur"
-   ]
-  },
-  {
-   "id": "kz-reeds",
-   "category": "engine_part",
-   "brand": "Générique",
-   "name": "Clapets moteur KZ",
-   "subcategory": null,
-   "specs": {},
-   "default_life": null,
-   "life_unit": null,
-   "uses": [
-    "KZ",
-    "KZ2"
-   ],
-   "aliases": [],
-   "homologation": null,
-   "sources": [
-    {
-     "key": "kp_kz",
-     "label": "KartPulse : entretien TM KZ (avis de pilotes)",
-     "url": "https://forums.kartpulse.com/t/tm-kz-r1-maintenance-intervals-before-after-session-prep/14551",
-     "type": "retour pilotes"
-    }
-   ],
-   "notes": null,
-   "maintenance": [
-    {
-     "element": "Clapets",
-     "action": "Contrôler à chaque week-end de course, remplacer à l'usure",
-     "interval": "≈ 3 à 6",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    }
-   ],
-   "season": "2026-2027",
-   "category_label": "Pièces moteur",
-   "in_db_seed": false,
-   "source_types": [
-    "retour pilotes"
-   ]
-  },
-  {
-   "id": "kz-piston",
-   "category": "engine_part",
-   "brand": "Générique",
-   "name": "Piston moteur KZ",
-   "subcategory": null,
-   "specs": {},
-   "default_life": 6,
-   "life_unit": "hours",
-   "uses": [
-    "KZ",
-    "KZ2"
-   ],
-   "aliases": [],
-   "homologation": null,
-   "sources": [
-    {
-     "key": "kp_kz",
-     "label": "KartPulse : entretien TM KZ (avis de pilotes)",
-     "url": "https://forums.kartpulse.com/t/tm-kz-r1-maintenance-intervals-before-after-session-prep/14551",
-     "type": "retour pilotes"
-    }
-   ],
-   "notes": null,
-   "maintenance": [
-    {
-     "element": "Piston",
-     "action": "Remplacer",
-     "interval": "3 à 6",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_kz",
-     "ref": null,
-     "kind": "retour pilotes"
-    }
-   ],
-   "season": "2026-2027",
-   "category_label": "Pièces moteur",
-   "in_db_seed": false,
-   "source_types": [
-    "retour pilotes"
    ]
   },
   {
@@ -10371,6 +9587,12 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": {
+    "source": "iame_x30",
+    "label": "Manuel IAME 125cc X30 (MAN-80)",
+    "url": "https://cdn.shopify.com/s/files/1/0341/9396/5189/files/Manual_IAME_125cc_X30.pdf",
+    "ref": "p. 9"
+   },
    "category_label": "Pièces moteur",
    "in_db_seed": false,
    "source_types": [
@@ -10424,6 +9646,12 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": {
+    "source": "iame_x30",
+    "label": "Manuel IAME 125cc X30 (MAN-80)",
+    "url": "https://cdn.shopify.com/s/files/1/0341/9396/5189/files/Manual_IAME_125cc_X30.pdf",
+    "ref": "p. 9"
+   },
    "category_label": "Pièces moteur",
    "in_db_seed": false,
    "source_types": [
@@ -10477,6 +9705,12 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": {
+    "source": "iame_x30",
+    "label": "Manuel IAME 125cc X30 (MAN-80)",
+    "url": "https://cdn.shopify.com/s/files/1/0341/9396/5189/files/Manual_IAME_125cc_X30.pdf",
+    "ref": "p. 9"
+   },
    "category_label": "Pièces moteur",
    "in_db_seed": false,
    "source_types": [
@@ -10530,6 +9764,12 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": {
+    "source": "iame_x30",
+    "label": "Manuel IAME 125cc X30 (MAN-80)",
+    "url": "https://cdn.shopify.com/s/files/1/0341/9396/5189/files/Manual_IAME_125cc_X30.pdf",
+    "ref": "p. 8"
+   },
    "category_label": "Pièces moteur",
    "in_db_seed": false,
    "source_types": [
@@ -10583,6 +9823,12 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": {
+    "source": "iame_x30",
+    "label": "Manuel IAME 125cc X30 (MAN-80)",
+    "url": "https://cdn.shopify.com/s/files/1/0341/9396/5189/files/Manual_IAME_125cc_X30.pdf",
+    "ref": "p. 9"
+   },
    "category_label": "Pièces moteur",
    "in_db_seed": false,
    "source_types": [
@@ -10625,6 +9871,7 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pièces moteur",
    "in_db_seed": false,
    "source_types": [
@@ -10652,12 +9899,6 @@
      "label": "Rotax 125 MAX evo / Junior / Mini / Micro MAX evo : Installation Instructions and Operators Manual (éd. 09/2016)",
      "url": "https://kart.co.za/wp-content/uploads/2021/02/Installation-Instructions-and-Operators-Manual.pdf",
      "type": "constructeur"
-    },
-    {
-     "key": "kp_rotax",
-     "label": "KartPulse : révision des Rotax (avis de pilotes)",
-     "url": "https://forums.kartpulse.com/t/rebuild-of-rotax/6352",
-     "type": "retour pilotes"
     }
    ],
    "notes": null,
@@ -10671,83 +9912,19 @@
      "source": "rotax_evo_2016",
      "ref": "p. 56",
      "kind": "constructeur"
-    },
-    {
-     "element": "Haut moteur",
-     "action": "Révision",
-     "interval": "15 à 20",
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "kp_rotax",
-     "ref": null,
-     "kind": "retour pilotes"
     }
    ],
    "season": "2026-2027",
+   "life_ref": {
+    "source": "rotax_evo_2016",
+    "label": "Rotax 125 MAX evo / Junior / Mini / Micro MAX evo : Installation Instructions and Operators Manual (éd. 09/2016)",
+    "url": "https://kart.co.za/wp-content/uploads/2021/02/Installation-Instructions-and-Operators-Manual.pdf",
+    "ref": "p. 56"
+   },
    "category_label": "Pièces moteur",
    "in_db_seed": false,
    "source_types": [
-    "constructeur",
-    "retour pilotes"
-   ]
-  },
-  {
-   "id": "rotax-dd2-teardown",
-   "category": "engine_part",
-   "brand": "Rotax",
-   "name": "Révision haut et bas moteur DD2",
-   "subcategory": null,
-   "specs": {},
-   "default_life": 25,
-   "life_unit": "hours",
-   "uses": [
-    "Rotax 125 MAX DD2"
-   ],
-   "aliases": [],
-   "homologation": null,
-   "sources": [
-    {
-     "key": "apexai_pilotes",
-     "label": "Retours des pilotes ApexAI (octobre 2026)",
-     "url": null,
-     "type": "retour pilotes"
-    },
-    {
-     "key": "rotax_dd2_2024",
-     "label": "Rotax 125 MAX DD2 : Operating Manual 2024",
-     "url": "https://rotax-racing.com/assets/uploads/Engines/KA_Operating-Manual_125MAX_DD2_en_2024_2024-12-06-081458_vvwv.pdf",
-     "type": "constructeur"
-    }
-   ],
-   "notes": null,
-   "maintenance": [
-    {
-     "element": "Moteur (haut et bas)",
-     "action": "Révision",
-     "interval": 25,
-     "unit": "heures",
-     "usage": "compétition",
-     "source": "apexai_pilotes",
-     "ref": null,
-     "kind": "retour pilotes"
-    },
-    {
-     "element": "Moteur complet",
-     "action": "Démontage et contrôle par un centre agréé Rotax",
-     "interval": "tableau du manuel",
-     "unit": null,
-     "usage": "tous",
-     "source": "rotax_dd2_2024",
-     "ref": "ch. 4 p. 8",
-     "kind": "constructeur"
-    }
-   ],
-   "season": "2026-2027",
-   "category_label": "Pièces moteur",
-   "in_db_seed": false,
-   "source_types": [
-    "constructeur",
-    "retour pilotes"
+    "constructeur"
    ]
   },
   {
@@ -10786,6 +9963,12 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": {
+    "source": "vortex_minirok",
+    "label": "Vortex Mini ROK : manuel d'utilisation",
+    "url": "https://www.vortex-rok.com/gestione/allegati_motori_campionati/142_180.pdf",
+    "ref": "§5.14 p. 29"
+   },
    "category_label": "Pièces moteur",
    "in_db_seed": false,
    "source_types": [
@@ -10829,6 +10012,12 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": {
+    "source": "vortex_rokgp",
+    "label": "Vortex ROK GP : manuel d'utilisation",
+    "url": "https://www.vortex-rok.com/gestione/allegati_motori_campionati/194_302.pdf",
+    "ref": "§5.1 et §5.14"
+   },
    "category_label": "Pièces moteur",
    "in_db_seed": false,
    "source_types": [
@@ -10871,6 +10060,12 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": {
+    "source": "vortex_minirok",
+    "label": "Vortex Mini ROK : manuel d'utilisation",
+    "url": "https://www.vortex-rok.com/gestione/allegati_motori_campionati/142_180.pdf",
+    "ref": "§5.13 p. 27"
+   },
    "category_label": "Pièces moteur",
    "in_db_seed": false,
    "source_types": [
@@ -10914,6 +10109,12 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": {
+    "source": "vortex_rokgp",
+    "label": "Vortex ROK GP : manuel d'utilisation",
+    "url": "https://www.vortex-rok.com/gestione/allegati_motori_campionati/194_302.pdf",
+    "ref": "§5.1 p. 28"
+   },
    "category_label": "Pièces moteur",
    "in_db_seed": false,
    "source_types": [
@@ -10957,6 +10158,12 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": {
+    "source": "vortex_rokgp",
+    "label": "Vortex ROK GP : manuel d'utilisation",
+    "url": "https://www.vortex-rok.com/gestione/allegati_motori_campionati/194_302.pdf",
+    "ref": "§5.1 et §5.15"
+   },
    "category_label": "Pièces moteur",
    "in_db_seed": false,
    "source_types": [
@@ -10988,6 +10195,7 @@
    "notes": "Mélange 1:50 (2 %) ; 1:33 pendant le rodage, sur les 10 premiers litres.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Huiles",
    "in_db_seed": false,
    "source_types": [
@@ -11043,6 +10251,7 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Huiles",
    "in_db_seed": false,
    "source_types": [
@@ -11096,6 +10305,7 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Huiles",
    "in_db_seed": false,
    "source_types": [
@@ -11140,6 +10350,7 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Huiles",
    "in_db_seed": false,
    "source_types": [
@@ -11171,6 +10382,7 @@
    "notes": "Mélange 4 à 6 % imposé en Eurocup.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Huiles",
    "in_db_seed": false,
    "source_types": [
@@ -11215,6 +10427,7 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Huiles",
    "in_db_seed": false,
    "source_types": [
@@ -11246,6 +10459,7 @@
    "notes": null,
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Carburant",
    "in_db_seed": false,
    "source_types": [
@@ -11305,6 +10519,7 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Filtres",
    "in_db_seed": false,
    "source_types": [
@@ -11357,6 +10572,7 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Filtres",
    "in_db_seed": false,
    "source_types": [
@@ -11399,6 +10615,7 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Échappements",
    "in_db_seed": false,
    "source_types": [
@@ -11452,6 +10669,7 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Échappements",
    "in_db_seed": false,
    "source_types": [
@@ -11495,6 +10713,7 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Échappements",
    "in_db_seed": false,
    "source_types": [
@@ -11528,6 +10747,7 @@
    "notes": "Température de fonctionnement 45 à 65 °C.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Refroidissement",
    "in_db_seed": false,
    "source_types": [
@@ -11570,6 +10790,7 @@
     }
    ],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Refroidissement",
    "in_db_seed": false,
    "source_types": [
@@ -11604,6 +10825,7 @@
    "notes": "Liquide indiqué par OTK pour les systèmes BSD et BSS.",
    "maintenance": [],
    "season": "2026-2027",
+   "life_ref": null,
    "category_label": "Pièces de frein",
    "in_db_seed": false,
    "source_types": [
@@ -11611,5 +10833,5 @@
    ]
   }
  ],
- "version": "40ffc809ac25cbdc"
+ "version": "42916c11e009ad34"
 }
