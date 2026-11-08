@@ -36,7 +36,27 @@ def test_signature_depends_on_content_params_and_mode():
     assert a != signature(b"abc", {"laps": []}, "light")
 
 
-def test_job_runs_reports_progress_and_reuses_signature():
+def _as_racer(monkeypatch):
+    import src.api.jobs as jobs
+    import src.core.subscription_service as sub
+
+    monkeypatch.setattr(jobs, "_user_id", lambda _auth: "racer-user")
+    monkeypatch.setattr(sub, "get_subscription_tier", lambda _uid: "racer")
+
+
+def test_light_mode_is_racer_only():
+    with make_test_client(app) as client:
+        r = client.post(
+            "/api/analysis/jobs",
+            files={"file": ("adria.csv", b"x", "text/csv")},
+            data={"mode": "light"},
+        )
+        assert r.status_code == 403
+        assert r.json()["detail"]["error"] == "racer_required"
+
+
+def test_job_runs_reports_progress_and_reuses_signature(monkeypatch):
+    _as_racer(monkeypatch)
     with make_test_client(app) as client:
         content = _content()
         r = client.post(

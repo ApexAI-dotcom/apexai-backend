@@ -276,6 +276,26 @@ async def create_job(
     mode = "light" if (mode or "").strip().lower() == "light" else "full"
     user_id = _user_id(authorization)
 
+    # Comparateur (2e séance en analyse allégée, hors quota) : Racer et Team.
+    if mode == "light":
+        tier = None
+        if user_id:
+            try:
+                from src.core.subscription_service import get_subscription_tier
+
+                tier = get_subscription_tier(user_id)
+            except Exception:
+                tier = None
+        if tier not in ("racer", "team"):
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "success": False,
+                    "error": "racer_required",
+                    "message": "Le comparateur de séances est réservé aux offres Racer et Team.",
+                },
+            )
+
     if mode == "full" and user_id:
         from src.core.subscription_service import check_analysis_limit
 
