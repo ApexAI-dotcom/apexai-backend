@@ -1086,26 +1086,39 @@ def generate_plot_data(df: pd.DataFrame) -> Dict[str, Any]:
             }
 
         # --- 2. Throttle / Brake ---
+        # Les boîtiers karting (MyChron, Alfano) n'ont en général pas de capteur
+        # de pédale. Sans capteur, on ne publie PAS de faux pourcentages : on
+        # publie la phase de pilotage mesurée (freinage / gaz / ni l'un ni
+        # l'autre), la même que la carte et l'analyse des freinages, en 0 / 100.
         if 'cumulative_distance' in df.columns and 'throttle' in df.columns and 'brake' in df.columns:
+            inferred = bool(df.attrs.get('pedals_inferred'))
+            brk_an = df.attrs.get('braking') or {}
+
+            def _tb(part):
+                dist = downsample_array([round(float(d), 1) for d in part['cumulative_distance'].values])
+                if inferred:
+                    ph = _driving_phases(part, brk_an) or []
+                    if len(ph) == len(part):
+                        thr = [100.0 if p == "acceleration" else 0.0 for p in ph]
+                        brk = [100.0 if p == "braking" else 0.0 for p in ph]
+                    else:
+                        thr = [0.0] * len(part)
+                        brk = [0.0] * len(part)
+                else:
+                    thr = [round(float(t), 1) for t in part['throttle'].values]
+                    brk = [round(float(b), 1) for b in part['brake'].values]
+                return dist, downsample_array(thr), downsample_array(brk)
+
             tb_laps = []
             if 'lap_number' in df.columns:
-                # Top 1 lap for simplicity
                 for lap, lap_df in df.groupby('lap_number'):
                     if pd.notna(lap) and lap >= 0:
-                        tb_laps.append({
-                            "lap_number": int(lap),
-                            "distance_m": downsample_array([round(float(d), 1) for d in lap_df['cumulative_distance'].values]),
-                            "throttle_pct": downsample_array([round(float(t), 1) for t in lap_df['throttle'].values]),
-                            "brake_pct": downsample_array([round(float(b), 1) for b in lap_df['brake'].values]),
-                        })
+                        d_, t_, b_ = _tb(lap_df)
+                        tb_laps.append({"lap_number": int(lap), "distance_m": d_, "throttle_pct": t_, "brake_pct": b_})
             else:
-                 tb_laps.append({
-                    "lap_number": 1,
-                    "distance_m": downsample_array([round(float(d), 1) for d in df['cumulative_distance'].values]),
-                    "throttle_pct": downsample_array([round(float(t), 1) for t in df['throttle'].values]),
-                    "brake_pct": downsample_array([round(float(b), 1) for b in df['brake'].values]),
-                })
-            plot_data["throttle_brake"] = {"laps": tb_laps}
+                d_, t_, b_ = _tb(df)
+                tb_laps.append({"lap_number": 1, "distance_m": d_, "throttle_pct": t_, "brake_pct": b_})
+            plot_data["throttle_brake"] = {"laps": tb_laps, "source": "phases" if inferred else "capteurs"}
 
         # --- 3. Performance Radar ---
         if 'score_data' in df.attrs:

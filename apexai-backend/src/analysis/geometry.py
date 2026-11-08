@@ -372,6 +372,10 @@ def calculate_trajectory_geometry(df: pd.DataFrame) -> pd.DataFrame:
         
         df_result['throttle'] = throttle
         df_result['brake'] = brake
+        # Pas de capteur de pédale : ces valeurs ne sont qu'un ordre de grandeur
+        # tiré de la vitesse. Le graphique « Accélérateur & Frein » ne doit pas
+        # les afficher comme des pourcentages de pédale.
+        df_result.attrs['pedals_inferred'] = True
     
     return df_result
 
