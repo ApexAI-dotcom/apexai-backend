@@ -27,3 +27,11 @@ def test_dd2_has_no_invented_interval():
     dd2 = compcat.catalog_items()["rotax-dd2"]
     assert dd2["default_life"] is None
     assert {m["element"] for m in dd2["maintenance"]} == {"Huile de boîte", "Filtre à air"}
+
+
+def test_forum_tips_are_apart_and_linked():
+    dd2 = compcat.catalog_items()["rotax-dd2"]
+    assert dd2["forum"] and all(f["url"] and "forum" in f["url"] for f in dd2["forum"])
+    for it in compcat.catalog_items().values():
+        for f in it.get("forum") or []:
+            assert f["url"], it["id"]

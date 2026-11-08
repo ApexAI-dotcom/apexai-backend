@@ -7,7 +7,8 @@ Le fichier src/data/component_catalog.json est produit par
 scripts/composants/catalog.py du dépôt front : manuels constructeurs,
 règlements 2026, listes d'homologation CIK-FIA, chaque fiche avec ses sources.
 L'entretien et les durées avant révision viennent uniquement des documents du
-constructeur (règle du 8 nov. 2026 : aucun avis de pilote servi dans l'app). On le fusionne avec la table kart_components :
+constructeur (règle du 8 nov. 2026). Les avis de pilotes de forums publics sont servis à
+part (« forum »), avec leur lien, et ne règlent jamais une jauge. On le fusionne avec la table kart_components :
 
 - une ligne de la table garde son identifiant et son nom (profils et trains
   de pneus y font référence) et reçoit les compléments de la base (usages,
@@ -79,8 +80,8 @@ def merge(db_rows: Optional[Iterable[Dict[str, Any]]]) -> List[Dict[str, Any]]:
         # Durée avant révision : sourcée (life_ref) seulement si le constructeur la donne ;
         # sinon la valeur de la table reste une simple valeur de départ des jauges.
         item["life_ref"] = extra.get("life_ref")
-        for k in ("uses", "aliases", "homologation", "notes", "maintenance", "sources", "source_types", "season"):
-            item[k] = extra.get(k) if extra.get(k) else ([] if k in ("uses", "aliases", "maintenance", "sources", "source_types") else None)
+        for k in ("uses", "aliases", "homologation", "notes", "maintenance", "forum", "sources", "source_types", "season"):
+            item[k] = extra.get(k) if extra.get(k) else ([] if k in ("uses", "aliases", "maintenance", "forum", "sources", "source_types") else None)
         item["in_db"] = True
         out[item["id"]] = item
     for cid, extra in cat.items():
