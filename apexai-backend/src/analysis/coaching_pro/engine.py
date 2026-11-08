@@ -213,7 +213,7 @@ def _plan(chosen: List[Finding], corners_by_id) -> Optional[Dict[str, Any]]:
     lines.append(f"Objectif : virage {main.corner}, {_cue(main)}.")
     rest = [f"virage {f.corner}, {_cue(f)}" for f in corners[1:3] if _cue(f) != _cue(main)]
     if rest:
-        lines.append("Si ça vient bien : " + " ; ".join(rest) + ".")
+        lines.append("Ensuite : " + " ; ".join(rest) + ".")
     return {
         "priority": 0, "category": "plan", "impact_seconds": 0.0, "corner": None,
         "message": "Ta prochaine séance",
