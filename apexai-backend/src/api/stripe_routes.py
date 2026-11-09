@@ -656,7 +656,19 @@ async def reconcile_checkout(request: Request, current_user: str = Depends(get_c
         subscription_end_date=end_dt,
     )
     logger.info("reconcile: user_id=%s upgraded to %s via session %s", current_user, tier, session_id)
-    return JSONResponse(content={"reconciled": True, "tier": tier})
+    # De quoi déclarer l'achat aux outils de mesure (GA4 « purchase », Meta
+    # « Purchase ») : montant réellement payé, devise, n° de transaction stable.
+    amount = session.get("amount_total")
+    return JSONResponse(
+        content={
+            "reconciled": True,
+            "tier": tier,
+            "period": period,
+            "transaction_id": session_id,
+            "value": round(amount / 100, 2) if isinstance(amount, (int, float)) else None,
+            "currency": (session.get("currency") or "eur").upper(),
+        }
+    )
 
 
 @router.post("/webhook")
