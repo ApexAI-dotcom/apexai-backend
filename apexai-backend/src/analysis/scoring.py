@@ -496,3 +496,81 @@ def validate_score_consistency(score_data: Dict[str, Any]) -> None:
             score_data["grade"] = "D"
         else:
             score_data["grade"] = "F"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Note sur MESURES (remplace les deux critères qui restaient figés)
+# ─────────────────────────────────────────────────────────────────────────────
+# « Vitesse point de corde » valait toujours 20/25 et « Temps secteurs »
+# toujours 15/20 : la donnée qu'ils attendaient (speed_efficiency_pct)
+# n'arrivait jamais. Toutes les séances finissaient entre 76 et 82, et un
+# pilote qui laissait 1,6 s par tour sur la piste pouvait être mieux noté
+# qu'un autre qui n'en laissait que 0,8. Chaque critère lit désormais une
+# mesure de la séance, rapportée au pilote lui-même :
+#   - Régularité (25) : écart entre le tour médian et le meilleur tour ;
+#   - Vitesse point de corde (25) : vitesse au point de corde comparée à ton
+#     meilleur passage, virage par virage ;
+#   - Temps secteurs (20) : tour idéal (meilleurs mini-secteurs) contre
+#     meilleur tour, c'est-à-dire le temps encore à aller chercher.
+# Plus il reste de temps à gagner, plus la note baisse : la note et les
+# secondes annoncées ne peuvent plus se contredire.
+SPREAD_ZERO = 0.06       # médiane à 6 % du meilleur tour → 0/25
+GAIN_ZERO = 0.03         # 3 % du tour à gagner → 0/20
+EFF_FLOOR, EFF_TOP = 0.80, 1.0
+
+
+def _grade(score: float) -> str:
+    if score >= 80:
+        return "A"
+    if score >= 70:
+        return "B"
+    if score >= 55:
+        return "C"
+    if score >= 40:
+        return "D"
+    return "F"
+
+
+def rescore_from_measures(
+    score_data: Dict[str, Any],
+    lap_times: List[float],
+    potential_gain_s: Optional[float],
+    corner_analysis: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Recalcule régularité, vitesse au point de corde et temps secteurs sur mesures."""
+    b = dict(score_data.get("breakdown") or {})
+    laps = sorted(float(t) for t in lap_times or [] if t and np.isfinite(t) and t > 0)
+    best = laps[0] if laps else None
+    measures: Dict[str, Any] = {}
+
+    if best and len(laps) >= 2:
+        spread = (float(np.median(laps)) - best) / best
+        b["trajectory_consistency"] = round(25.0 * float(np.clip(1.0 - spread / SPREAD_ZERO, 0.0, 1.0)), 1)
+        measures["lap_spread_pct"] = round(spread * 100, 2)
+
+    effs = [float(c.get("speed_efficiency")) for c in corner_analysis or []
+            if c.get("speed_efficiency") not in (None, 0, 0.0)]
+    effs = [e for e in effs if np.isfinite(e) and 0.3 < e <= 1.5]
+    # Sur un seul tour, la comparaison au meilleur passage n'a pas de sens
+    # (100 % par construction) : le critère garde sa valeur d'origine.
+    if effs and len(laps) >= 2:
+        eff = float(np.mean(np.minimum(effs, 1.0)))
+        b["apex_speed"] = round(25.0 * float(np.clip((eff - EFF_FLOOR) / (EFF_TOP - EFF_FLOOR), 0.0, 1.0)), 1)
+        measures["apex_speed_efficiency"] = round(eff, 3)
+
+    if best and potential_gain_s is not None and np.isfinite(potential_gain_s) and potential_gain_s >= 0:
+        ratio = float(potential_gain_s) / best
+        b["sector_times"] = round(20.0 * float(np.clip(1.0 - ratio / GAIN_ZERO, 0.0, 1.0)), 1)
+        measures["potential_gain_pct"] = round(ratio * 100, 2)
+
+    out = dict(score_data)
+    out["breakdown"] = b
+    out["overall_score"] = round(min(100.0, sum(b.values())), 1)
+    out["grade"] = _grade(out["overall_score"])
+    out["percentile"] = int(min(99, max(10, 10 + (out["overall_score"] - 50) * 1.5)))
+    details = dict(out.get("details") or {})
+    details.update(measures)
+    if "apex_speed_efficiency" in measures:
+        details["avg_apex_speed_efficiency"] = measures["apex_speed_efficiency"]
+    out["details"] = details
+    return out

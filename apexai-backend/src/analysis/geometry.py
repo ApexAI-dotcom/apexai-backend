@@ -866,6 +866,40 @@ def _canonical_corners(df_result: pd.DataFrame) -> List[Dict[str, Any]]:
         prominence=MIN_PROMINENCE,
         distance=max(1, int(MIN_GAP_M / STEP_M)),
     )
+    # Un seul virage pris en double apex (épingle longue, courbe qui se
+    # resserre) donne deux pics de courbure. Ce sont deux virages seulement
+    # si le pilote redresse ou relance entre les deux. On fusionne deux pics
+    # consécutifs du même sens quand, à la fois : ils sont à moins de 30 m,
+    # la courbure ne retombe pas sous 70 % entre eux (volant jamais redressé)
+    # et la vitesse ne remonte pas de plus de 5 km/h (pas de relance).
+    # Martensville : V5-V6 et V7-V8 étaient chacun un seul virage.
+    MERGE_GAP_M, MERGE_KEEP, MERGE_RISE_KMH = 30.0, 0.70, 5.0
+    vg = None
+    spd_col = next((c for c in ('speed', 'speed_kmh', 'GPS Speed') if c in g.columns), None)
+    if spd_col is not None:
+        v = pd.to_numeric(g[spd_col], errors='coerce').to_numpy(float)[ok]
+        if np.isfinite(v).mean() > 0.9:
+            vg = np.interp(grid, d, np.nan_to_num(v))
+    kept: List[int] = []
+    for p in peaks:
+        if kept:
+            q = kept[-1]
+            same_dir = np.sign(kg_signed[q]) == np.sign(kg_signed[p])
+            gap = float(grid[p] - grid[q])
+            if same_dir and gap <= MERGE_GAP_M:
+                held = float(kg[q:p + 1].min()) >= MERGE_KEEP * min(kg[q], kg[p])
+                rise_ok = True
+                if vg is not None:
+                    w2 = max(1, int(10.0 / STEP_M))
+                    vmin = max(vg[max(0, q - w2):q + w2 + 1].min(), vg[max(0, p - w2):p + w2 + 1].min())
+                    rise_ok = float(vg[q:p + 1].max()) - float(vmin) <= MERGE_RISE_KMH
+                if held and rise_ok:
+                    if kg[p] > kg[q]:
+                        kept[-1] = p  # l'apex retenu : le point le plus serré
+                    continue
+        kept.append(p)
+    peaks = np.array(kept, dtype=int)
+
     out = []
     for p in peaks:
         s = float(grid[p])

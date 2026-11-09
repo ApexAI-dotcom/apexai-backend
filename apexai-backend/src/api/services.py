@@ -739,6 +739,21 @@ def _run_analysis_pipeline_sync(
         logger.warning(f"[{analysis_id}] build_racing_line failed: {e}")
         racing_line_data = None
 
+    # Note sur mesures : régularité des chronos, vitesse au point de corde
+    # comparée au meilleur passage, temps encore à gagner (tour idéal).
+    if not light:
+        try:
+            from src.analysis.ideal_lap import _valid_lap_numbers
+            from src.analysis.scoring import rescore_from_measures
+
+            exact = _beacon_lap_times(df)
+            rep = set(_valid_lap_numbers(df))
+            rep_times = [t for ln, t in exact.items() if (not rep or ln in rep) and ln >= 1]
+            gain = (ideal_lap_data or {}).get("potential_gain_s") if (ideal_lap_data or {}).get("available") else None
+            score_data = rescore_from_measures(score_data, rep_times, gain, unique_corner_analysis)
+        except Exception as e:
+            logger.warning(f"[{analysis_id}] note sur mesures indisponible : {e}")
+
     # Une seule source de vérité : overall_score = sum(breakdown) depuis calculate_performance_score
     validate_score_consistency(score_data)
 
