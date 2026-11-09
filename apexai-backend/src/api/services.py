@@ -380,6 +380,20 @@ def _run_analysis_pipeline_sync(
 
     # POST-GATE: Corners
     if len(corner_details) == 0:
+        # Export coupé (Race Studio n'a écrit qu'un morceau de la séance) : le
+        # dire précisément plutôt que d'accuser le GPS.
+        try:
+            from src.core.session_header import read_session_header
+            declared = read_session_header(temp_path).get("duration_s")
+            t = pd.to_numeric(df["time"], errors="coerce").dropna() if "time" in df.columns else pd.Series(dtype=float)
+            span = float(t.max() - t.min()) if len(t) >= 2 else 0.0
+        except Exception:
+            declared, span = None, 0.0
+        if declared and span < 0.5 * declared:
+            raise ValueError(
+                f"Fichier incomplet : il ne contient que {span:.0f} s sur les {declared:.0f} s de la séance "
+                "(export coupé). Réexporte la séance entière depuis Race Studio, ou envoie le .xrk."
+            )
         raise ValueError("Données inexploitables: aucun virage détecté. La trace GPS est peut-être tronquée ou a une résolution insuffisante.")
 
     # Previously we filtered down to selected laps here.

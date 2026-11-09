@@ -811,18 +811,35 @@ def _canonical_corners(df_result: pd.DataFrame) -> List[Dict[str, Any]]:
     if lat_col not in df_result.columns or 'cumulative_distance' not in df_result.columns:
         return []
 
-    # Tour de référence : le plus rapide parmi les tours complets.
-    best_ln, best_t = None, float('inf')
+    # Tour de référence : le plus rapide parmi les tours COMPLETS. Le morceau
+    # enregistré après le dernier passage sur la ligne (retour aux stands,
+    # arrêt du boîtier) porte lui aussi un numéro de tour : plus court que
+    # n'importe quel vrai tour, il était pris pour « le plus rapide » et le
+    # circuit se réduisait à ses 2 ou 3 premiers virages. Un tour complet a
+    # la longueur du circuit : on écarte ceux qui s'en éloignent.
+    cands = []
     for ln, g in df_result.groupby('lap_number'):
         if int(ln) < 1 or len(g) < 30:
             continue
         t = pd.to_numeric(g['time'], errors='coerce').dropna() if 'time' in g else []
-        if len(t) >= 2:
-            dur = float(t.max() - t.min())
-            if 15.0 < dur < best_t:
-                best_t, best_ln = dur, int(ln)
-    if best_ln is None:
+        if len(t) < 2:
+            continue
+        dist = pd.to_numeric(g['cumulative_distance'], errors='coerce').dropna()
+        length = float(dist.max() - dist.min()) if len(dist) >= 2 else 0.0
+        cands.append((float(t.max() - t.min()), length, int(ln)))
+    if not cands:
         return []
+    # Longueur du circuit : médiane des tours d'au moins la moitié du plus
+    # long (avec un seul vrai tour et un morceau, la médiane simple tomberait
+    # entre les deux).
+    longest = max(c[1] for c in cands)
+    ref_len = float(np.median([c[1] for c in cands if c[1] >= 0.5 * longest]))
+    full = [c for c in cands if 15.0 < c[0] and 0.9 * ref_len <= c[1] <= 1.15 * ref_len]
+    if not full:
+        full = [c for c in cands if 15.0 < c[0]]
+    if not full:
+        return []
+    best_t, _, best_ln = min(full)
 
     g = df_result[df_result['lap_number'] == best_ln]
     k = np.nan_to_num(pd.to_numeric(g['curvature'], errors='coerce').to_numpy(float))

@@ -175,3 +175,20 @@ def test_real_xrk_file_runs_through_pipeline(tmp_path):
     result = robust_load_telemetry(str(path))
     assert result["success"], result.get("error")
     assert result["diagnostics"]["channels"]["required_missing"] == []
+
+
+def test_gps_glitch_points_are_repaired():
+    """Quelques points GPS à des centaines de km (conversion libxrk) : recalculés entre leurs voisins."""
+    import numpy as np
+    import pandas as pd
+    from src.core.xrk_loader import _repair_gps_glitches
+
+    t = np.arange(0, 2000, 50.0)
+    lat = 41.566 + 0.0001 * np.sin(t / 300)
+    lon = 44.949 + 0.0001 * np.cos(t / 300)
+    lat[10], lon[10] = 31.55, 34.11
+    lat[11] = np.nan
+    df = pd.DataFrame({"timecodes": t, "GPS Latitude": lat, "GPS Longitude": lon})
+    assert _repair_gps_glitches(df) == 2
+    assert abs(df["GPS Latitude"][10] - 41.566) < 0.001 and abs(df["GPS Longitude"][10] - 44.949) < 0.001
+    assert df["GPS Latitude"].notna().all()

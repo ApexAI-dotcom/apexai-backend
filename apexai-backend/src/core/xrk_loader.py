@@ -99,6 +99,37 @@ def _usable_channels(log) -> List[str]:
     return keep
 
 
+GPS_GLITCH_M = 5000.0
+
+
+def _repair_gps_glitches(df) -> int:
+    """
+    Points GPS aberrants : sur certains .xrk, la conversion de libxrk
+    (ECEF → latitude / longitude) donne quelques points à des centaines de
+    kilomètres de la piste (division par zéro). Un seul suffit à fausser la
+    longueur du tour, qui est alors écarté des chronos. Un kart ne s'éloigne
+    jamais de 5 km du centre de sa séance : ces points sont recalculés par
+    interpolation entre leurs voisins.
+    """
+    lat = df["GPS Latitude"].to_numpy(dtype=float)
+    lon = df["GPS Longitude"].to_numpy(dtype=float)
+    ok = np.isfinite(lat) & np.isfinite(lon)
+    if ok.sum() < 10:
+        return 0
+    lat0, lon0 = float(np.median(lat[ok])), float(np.median(lon[ok]))
+    dist = np.hypot((lat - lat0) * 111_132.0, (lon - lon0) * 111_320.0 * np.cos(np.radians(lat0)))
+    bad = ~ok | ~np.isfinite(dist) | (dist > GPS_GLITCH_M)
+    n_bad = int(bad.sum())
+    if n_bad == 0 or n_bad > 0.2 * len(lat):
+        return 0
+    t = df["timecodes"].to_numpy(dtype=float)
+    good = ~bad
+    df["GPS Latitude"] = np.interp(t, t[good], lat[good])
+    df["GPS Longitude"] = np.interp(t, t[good], lon[good])
+    logger.info(f"xrk_import: {n_bad} point(s) GPS aberrant(s) recalculé(s)")
+    return n_bad
+
+
 def xrk_to_motec_csv(content: bytes) -> bytes:
     """Convertit le contenu d'un .xrk/.xrz en CSV « MoTeC CSV File » (UTF-8)."""
     try:
@@ -136,6 +167,8 @@ def xrk_to_motec_csv(content: bytes) -> bytes:
     df = df[df["timecodes"] >= 0].reset_index(drop=True)
     if len(df) < 10:
         raise XrkImportError("Ce fichier .xrk ne contient pas assez de données GPS (session trop courte).")
+
+    _repair_gps_glitches(df)
 
     time_s = df["timecodes"].to_numpy(dtype=float) / 1000.0
     dt = np.diff(time_s)
@@ -194,6 +227,19 @@ async def normalize_upload(content: bytes, filename: Optional[str]) -> Tuple[byt
     un thread pour ne pas bloquer l'event loop. Lève XrkImportError (ValueError)
     si le fichier est illisible.
     """
+    from src.core.alfano_loader import alfano_to_motec_csv, is_alfano_excel, is_alfano_zip
+
+    if is_alfano_zip(content) or is_alfano_excel(content):
+        # Séance Alfano (zip brut ADA ou export « Excel ») -> même CSV MoTeC.
+        loop = asyncio.get_event_loop()
+        csv_bytes = await loop.run_in_executor(None, alfano_to_motec_csv, content, filename)
+        stem = os.path.splitext(os.path.basename(filename or "alfano"))[0]
+        return csv_bytes, f"{stem}.csv"
+    if (filename or "").lower().endswith(".zip"):
+        raise XrkImportError(
+            "Ce zip ne contient pas de séance Alfano (fichiers LAP_…). Dépose le zip tel que l'exporte ADA, "
+            "ou le fichier de session lui-même."
+        )
     if not is_xrk_filename(filename):
         return content, filename
     loop = asyncio.get_event_loop()

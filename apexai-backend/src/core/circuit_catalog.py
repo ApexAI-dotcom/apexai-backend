@@ -22,7 +22,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 DATA = Path(__file__).resolve().parents[1] / "data" / "circuit_catalog.json"
 SUMMARY_KEYS = (
-    "slug", "name", "city", "postal_code", "department_code", "department", "region", "lat", "lon",
+    "slug", "name", "city", "postal_code", "department_code", "department", "region", "country", "lat", "lon",
     "indoor", "surface", "width_m", "length_m", "trace_status", "corners_count", "hairpins_count",
     "medium_count", "fast_corners_count", "kinks_count", "website", "osm_url", "source",
 )
@@ -59,7 +59,17 @@ def summary(c: Dict[str, Any]) -> Dict[str, Any]:
     out["rotation"] = c.get("rotation")
     out["ffsa"] = [s.get("name") for s in (c.get("ffsa_structures") or [])][:3]
     out["has_trace"] = bool(c.get("centerline"))
+    out["attribution"] = _attribution(c)
     return out
+
+
+def _attribution(c: Dict[str, Any]) -> Optional[str]:
+    """Origine du tracé : OpenStreetMap, ou le GPS d'une séance ApexAI."""
+    if not c.get("centerline"):
+        return None
+    if "OSM" in (c.get("source") or ""):
+        return "© contributeurs OpenStreetMap"
+    return "Tracé mesuré au GPS d'une séance ApexAI"
 
 
 def detail(c: Dict[str, Any]) -> Dict[str, Any]:
@@ -68,7 +78,7 @@ def detail(c: Dict[str, Any]) -> Dict[str, Any]:
     out["centerline"] = c.get("centerline") or []
     out["ffsa_structures"] = c.get("ffsa_structures") or []
     out["phone"] = c.get("phone")
-    out["attribution"] = "© contributeurs OpenStreetMap" if c.get("centerline") else None
+    out["attribution"] = _attribution(c)
     return out
 
 

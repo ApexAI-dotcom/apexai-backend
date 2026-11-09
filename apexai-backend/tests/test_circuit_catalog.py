@@ -35,3 +35,18 @@ def test_corner_count_ignores_flat_out_kinks():
     assert s["corners_count"] == 10
     assert s["kinks_count"] == 5
     assert s["hairpins_count"] + s["medium_count"] + s["fast_corners_count"] == s["corners_count"]
+
+
+def test_alfano_tracks_are_in_the_catalog():
+    """Séances Alfano : Soucy (fiche FFSA recalée sur la piste), Rustavi, Vihti, Martensville."""
+    assert cc.match_name("SOUCY")["slug"] == "sens-espace-karting-soucy"
+    assert cc.match_name("RUSTAVI INTERNATIONAL MOTORPARK")["country"] == "GE"
+    assert cc.match_name("VIHTI KARTING")["country"] == "FI"
+    for slug in ("sens-espace-karting-soucy", "rustavi-international-motorpark-karting", "vihti-karting", "martensville-speedway-karting"):
+        c = cc.get(slug)
+        m = cc.match_points([(p[0] + 0.00001, p[1]) for p in c["centerline"]] * 3)
+        assert m["slug"] == slug and m["confident"], slug
+        # Tracé mesuré au GPS d'une séance : pas attribué à OpenStreetMap.
+        assert "OpenStreetMap" not in cc.detail(c)["attribution"]
+    osm = next(c for c in cc.all_circuits() if "OSM" in (c.get("source") or "") and c.get("centerline"))
+    assert "OpenStreetMap" in cc.detail(osm)["attribution"]

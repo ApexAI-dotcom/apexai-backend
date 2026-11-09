@@ -44,6 +44,18 @@ def _info_items(conditions, track_condition, track_temperature, laps_analyzed, l
                         f"{laps_analyzed} tour(s). {conditions.summary()}"),
         "difficulty": "facile",
     }]
+    if laps_analyzed < 2:
+        # Les conseils comparent les passages d'un tour à l'autre : sur un seul
+        # tour complet, il n'y a pas de référence. On le dit au lieu de se taire.
+        items.append({
+            "priority": 0, "category": "info", "impact_seconds": 0.0, "corner": None,
+            "message": "Un seul tour complet : roule-en au moins 3 pour tes conseils",
+            "explanation": ("Les conseils comparent tes passages d'un tour à l'autre, virage par virage : c'est ce "
+                            "qui montre où le temps se perd. Avec un seul tour chronométré, la carte, les vitesses "
+                            "et les freinages restent lisibles, mais pas les écarts. Garde le boîtier allumé sur 3 "
+                            "tours ou plus à ta prochaine séance."),
+            "difficulty": "facile",
+        })
     notes = {
         "damp": ("Piste humide", "Adhérence réduite d'environ 15 %. Évite les bords de piste et les zones à l'ombre, "
                                  "où l'eau reste. Anticipe les freinages."),

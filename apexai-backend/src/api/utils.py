@@ -62,8 +62,13 @@ async def validate_csv_file(file: UploadFile, content_override: Optional[bytes] 
             return "Nom de fichier manquant"
         
         ext = os.path.splitext(file.filename.lower())[1]
-        if ext != '.csv' and ext not in XRK_EXTENSIONS:
-            return f"Extension invalide. Attendu: .csv, .xrk ou .xrz, reçu: {ext}"
+        if ext in ('.drk', '.rrk'):
+            # Annexes de Race Studio (voies calculées, GPS brut) : illisibles
+            # seules, la séance est dans le .xrk du même nom.
+            return ("Ce fichier est une annexe de Race Studio, sans la séance complète. "
+                    "Envoie le .xrk (ou le .xrz) du même nom, rangé à côté.")
+        if ext != '.csv' and ext not in XRK_EXTENSIONS and ext != '.zip':
+            return f"Extension invalide. Attendu : .csv, .xrk, .xrz ou le .zip Alfano, reçu : {ext}"
         
         # Lire contenu ou utiliser l'override
         if content_override is not None:
@@ -83,8 +88,9 @@ async def validate_csv_file(file: UploadFile, content_override: Optional[bytes] 
         if size < 1000:
             return "Fichier trop petit (<1KB). Vérifiez que c'est un fichier de télémétrie valide."
 
-        # Fichiers AiM natifs : binaires, la présence du GPS est vérifiée à la conversion
-        if ext in XRK_EXTENSIONS:
+        # Fichiers AiM natifs et zip Alfano : binaires, la présence du GPS est
+        # vérifiée à la conversion
+        if ext in XRK_EXTENSIONS or ext == '.zip':
             return None
 
         # Vérifier encoding et contenu
