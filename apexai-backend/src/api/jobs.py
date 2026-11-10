@@ -49,7 +49,13 @@ router = APIRouter(prefix="/api/analysis", tags=["analysis-jobs"])
 
 # Version du calcul : à changer quand le pipeline change de résultat, pour ne
 # pas resservir un ancien résultat mis en cache.
-PIPELINE_VERSION = "2026-11-07c-coaching-pro"
+# Le cache des résultats (mémoire + Redis, 7 jours) est indexé sur cette
+# version : chaque déploiement en change, sinon un fichier déjà analysé
+# ressortirait avec l'ancien calcul (vu le 10/11 : virages et note
+# corrigés en ligne mais invisibles au pilote).
+PIPELINE_VERSION = "2026-11-10-" + (
+    os.environ.get("RAILWAY_GIT_COMMIT_SHA") or os.environ.get("GIT_COMMIT_SHA") or "local"
+)[:12]
 
 _EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="analysis")
 _JOBS: Dict[str, "Job"] = {}

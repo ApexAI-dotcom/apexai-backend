@@ -64,7 +64,8 @@ logger = logging.getLogger(__name__)
 
 REDIS_CACHE_TTL = 3600
 # v7: ajout de track_features (signature de piste) + circuit_name dans la réponse
-REDIS_KEY_PREFIX = "analysis:v7:"
+# Préfixe lié au déploiement : un nouveau calcul n'est jamais masqué par le cache.
+REDIS_KEY_PREFIX = "analysis:v8:" + (os.environ.get("RAILWAY_GIT_COMMIT_SHA") or "local")[:12] + ":"
 
 
 @router.post(
