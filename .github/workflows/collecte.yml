@@ -1,0 +1,45 @@
+name: Collecte publique (manuel)
+
+# Lancement à la main uniquement (onglet Actions → « Collecte publique » → Run).
+# Le planning automatique reste coupé tant qu'il n'est pas validé :
+# décommenter le bloc `schedule` le jour où on le décide.
+on:
+  workflow_dispatch:
+    inputs:
+      sources:
+        description: "Sources (séparées par des virgules)"
+        default: "ffsa_events,osm_circuits,circuits"
+  # schedule:
+  #   - cron: "17 4 * * 1"   # lundi 4 h 17 UTC, une fois par semaine
+
+permissions:
+  contents: read
+
+jobs:
+  collecte:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Installer
+        run: pip install -r requirements-collect.txt pytest
+      - name: Tests du module (garde-fous + analyse)
+        run: python -m pytest collect/tests -q
+      - name: Cache des pages déjà lues
+        uses: actions/cache@v4
+        with:
+          path: .collect-cache
+          key: collect-${{ github.run_id }}
+          restore-keys: collect-
+      - name: Collecter (écrit seulement des fichiers, jamais en base)
+        run: python -m collect.run --out staging --sources "${{ inputs.sources || 'ffsa_events,osm_circuits,circuits' }}"
+      - name: Joindre les résultats au run
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: collecte-${{ github.run_number }}
+          path: staging/
+          retention-days: 30

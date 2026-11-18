@@ -1,0 +1,3 @@
+# Collecte publique (chantier 3) — séparé de requirements.txt : rien de ceci n'est installé sur Railway.
+httpx>=0.27,<1
+scrapling==0.5.1

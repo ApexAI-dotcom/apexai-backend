@@ -1,0 +1,6 @@
+{"version":0.6,"generator":"Overpass API","elements":[
+ {"type":"way","id":101,"center":{"lat":47.9512,"lon":0.2101},"tags":{"leisure":"track","sport":"karting","name":"Karting Exemple Nord","length":"1150 m","surface":"asphalt","website":"https://kex-nord.example"}},
+ {"type":"way","id":102,"center":{"lat":47.9513,"lon":0.2102},"tags":{"leisure":"sports_centre","sport":"karting","name":"Karting Exemple Nord"}},
+ {"type":"node","id":103,"lat":45.1,"lon":4.8,"tags":{"sport":"karting","name":"Kart Club Exemple Sud","addr:city":"Exempleville","length":"0,9 km"}},
+ {"type":"way","id":104,"center":{"lat":44.0,"lon":1.0},"tags":{"leisure":"track","sport":"karting"}}
+]}

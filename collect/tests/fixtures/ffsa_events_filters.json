@@ -1,0 +1,191 @@
+{
+ "success": true,
+ "data": {
+  "years": [
+   2026,
+   2025,
+   2024,
+   2023,
+   2022,
+   2021,
+   2020,
+   2019,
+   2018,
+   2017,
+   2016,
+   2015
+  ],
+  "competitions": [
+   {
+    "id": 3,
+    "name": "Championnat de France"
+   },
+   {
+    "id": 5,
+    "name": "Championnat de France Endurance"
+   },
+   {
+    "id": 1,
+    "name": "Coupe de France"
+   }
+  ],
+  "categories": [
+   {
+    "id": 1,
+    "name": "Cadet"
+   },
+   {
+    "id": 4,
+    "name": "Elite"
+   },
+   {
+    "id": 5,
+    "name": "Espoir"
+   },
+   {
+    "id": 9,
+    "name": "Feminine"
+   },
+   {
+    "id": 28,
+    "name": "Féminin"
+   },
+   {
+    "id": 27,
+    "name": "Gentleman"
+   },
+   {
+    "id": 31,
+    "name": "Gentleman Cup"
+   },
+   {
+    "id": 43,
+    "name": "Gentleman Iame"
+   },
+   {
+    "id": 38,
+    "name": "Gentleman Rotax"
+   },
+   {
+    "id": 15,
+    "name": "Handikart"
+   },
+   {
+    "id": 3,
+    "name": "Junior"
+   },
+   {
+    "id": 8,
+    "name": "KZ2"
+   },
+   {
+    "id": 23,
+    "name": "KZ2"
+   },
+   {
+    "id": 16,
+    "name": "KZ2 Gentleman"
+   },
+   {
+    "id": 25,
+    "name": "KZ2 Gentleman"
+   },
+   {
+    "id": 22,
+    "name": "KZ2 Master"
+   },
+   {
+    "id": 24,
+    "name": "KZ2 Master"
+   },
+   {
+    "id": 44,
+    "name": "Loisir 2T"
+   },
+   {
+    "id": 26,
+    "name": "Master"
+   },
+   {
+    "id": 30,
+    "name": "Master Cup"
+   },
+   {
+    "id": 41,
+    "name": "Master Iame"
+   },
+   {
+    "id": 40,
+    "name": "Master Rotax"
+   },
+   {
+    "id": 34,
+    "name": "Mini 60"
+   },
+   {
+    "id": 6,
+    "name": "Mini Kart"
+   },
+   {
+    "id": 2,
+    "name": "Minime"
+   },
+   {
+    "id": 7,
+    "name": "Nationale"
+   },
+   {
+    "id": 20,
+    "name": "OK"
+   },
+   {
+    "id": 21,
+    "name": "OK-Junior"
+   },
+   {
+    "id": 45,
+    "name": "Rotax Gentleman"
+   },
+   {
+    "id": 10,
+    "name": "Rotax Master"
+   },
+   {
+    "id": 19,
+    "name": "Rotax Max"
+   },
+   {
+    "id": 46,
+    "name": "Rotax Senior"
+   },
+   {
+    "id": 18,
+    "name": "Senior"
+   },
+   {
+    "id": 29,
+    "name": "Senior Cup"
+   },
+   {
+    "id": 42,
+    "name": "Senior Iame"
+   },
+   {
+    "id": 36,
+    "name": "Senior Rotax"
+   },
+   {
+    "id": 11,
+    "name": "Superkart"
+   },
+   {
+    "id": 14,
+    "name": "X30 Master"
+   },
+   {
+    "id": 13,
+    "name": "X30 Senior"
+   }
+  ]
+ }
+}

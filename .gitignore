@@ -39,3 +39,7 @@ apex-ai-fresh/
 lovable-temp/
 
 .vercel
+
+# Collecte publique
+.collect-cache/
+staging/
