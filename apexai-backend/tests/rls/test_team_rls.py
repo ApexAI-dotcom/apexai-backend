@@ -21,6 +21,8 @@ psycopg2 = pytest.importorskip("psycopg2")
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATION = ROOT / "supabase/migrations/20261118010000_team_space.sql"
 DOWN = ROOT / "supabase/migrations/20261118010000_team_space.down.sql"
+# Étapes suivantes de l'espace Team, appliquées dans l'ordre après le socle.
+LATER = sorted(p for p in (ROOT / "supabase/migrations").glob("2026111802*_team*.sql") if not p.name.endswith(".down.sql"))
 STUB = Path(__file__).with_name("supabase_stub.sql")
 DSN = os.environ.get("APEX_RLS_DSN") or "host=/var/lib/postgresql/apextest port=54329 user=postgres dbname=postgres"
 
@@ -52,6 +54,8 @@ def db():
     with conn.cursor() as c:
         c.execute(STUB.read_text())
         c.execute(MIGRATION.read_text())
+        for m in LATER:
+            c.execute(m.read_text())
     yield conn
     conn.close()
     with root.cursor() as c:
@@ -268,6 +272,8 @@ def test_down_migration_keeps_pilot_sessions(seeded):
     with seeded.cursor() as c:
         c.execute("SELECT count(*) FROM public.analyses")
         before = c.fetchone()[0]
+        for m in reversed(LATER):
+            c.execute(m.with_name(m.name.replace(".sql", ".down.sql")).read_text())
         c.execute(DOWN.read_text())
         c.execute("SELECT count(*) FROM public.analyses")
         assert c.fetchone()[0] == before
