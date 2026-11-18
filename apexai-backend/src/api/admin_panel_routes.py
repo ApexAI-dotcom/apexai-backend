@@ -46,8 +46,8 @@ if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY and SUPABASE_SERVICE_ROLE_KEY not 
 
 # Permissions par rôle (source de vérité unique)
 PERMISSIONS: Dict[str, set] = {
-    "owner":   {"stats", "feedback", "promo", "catalog", "circuits", "roles", "users"},
-    "admin":   {"stats", "feedback", "promo", "catalog", "circuits", "users"},
+    "owner":   {"stats", "feedback", "promo", "catalog", "circuits", "roles", "users", "team"},
+    "admin":   {"stats", "feedback", "promo", "catalog", "circuits", "users", "team"},
     "support": {"stats", "feedback"},
     "analyst": {"stats"},
 }

@@ -105,7 +105,15 @@ def _fetch_profile(user_id: str) -> Optional[dict[str, Any]]:
             .execute()
         )
         if result.data and len(result.data) > 0:
-            return dict(result.data[0])
+            profile = dict(result.data[0])
+            # Espace Team : accès accordé par une structure (pilote → racer,
+            # coach → team), seulement si l'interrupteur est allumé.
+            try:
+                from src.core.team_service import structure_tier
+                profile["_structure_tier"] = structure_tier(user_id, supabase)
+            except Exception as exc:
+                logger.info("subscription_service: accès structure ignoré (%s)", exc)
+            return profile
         return None
     except Exception as e:
         logger.exception("subscription_service: fetch_profile failed for user %s: %s", user_id, e)
@@ -155,12 +163,13 @@ def get_subscription_tier(user_id: str) -> str:
 
 
 def _effective_tier(profile: Optional[dict[str, Any]]) -> str:
-    """Abonnement payé ou Paddock Pass en cours, le plus élevé des deux."""
+    """Abonnement payé, Paddock Pass en cours ou structure Team : le plus élevé."""
     paid = _parse_tier(profile.get("subscription_tier") if profile else None)
-    trial = _trial_tier_if_active(profile)
-    if trial and _TIER_RANK.get(trial, 0) > _TIER_RANK.get(paid, 0):
-        return trial
-    return paid
+    best = paid
+    for granted in (_trial_tier_if_active(profile), (profile or {}).get("_structure_tier")):
+        if granted and granted in TIER_LIMITS and _TIER_RANK.get(granted, 0) > _TIER_RANK.get(best, 0):
+            best = granted
+    return best
 
 
 def _reset_monthly_count(user_id: str) -> bool:

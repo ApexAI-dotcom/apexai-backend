@@ -276,6 +276,14 @@ try:
 except ImportError as e:
     logger.warning("⚠ Kart routes not loaded: %s", e)
 
+# Espace Team (écoles, clubs, coachs) — derrière l'interrupteur app_flags('team_space')
+try:
+    from .team_routes import router as team_router
+    app.include_router(team_router)
+    logger.info("✓ Team routes loaded (/api/team, /api/admin/team)")
+except ImportError as e:
+    logger.warning("⚠ Team routes not loaded: %s", e)
+
 # Routes Auth (debug temporaire)
 try:
     from .auth import auth_router
