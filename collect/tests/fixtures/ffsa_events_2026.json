@@ -1,0 +1,181 @@
+{
+ "success": true,
+ "data": [
+  {
+   "id": 210,
+   "date": "25.10.2026",
+   "place": "Bresse",
+   "competition": "Championnat de France",
+   "categories": [
+    "Superkart",
+    "KZ2",
+    "KZ2 Master",
+    "KZ2 Gentleman"
+   ],
+   "url": "https://www.ffsakarting.org/competitions/2026/210-championnat-de-france/live"
+  },
+  {
+   "id": 203,
+   "date": "18.10.2026",
+   "place": "Salbris",
+   "competition": "Coupe de France",
+   "categories": [
+    "Nationale",
+    "KZ2",
+    "KZ2 Gentleman",
+    "KZ2 Master",
+    "Mini 60",
+    "Senior Rotax",
+    "Gentleman Rotax",
+    "Master Rotax",
+    "Master Iame",
+    "Senior Iame",
+    "Gentleman Iame"
+   ],
+   "url": "https://www.ffsakarting.org/competitions/2026/203-coupe-de-france/live"
+  },
+  {
+   "id": 215,
+   "date": "04.10.2026",
+   "place": "Le Vigeant",
+   "competition": "Coupe de France",
+   "categories": [
+    "Superkart"
+   ],
+   "url": "https://www.ffsakarting.org/competitions/2026/215-coupe-de-france"
+  },
+  {
+   "id": 204,
+   "date": "20.09.2026",
+   "place": "Le Mans (Karting)",
+   "competition": "Champions Cup & Championnat de France",
+   "categories": [
+    "Handikart"
+   ],
+   "url": "https://www.ffsakarting.org/competitions/2026/204-championnat-de-france/live"
+  },
+  {
+   "id": 208,
+   "date": "29.08.2026",
+   "place": "Anneville",
+   "competition": "Championnat de France",
+   "categories": [
+    "Junior"
+   ],
+   "url": "https://www.ffsakarting.org/competitions/2026/208-championnat-de-france/results"
+  },
+  {
+   "id": 202,
+   "date": "02.08.2026",
+   "place": "Anneville",
+   "competition": "Championnat de France",
+   "categories": [
+    "Nationale",
+    "Rotax Master",
+    "Rotax Gentleman",
+    "Rotax Senior"
+   ],
+   "url": "https://www.ffsakarting.org/competitions/2026/202-championnat-de-france/live"
+  },
+  {
+   "id": 216,
+   "date": "01.08.2026",
+   "place": "Anneville",
+   "competition": "Coupe de France",
+   "categories": [
+    "Loisir 2T"
+   ],
+   "url": "https://www.ffsakarting.org/competitions/2026/216-coupe-de-france/live"
+  },
+  {
+   "id": 201,
+   "date": "26.07.2026",
+   "place": "Varennes / Allier",
+   "competition": "Championnat de France",
+   "categories": [
+    "Junior",
+    "KZ2",
+    "KZ2 Gentleman",
+    "KZ2 Master",
+    "Féminin"
+   ],
+   "url": "https://www.ffsakarting.org/competitions/2026/201-championnat-de-france/live"
+  },
+  {
+   "id": 200,
+   "date": "12.07.2026",
+   "place": "Aigues-Vives",
+   "competition": "Championnat de France",
+   "categories": [
+    "Mini 60",
+    "Master Iame",
+    "Senior Iame",
+    "Gentleman Iame"
+   ],
+   "url": "https://www.ffsakarting.org/competitions/2026/200-championnat-de-france/live"
+  },
+  {
+   "id": 209,
+   "date": "05.07.2026",
+   "place": "Ledenon",
+   "competition": "Championnat de France",
+   "categories": [
+    "Superkart",
+    "KZ2",
+    "KZ2 Master",
+    "KZ2 Gentleman"
+   ],
+   "url": "https://www.ffsakarting.org/competitions/2026/209-championnat-de-france"
+  },
+  {
+   "id": 217,
+   "date": "31.05.2026",
+   "place": "Muret",
+   "competition": "Championnat de France",
+   "categories": [
+    "Junior"
+   ],
+   "url": "https://www.ffsakarting.org/competitions/2026/217-championnat-de-france/results"
+  },
+  {
+   "id": 211,
+   "date": "16.05.2026",
+   "place": "Magny-Cours",
+   "competition": "Championnat de France",
+   "categories": [
+    "Superkart"
+   ],
+   "url": "https://www.ffsakarting.org/competitions/2026/211-championnat-de-france"
+  },
+  {
+   "id": 206,
+   "date": "26.04.2026",
+   "place": "Aunay-les-Bois",
+   "competition": "Championnat de France",
+   "categories": [
+    "Junior"
+   ],
+   "url": "https://www.ffsakarting.org/competitions/2026/206-championnat-de-france/live"
+  },
+  {
+   "id": 214,
+   "date": "19.04.2026",
+   "place": "Dijon",
+   "competition": "Championnat de France",
+   "categories": [
+    "Superkart"
+   ],
+   "url": "https://www.ffsakarting.org/competitions/2026/214-championnat-de-france"
+  },
+  {
+   "id": 205,
+   "date": "22.03.2026",
+   "place": "Salbris",
+   "competition": "Championnat de France",
+   "categories": [
+    "Junior"
+   ],
+   "url": "https://www.ffsakarting.org/competitions/2026/205-championnat-de-france/results"
+  }
+ ]
+}
